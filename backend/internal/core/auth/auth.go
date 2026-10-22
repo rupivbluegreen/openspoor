@@ -75,7 +75,9 @@ func (p Principal) Has(roles ...string) bool {
 type ctxKey struct{}
 
 // With stores p in ctx.
-func With(ctx context.Context, p Principal) context.Context { return context.WithValue(ctx, ctxKey{}, p) }
+func With(ctx context.Context, p Principal) context.Context {
+	return context.WithValue(ctx, ctxKey{}, p)
+}
 
 // From returns the principal in ctx.
 func From(ctx context.Context) (Principal, bool) {

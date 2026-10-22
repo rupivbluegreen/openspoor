@@ -23,6 +23,7 @@ import (
 	"github.com/openspoor/openspoor/internal/core/httpx"
 	"github.com/openspoor/openspoor/internal/core/jobs"
 	"github.com/openspoor/openspoor/internal/core/kernel"
+	"github.com/openspoor/openspoor/internal/core/secrets"
 	"github.com/openspoor/openspoor/internal/platform"
 )
 
@@ -51,7 +52,12 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		d.Close()
 		return nil, err
 	}
-	deps := kernel.Deps{Cfg: cfg, DB: d, Bus: b, Jobs: jobs.NewRunner(d.Pool, cfg.WorkerConcurrency)}
+	sealer, err := secrets.New(cfg.MasterKey)
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	deps := kernel.Deps{Cfg: cfg, DB: d, Bus: b, Jobs: jobs.NewRunner(d.Pool, cfg.WorkerConcurrency), Seal: sealer}
 	plat := platform.New(deps)
 	a, err := auth.New(ctx, cfg.JWTSecret, cfg.JWTTTL, plat, cfg.OIDCIssuer, cfg.OIDCAudience)
 	if err != nil {
@@ -143,7 +149,10 @@ func securityHeaders(next http.Handler) http.Handler {
 func (a *App) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, securityHeaders, logRequests, metrics, a.cors)
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK); _, _ = w.Write([]byte("ok")) })
+	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()

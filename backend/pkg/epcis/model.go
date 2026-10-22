@@ -85,9 +85,9 @@ type Location struct {
 
 // ErrorDeclaration marks an earlier event as erroneous.
 type ErrorDeclaration struct {
-	DeclarationTime   time.Time `json:"declarationTime"`
-	Reason            string    `json:"reason,omitempty"`
-	CorrectiveEventIDs []string `json:"correctiveEventIDs,omitempty"`
+	DeclarationTime    time.Time `json:"declarationTime"`
+	Reason             string    `json:"reason,omitempty"`
+	CorrectiveEventIDs []string  `json:"correctiveEventIDs,omitempty"`
 }
 
 // PersistentDisposition sets/unsets persistent dispositions.

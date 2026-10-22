@@ -46,7 +46,9 @@ func (a *App) runLocked(ctx context.Context, sc kernel.Schedule) {
 	if err := conn.QueryRow(ctx, "select pg_try_advisory_lock(hashtextextended($1, 0))", "schedule:"+sc.Name).Scan(&got); err != nil || !got {
 		return
 	}
-	defer func() { _, _ = conn.Exec(context.Background(), "select pg_advisory_unlock(hashtextextended($1, 0))", "schedule:"+sc.Name) }()
+	defer func() {
+		_, _ = conn.Exec(context.Background(), "select pg_advisory_unlock(hashtextextended($1, 0))", "schedule:"+sc.Name)
+	}()
 	if err := sc.Run(ctx); err != nil && ctx.Err() == nil {
 		slog.Warn("scheduled task failed", "task", sc.Name, "err", err)
 	}

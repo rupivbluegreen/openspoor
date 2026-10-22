@@ -20,53 +20,54 @@ const (
 
 // Config is the full runtime configuration.
 type Config struct {
-	Mode          Mode
-	HTTPAddr      string
-	DatabaseURL   string
-	JWTSecret     []byte
-	JWTTTL        time.Duration
-	DevAuth       bool
-	OIDCIssuer    string
-	OIDCAudience  string
-	KafkaBrokers  []string
-	S3Endpoint    string
-	S3Bucket      string
-	BaseDomain    string
-	PublicURL     string
-	BillingDriver string // "none", "lago", "stripe"
-	LagoURL       string
-	LagoAPIKey    string
-	AnthropicKey  string
-	AnthropicModel string
+	Mode              Mode
+	HTTPAddr          string
+	DatabaseURL       string
+	JWTSecret         []byte
+	JWTTTL            time.Duration
+	DevAuth           bool
+	OIDCIssuer        string
+	OIDCAudience      string
+	KafkaBrokers      []string
+	S3Endpoint        string
+	S3Bucket          string
+	BaseDomain        string
+	PublicURL         string
+	BillingDriver     string // "none", "lago", "stripe"
+	LagoURL           string
+	LagoAPIKey        string
+	AnthropicKey      string
+	AnthropicModel    string
 	WorkerConcurrency int
-	CORSOrigins   []string
-	LogLevel      string
+	CORSOrigins       []string
+	LogLevel          string
+	MasterKey         []byte
 }
 
 // Load reads configuration from environment variables with safe defaults for development.
 func Load() (Config, error) {
 	c := Config{
-		Mode:          Mode(env("OPENSPOOR_MODE", "single")),
-		HTTPAddr:      env("OPENSPOOR_HTTP_ADDR", ":8080"),
-		DatabaseURL:   env("OPENSPOOR_DATABASE_URL", "postgres://openspoor:openspoor@localhost:5432/openspoor?sslmode=disable"),
-		JWTSecret:     []byte(env("OPENSPOOR_JWT_SECRET", "")),
-		JWTTTL:        envDuration("OPENSPOOR_JWT_TTL", 12*time.Hour),
-		DevAuth:       envBool("OPENSPOOR_DEV_AUTH", false),
-		OIDCIssuer:    env("OPENSPOOR_OIDC_ISSUER", ""),
-		OIDCAudience:  env("OPENSPOOR_OIDC_AUDIENCE", "openspoor"),
-		KafkaBrokers:  envList("OPENSPOOR_KAFKA_BROKERS"),
-		S3Endpoint:    env("OPENSPOOR_S3_ENDPOINT", ""),
-		S3Bucket:      env("OPENSPOOR_S3_BUCKET", "openspoor-archive"),
-		BaseDomain:    env("OPENSPOOR_BASE_DOMAIN", "localhost"),
-		PublicURL:     env("OPENSPOOR_PUBLIC_URL", "http://localhost:8080"),
-		BillingDriver: env("OPENSPOOR_BILLING", "none"),
-		LagoURL:       env("OPENSPOOR_LAGO_URL", ""),
-		LagoAPIKey:    env("OPENSPOOR_LAGO_API_KEY", ""),
-		AnthropicKey:  env("ANTHROPIC_API_KEY", ""),
-		AnthropicModel: env("OPENSPOOR_ASSISTANT_MODEL", "claude-sonnet-5-5"),
+		Mode:              Mode(env("OPENSPOOR_MODE", "single")),
+		HTTPAddr:          env("OPENSPOOR_HTTP_ADDR", ":8080"),
+		DatabaseURL:       env("OPENSPOOR_DATABASE_URL", "postgres://openspoor:openspoor@localhost:5432/openspoor?sslmode=disable"),
+		JWTSecret:         []byte(env("OPENSPOOR_JWT_SECRET", "")),
+		JWTTTL:            envDuration("OPENSPOOR_JWT_TTL", 12*time.Hour),
+		DevAuth:           envBool("OPENSPOOR_DEV_AUTH", false),
+		OIDCIssuer:        env("OPENSPOOR_OIDC_ISSUER", ""),
+		OIDCAudience:      env("OPENSPOOR_OIDC_AUDIENCE", "openspoor"),
+		KafkaBrokers:      envList("OPENSPOOR_KAFKA_BROKERS"),
+		S3Endpoint:        env("OPENSPOOR_S3_ENDPOINT", ""),
+		S3Bucket:          env("OPENSPOOR_S3_BUCKET", "openspoor-archive"),
+		BaseDomain:        env("OPENSPOOR_BASE_DOMAIN", "localhost"),
+		PublicURL:         env("OPENSPOOR_PUBLIC_URL", "http://localhost:8080"),
+		BillingDriver:     env("OPENSPOOR_BILLING", "none"),
+		LagoURL:           env("OPENSPOOR_LAGO_URL", ""),
+		LagoAPIKey:        env("OPENSPOOR_LAGO_API_KEY", ""),
+		AnthropicKey:      env("ANTHROPIC_API_KEY", ""),
+		AnthropicModel:    env("OPENSPOOR_ASSISTANT_MODEL", "claude-sonnet-5-5"),
 		WorkerConcurrency: envInt("OPENSPOOR_WORKER_CONCURRENCY", 4),
-		CORSOrigins:   envList("OPENSPOOR_CORS_ORIGINS"),
-		LogLevel:      env("OPENSPOOR_LOG_LEVEL", "info"),
+		CORSOrigins:       envList("OPENSPOOR_CORS_ORIGINS"),
+		LogLevel:          env("OPENSPOOR_LOG_LEVEL", "info"),
 	}
 	switch c.Mode {
 	case ModeSaaS, ModeSingle, ModeHub:
@@ -81,6 +82,13 @@ func Load() (Config, error) {
 	}
 	if len(c.JWTSecret) < 16 {
 		return c, fmt.Errorf("OPENSPOOR_JWT_SECRET must be at least 16 bytes")
+	}
+	c.MasterKey = []byte(env("OPENSPOOR_MASTER_KEY", ""))
+	if len(c.MasterKey) == 0 {
+		if !c.DevAuth {
+			return c, fmt.Errorf("OPENSPOOR_MASTER_KEY is required unless OPENSPOOR_DEV_AUTH=true")
+		}
+		c.MasterKey = append([]byte("dev-master:"), c.JWTSecret...)
 	}
 	if c.BillingDriver == "" {
 		c.BillingDriver = "none"

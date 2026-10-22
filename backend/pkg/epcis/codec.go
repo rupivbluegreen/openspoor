@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,7 +23,9 @@ func ParseJSON(b []byte) (*Document, error) {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 	switch probe.Type {
-	case "EPCISDocument", "EPCISQueryDocument":
+	case "EPCISDocument":
+		return parseDocumentParallel(b)
+	case "EPCISQueryDocument":
 		var d Document
 		if err := json.Unmarshal(b, &d); err != nil {
 			return nil, fmt.Errorf("invalid EPCIS document: %w", err)
@@ -431,4 +435,71 @@ func isXMLName(s string) bool {
 		}
 	}
 	return true
+}
+
+// rawDocument splits the event list into raw messages so events decode in parallel.
+type rawDocument struct {
+	Context       any             `json:"@context,omitempty"`
+	Type          string          `json:"type"`
+	SchemaVersion string          `json:"schemaVersion"`
+	CreationDate  time.Time       `json:"creationDate"`
+	Header        json.RawMessage `json:"epcisHeader,omitempty"`
+	Body          struct {
+		EventList []json.RawMessage `json:"eventList"`
+	} `json:"epcisBody"`
+}
+
+func parseDocumentParallel(b []byte) (*Document, error) {
+	var rd rawDocument
+	if err := json.Unmarshal(b, &rd); err != nil {
+		return nil, fmt.Errorf("invalid EPCIS document: %w", err)
+	}
+	d := &Document{Context: rd.Context, Type: rd.Type, SchemaVersion: rd.SchemaVersion, CreationDate: rd.CreationDate, Header: rd.Header}
+	d.Body.EventList = make([]Event, len(rd.Body.EventList))
+	err := ParallelFor(len(rd.Body.EventList), func(i int) error {
+		if err := json.Unmarshal(rd.Body.EventList[i], &d.Body.EventList[i]); err != nil {
+			return fmt.Errorf("event %d: %w", i, err)
+		}
+		return nil
+	})
+	return d, err
+}
+
+// ParallelFor runs fn(i) for i in [0,n) across GOMAXPROCS workers and returns the first error.
+func ParallelFor(n int, fn func(i int) error) error {
+	workers := runtime.GOMAXPROCS(0)
+	if n < 512 || workers == 1 {
+		for i := 0; i < n; i++ {
+			if err := fn(i); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	var wg sync.WaitGroup
+	errs := make([]error, workers)
+	chunk := (n + workers - 1) / workers
+	for w := 0; w < workers; w++ {
+		lo, hi := w*chunk, min((w+1)*chunk, n)
+		if lo >= hi {
+			break
+		}
+		wg.Add(1)
+		go func(w, lo, hi int) {
+			defer wg.Done()
+			for i := lo; i < hi; i++ {
+				if err := fn(i); err != nil {
+					errs[w] = err
+					return
+				}
+			}
+		}(w, lo, hi)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -28,11 +28,11 @@ func set(xs ...string) map[string]bool {
 }
 
 var cbvPrefixes = map[string][]string{
-	"bizstep":     {"urn:epcglobal:cbv:bizstep:", "https://ref.gs1.org/cbv/BizStep-", "cbv:BizStep-"},
-	"disp":        {"urn:epcglobal:cbv:disp:", "https://ref.gs1.org/cbv/Disp-", "cbv:Disp-"},
-	"btt":         {"urn:epcglobal:cbv:btt:", "https://ref.gs1.org/cbv/BTT-", "cbv:BTT-"},
-	"sdt":         {"urn:epcglobal:cbv:sdt:", "https://ref.gs1.org/cbv/SDT-", "cbv:SDT-"},
-	"er":          {"urn:epcglobal:cbv:er:", "https://ref.gs1.org/cbv/ER-", "cbv:ER-"},
+	"bizstep": {"urn:epcglobal:cbv:bizstep:", "https://ref.gs1.org/cbv/BizStep-", "cbv:BizStep-"},
+	"disp":    {"urn:epcglobal:cbv:disp:", "https://ref.gs1.org/cbv/Disp-", "cbv:Disp-"},
+	"btt":     {"urn:epcglobal:cbv:btt:", "https://ref.gs1.org/cbv/BTT-", "cbv:BTT-"},
+	"sdt":     {"urn:epcglobal:cbv:sdt:", "https://ref.gs1.org/cbv/SDT-", "cbv:SDT-"},
+	"er":      {"urn:epcglobal:cbv:er:", "https://ref.gs1.org/cbv/ER-", "cbv:ER-"},
 }
 
 // Short normalizes a CBV value to its bare term (e.g. "shipping"). Non-CBV URIs are returned unchanged.

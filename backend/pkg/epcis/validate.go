@@ -204,10 +204,15 @@ func CheckEPC(id string) string {
 
 // ValidateDocument normalizes and validates every event.
 func ValidateDocument(d *Document) []FieldError {
-	var errs []FieldError
-	for i := range d.Body.EventList {
+	per := make([][]FieldError, len(d.Body.EventList))
+	_ = ParallelFor(len(d.Body.EventList), func(i int) error {
 		Normalize(&d.Body.EventList[i])
-		errs = append(errs, Validate(i, &d.Body.EventList[i])...)
+		per[i] = Validate(i, &d.Body.EventList[i])
+		return nil
+	})
+	var errs []FieldError
+	for _, e := range per {
+		errs = append(errs, e...)
 	}
 	return errs
 }

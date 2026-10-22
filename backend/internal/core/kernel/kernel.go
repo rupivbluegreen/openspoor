@@ -14,6 +14,7 @@ import (
 	"github.com/openspoor/openspoor/internal/core/config"
 	"github.com/openspoor/openspoor/internal/core/db"
 	"github.com/openspoor/openspoor/internal/core/jobs"
+	"github.com/openspoor/openspoor/internal/core/secrets"
 )
 
 // Deps are injected into every module.
@@ -23,6 +24,7 @@ type Deps struct {
 	Bus  *bus.Bus
 	Jobs *jobs.Runner
 	Auth *auth.Authenticator
+	Seal *secrets.Sealer
 }
 
 // Module is implemented by each bounded context.

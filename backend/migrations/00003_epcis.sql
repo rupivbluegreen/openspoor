@@ -40,7 +40,7 @@ create table epcis_event (
   primary key (tenant_id, record_time, id)
 ) partition by range (record_time);
 create table epcis_event_default partition of epcis_event default;
-create index epcis_event_epcs_idx on epcis_event using gin (epcs);
+create index epcis_event_epcs_idx on epcis_event using gin (epcs) with (fastupdate = on, gin_pending_list_limit = 65536);
 create index epcis_event_time_idx on epcis_event (tenant_id, event_time);
 create index epcis_event_capture_idx on epcis_event (tenant_id, capture_id);
 create index epcis_event_eventid_idx on epcis_event (tenant_id, event_id);
