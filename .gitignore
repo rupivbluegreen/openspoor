@@ -1,0 +1,12 @@
+/backend/bin/
+/backend/coverage.*
+node_modules/
+dist/
+.vite/
+*.log
+.env
+.env.*
+!.env.example
+/site/_site/
+.DS_Store
+bench-results/*.tmp

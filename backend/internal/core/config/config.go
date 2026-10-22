@@ -1,0 +1,134 @@
+// Package config loads Open Spoor runtime configuration from the environment.
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Mode selects how one binary behaves; it is configuration, never a fork.
+type Mode string
+
+const (
+	ModeSaaS   Mode = "saas"
+	ModeSingle Mode = "single"
+	ModeHub    Mode = "hub"
+)
+
+// Config is the full runtime configuration.
+type Config struct {
+	Mode          Mode
+	HTTPAddr      string
+	DatabaseURL   string
+	JWTSecret     []byte
+	JWTTTL        time.Duration
+	DevAuth       bool
+	OIDCIssuer    string
+	OIDCAudience  string
+	KafkaBrokers  []string
+	S3Endpoint    string
+	S3Bucket      string
+	BaseDomain    string
+	PublicURL     string
+	BillingDriver string // "none", "lago", "stripe"
+	LagoURL       string
+	LagoAPIKey    string
+	AnthropicKey  string
+	AnthropicModel string
+	WorkerConcurrency int
+	CORSOrigins   []string
+	LogLevel      string
+}
+
+// Load reads configuration from environment variables with safe defaults for development.
+func Load() (Config, error) {
+	c := Config{
+		Mode:          Mode(env("OPENSPOOR_MODE", "single")),
+		HTTPAddr:      env("OPENSPOOR_HTTP_ADDR", ":8080"),
+		DatabaseURL:   env("OPENSPOOR_DATABASE_URL", "postgres://openspoor:openspoor@localhost:5432/openspoor?sslmode=disable"),
+		JWTSecret:     []byte(env("OPENSPOOR_JWT_SECRET", "")),
+		JWTTTL:        envDuration("OPENSPOOR_JWT_TTL", 12*time.Hour),
+		DevAuth:       envBool("OPENSPOOR_DEV_AUTH", false),
+		OIDCIssuer:    env("OPENSPOOR_OIDC_ISSUER", ""),
+		OIDCAudience:  env("OPENSPOOR_OIDC_AUDIENCE", "openspoor"),
+		KafkaBrokers:  envList("OPENSPOOR_KAFKA_BROKERS"),
+		S3Endpoint:    env("OPENSPOOR_S3_ENDPOINT", ""),
+		S3Bucket:      env("OPENSPOOR_S3_BUCKET", "openspoor-archive"),
+		BaseDomain:    env("OPENSPOOR_BASE_DOMAIN", "localhost"),
+		PublicURL:     env("OPENSPOOR_PUBLIC_URL", "http://localhost:8080"),
+		BillingDriver: env("OPENSPOOR_BILLING", "none"),
+		LagoURL:       env("OPENSPOOR_LAGO_URL", ""),
+		LagoAPIKey:    env("OPENSPOOR_LAGO_API_KEY", ""),
+		AnthropicKey:  env("ANTHROPIC_API_KEY", ""),
+		AnthropicModel: env("OPENSPOOR_ASSISTANT_MODEL", "claude-sonnet-5-5"),
+		WorkerConcurrency: envInt("OPENSPOOR_WORKER_CONCURRENCY", 4),
+		CORSOrigins:   envList("OPENSPOOR_CORS_ORIGINS"),
+		LogLevel:      env("OPENSPOOR_LOG_LEVEL", "info"),
+	}
+	switch c.Mode {
+	case ModeSaaS, ModeSingle, ModeHub:
+	default:
+		return c, fmt.Errorf("OPENSPOOR_MODE must be saas, single or hub, got %q", c.Mode)
+	}
+	if len(c.JWTSecret) == 0 {
+		if !c.DevAuth {
+			return c, fmt.Errorf("OPENSPOOR_JWT_SECRET is required unless OPENSPOOR_DEV_AUTH=true")
+		}
+		c.JWTSecret = []byte("dev-only-insecure-secret-change-me")
+	}
+	if len(c.JWTSecret) < 16 {
+		return c, fmt.Errorf("OPENSPOOR_JWT_SECRET must be at least 16 bytes")
+	}
+	if c.BillingDriver == "" {
+		c.BillingDriver = "none"
+	}
+	return c, nil
+}
+
+func env(k, def string) string {
+	if v, ok := os.LookupEnv(k); ok && v != "" {
+		return v
+	}
+	return def
+}
+
+func envBool(k string, def bool) bool {
+	v, err := strconv.ParseBool(env(k, strconv.FormatBool(def)))
+	if err != nil {
+		return def
+	}
+	return v
+}
+
+func envInt(k string, def int) int {
+	v, err := strconv.Atoi(env(k, strconv.Itoa(def)))
+	if err != nil {
+		return def
+	}
+	return v
+}
+
+func envDuration(k string, def time.Duration) time.Duration {
+	v, err := time.ParseDuration(env(k, def.String()))
+	if err != nil {
+		return def
+	}
+	return v
+}
+
+func envList(k string) []string {
+	v := env(k, "")
+	if v == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}

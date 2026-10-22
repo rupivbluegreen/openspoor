@@ -1,0 +1,9 @@
+{
+  "@context": ["https://ref.gs1.org/standards/epcis/2.0.0/epcis-context.jsonld"],
+  "type": "EPCISDocument", "schemaVersion": "2.0", "creationDate": "2024-01-01T00:00:00Z",
+  "epcisBody": {"eventList": [
+    {"type": "ObjectEvent", "action": "ADD", "bizStep": "commissioning", "eventTime": "2024-01-01T00:00:00Z", "eventTimeZoneOffset": "+00:00", "epcList": ["urn:epc:id:sgtin:0614141.107346.1"]},
+    {"type": "ObjectEvent", "action": "JUMP", "bizStep": "teleporting", "eventTime": "2024-01-01T00:00:00Z", "eventTimeZoneOffset": "+00:00", "epcList": ["urn:epc:id:sgtin:0614141.107346.2"]},
+    {"type": "AggregationEvent", "action": "ADD", "eventTime": "2024-01-01T00:00:00Z", "eventTimeZoneOffset": "+00:00", "childEPCs": ["urn:epc:id:sgtin:0614141.107346.1"]}
+  ]}
+}

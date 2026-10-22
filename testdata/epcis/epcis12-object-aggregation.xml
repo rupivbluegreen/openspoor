@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<epcis:EPCISDocument xmlns:epcis="urn:epcglobal:epcis:xsd:1" schemaVersion="1.2" creationDate="2024-03-01T10:00:00Z">
+  <EPCISBody>
+    <EventList>
+      <ObjectEvent>
+        <eventTime>2024-03-01T09:00:00.000+01:00</eventTime>
+        <eventTimeZoneOffset>+01:00</eventTimeZoneOffset>
+        <epcList>
+          <epc>urn:epc:id:sgtin:0614141.107346.1001</epc>
+          <epc>urn:epc:id:sgtin:0614141.107346.1002</epc>
+        </epcList>
+        <action>ADD</action>
+        <bizStep>urn:epcglobal:cbv:bizstep:commissioning</bizStep>
+        <disposition>urn:epcglobal:cbv:disp:active</disposition>
+        <readPoint><id>urn:epc:id:sgln:0614141.07346.0</id></readPoint>
+        <extension>
+          <ilmd>
+            <cbvmda:lotNumber xmlns:cbvmda="urn:epcglobal:cbv:mda">LOT42</cbvmda:lotNumber>
+            <cbvmda:itemExpirationDate xmlns:cbvmda="urn:epcglobal:cbv:mda">2027-01-31</cbvmda:itemExpirationDate>
+          </ilmd>
+        </extension>
+      </ObjectEvent>
+      <AggregationEvent>
+        <eventTime>2024-03-01T09:05:00.000+01:00</eventTime>
+        <eventTimeZoneOffset>+01:00</eventTimeZoneOffset>
+        <parentID>urn:epc:id:sscc:0614141.1234567890</parentID>
+        <childEPCs>
+          <epc>urn:epc:id:sgtin:0614141.107346.1001</epc>
+          <epc>urn:epc:id:sgtin:0614141.107346.1002</epc>
+        </childEPCs>
+        <action>ADD</action>
+        <bizStep>urn:epcglobal:cbv:bizstep:packing</bizStep>
+        <disposition>urn:epcglobal:cbv:disp:in_progress</disposition>
+        <bizLocation><id>urn:epc:id:sgln:0614141.07346.0</id></bizLocation>
+      </AggregationEvent>
+      <extension>
+        <TransformationEvent>
+          <eventTime>2024-03-02T08:00:00Z</eventTime>
+          <eventTimeZoneOffset>+00:00</eventTimeZoneOffset>
+          <inputQuantityList>
+            <quantityElement><epcClass>urn:epc:class:lgtin:4012345.012345.998877</epcClass><quantity>200</quantity><uom>KGM</uom></quantityElement>
+          </inputQuantityList>
+          <outputEPCList><epc>urn:epc:id:sgtin:4012345.077889.25</epc></outputEPCList>
+          <bizStep>urn:epcglobal:cbv:bizstep:commissioning</bizStep>
+        </TransformationEvent>
+      </extension>
+    </EventList>
+  </EPCISBody>
+</epcis:EPCISDocument>
