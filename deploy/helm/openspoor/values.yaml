@@ -1,0 +1,46 @@
+image:
+  repository: ghcr.io/openspoor/openspoor
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+mode: single          # single | saas | hub
+publicUrl: https://openspoor.example.com
+baseDomain: openspoor.example.com   # saas: tenants at <slug>.<baseDomain>
+
+# Secrets are never stored in values: point at an existing Secret with keys
+# OPENSPOOR_DATABASE_URL, OPENSPOOR_JWT_SECRET, OPENSPOOR_MASTER_KEY (+ optional ones).
+existingSecret: openspoor-secrets
+migrateDatabaseUrlKey: OPENSPOOR_DATABASE_URL
+
+extraEnv: {}          # e.g. OPENSPOOR_KAFKA_BROKERS, OPENSPOOR_OIDC_ISSUER, OPENSPOOR_S3_ENDPOINT
+
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { memory: 1Gi }
+worker:
+  replicas: 1
+  concurrency: 4
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { memory: 1Gi }
+
+service:
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []           # [openspoor.example.com] or ["*.openspoor.example.com"] for saas
+  tls: []
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: [ALL] }

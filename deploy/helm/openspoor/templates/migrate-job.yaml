@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "openspoor.name" . }}-migrate-{{ .Release.Revision }}
+  labels: {{- include "openspoor.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "openspoor.image" . }}
+          args: ["migrate"]
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom: [{ secretRef: { name: {{ .Values.existingSecret }} } }]
+          env: {{- include "openspoor.env" . | nindent 12 }}

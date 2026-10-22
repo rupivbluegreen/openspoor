@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "openspoor.name" . }}-worker
+  labels: {{- include "openspoor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels: { app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/component: worker }
+  template:
+    metadata:
+      labels: {{- include "openspoor.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "openspoor.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["worker"]
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom: [{ secretRef: { name: {{ .Values.existingSecret }} } }]
+          env: {{- include "openspoor.env" . | nindent 12 }}
+            - name: OPENSPOOR_WORKER_CONCURRENCY
+              value: {{ .Values.worker.concurrency | quote }}
+          ports: [{ name: http, containerPort: 8080 }]
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}

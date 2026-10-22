@@ -56,3 +56,6 @@ worker:
 
 docker: ## container image openspoor/openspoor
 	docker build -t openspoor/openspoor:$(VERSION) -f ../deploy/Dockerfile ..
+
+validation-pack: ## generate docs/validation/OQ-report.md from a full test run
+	eval "$$(../scripts/testdb.sh)" && OPENSPOOR_BENCH=1 OPENSPOOR_BENCH_EVENTS=20000 $(GO) test -count=1 -json ./... | $(GO) run ./cmd/validationpack -trace ../docs/validation/traceability.yaml > ../docs/validation/OQ-report.md

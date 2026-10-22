@@ -1,0 +1,7 @@
+apiVersion: v2
+name: openspoor
+description: Open Spoor — the Open Agentic Supply Chain OS (one image; api + worker)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+license: Apache-2.0
