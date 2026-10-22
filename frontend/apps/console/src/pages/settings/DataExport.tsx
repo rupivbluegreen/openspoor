@@ -2,14 +2,13 @@ import { useState } from 'react';
 import { Alert, Button, Card, Space, Typography } from 'antd';
 import { CloudDownloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { api, downloadBlob, notifyError, PageContainer, useESignature } from '@openspoor/ui/pro';
+import { api, downloadBlob, ModalForm, notifyError, PageContainer, ProFormText, ProFormTextArea, tokenStore } from '@openspoor/ui/pro';
 import { useSession } from '../../lib/session';
 
 export default function DataExport() {
   const { t } = useTranslation();
   const { tenant, hasRole } = useSession();
   const [busy, setBusy] = useState(false);
-  const { requestSignature, holder } = useESignature();
 
   const exportData = async () => {
     setBusy(true);
@@ -24,14 +23,16 @@ export default function DataExport() {
     }
   };
 
-  const deleteTenant = async () => {
-    if (!tenant) return;
-    const sig = await requestSignature({ entity: 'tenant', entityId: tenant.id, defaultMeaning: 'responsibility', defaultReason: 'Delete tenant and all data' });
-    if (!sig) return;
+  // The server re-authenticates the password and requires the typed slug before crypto-shredding the tenant.
+  const deleteTenant = async (v: { confirmSlug: string; password: string; reason: string }) => {
     try {
-      await api.del('/tenant', { json: { signatureId: sig.id } });
+      await api.del('/tenant', { json: v });
+      tokenStore.set(null);
+      window.location.assign('/login');
+      return true;
     } catch (e) {
       notifyError(e);
+      return false;
     }
   };
 
@@ -47,13 +48,24 @@ export default function DataExport() {
         {hasRole('Admin') && (
           <Card title="Delete tenant">
             <Alert type="error" showIcon title="Deleting the tenant is irreversible and requires an electronic signature." style={{ marginBottom: 12 }} />
-            <Button danger icon={<DeleteOutlined />} onClick={deleteTenant}>
-              {t('action.delete')}
-            </Button>
+            <ModalForm<{ confirmSlug: string; password: string; reason: string }>
+              title="Delete tenant"
+              trigger={<Button danger icon={<DeleteOutlined />}>{t('action.delete')}</Button>}
+              submitter={{ submitButtonProps: { danger: true } }}
+              modalProps={{ destroyOnHidden: true }}
+              onFinish={deleteTenant}
+            >
+              <ProFormText
+                name="confirmSlug"
+                label={`Type the tenant slug "${tenant?.slug ?? ''}" to confirm`}
+                rules={[{ required: true }, { validator: (_, v) => (v === tenant?.slug ? Promise.resolve() : Promise.reject(new Error('Slug does not match'))) }]}
+              />
+              <ProFormText.Password name="password" label="Your password" rules={[{ required: true }]} />
+              <ProFormTextArea name="reason" label="Reason" rules={[{ required: true }]} />
+            </ModalForm>
           </Card>
         )}
       </Space>
-      {holder}
     </PageContainer>
   );
 }
