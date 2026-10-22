@@ -62,7 +62,9 @@ func TestFederationTwoNodes(t *testing.T) {
 		r := a.Do("GET", "/api/v1/federation/messages", nil)
 		t.Fatalf("node B events: %d; messages %s", st.Events, r.Body)
 	}
-	var msgs struct{ Items []struct{ Status, Direction string } }
+	var msgs struct {
+		Items []struct{ Status, Direction string }
+	}
 	a.Must(http.StatusOK, a.Do("GET", "/api/v1/federation/messages", nil), &msgs)
 	if len(msgs.Items) != 1 || msgs.Items[0].Status != "delivered" {
 		t.Fatalf("outbound status: %+v", msgs.Items)
@@ -121,7 +123,9 @@ func TestFederationTwoNodes(t *testing.T) {
 	}
 	a.Must(http.StatusOK, a.Do("POST", "/api/v1/b2b/documents/"+d.ID+"/send", nil), nil)
 	a.Drain()
-	var inb struct{ Items []struct{ Number, Direction string } }
+	var inb struct {
+		Items []struct{ Number, Direction string }
+	}
 	b.Must(http.StatusOK, b.Do("GET", "/api/v1/b2b/documents?direction=inbound", nil), &inb)
 	if len(inb.Items) != 1 || inb.Items[0].Number != "PO-9" {
 		t.Fatalf("inbound b2b on node B: %+v", inb.Items)

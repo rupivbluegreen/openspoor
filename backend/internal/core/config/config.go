@@ -64,7 +64,7 @@ func Load() (Config, error) {
 		LagoURL:           env("OPENSPOOR_LAGO_URL", ""),
 		LagoAPIKey:        env("OPENSPOOR_LAGO_API_KEY", ""),
 		AnthropicKey:      env("ANTHROPIC_API_KEY", ""),
-		AnthropicModel:    env("OPENSPOOR_ASSISTANT_MODEL", "claude-sonnet-5-5"),
+		AnthropicModel:    env("OPENSPOOR_ASSISTANT_MODEL", ""),
 		WorkerConcurrency: envInt("OPENSPOOR_WORKER_CONCURRENCY", 4),
 		CORSOrigins:       envList("OPENSPOOR_CORS_ORIGINS"),
 		LogLevel:          env("OPENSPOOR_LOG_LEVEL", "info"),

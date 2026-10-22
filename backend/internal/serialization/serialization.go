@@ -286,7 +286,7 @@ func (m *Module) Allocate(ctx context.Context, poolID uuid.UUID, count int, idem
 			return err
 		}
 		remaining := capacity - next
-		if remaining*100 < capacity*int64(lowPct) {
+		if lowWatermark(remaining, capacity, lowPct) {
 			pool.Issued = next
 			pool.fill()
 			lowAlert = &pool
@@ -602,4 +602,10 @@ func (c *Checker) StatusMany(gtins, serials []string) []SerialStatus {
 		return nil
 	})
 	return out
+}
+
+// lowWatermark reports remaining < capacity * pct / 100 without int64 overflow
+// (FF1 pools can hold up to 2^62 serials).
+func lowWatermark(remaining, capacity int64, pct int) bool {
+	return float64(remaining) < float64(capacity)*float64(pct)/100
 }

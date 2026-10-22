@@ -688,30 +688,35 @@ func (m *Module) getReport(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-// resubmit requeues a rejected or failed report (one click from the alert inbox) and resolves its alert.
+// Resubmit requeues a rejected or failed report inside a tenant tx and resolves its alert.
+// It is used by the alert inbox (one click) and by the Act agents.
+func Resubmit(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, id uuid.UUID) (Report, error) {
+	rep, err := db.One[Report](ctx, tx, `update regulatory_report set status='queued', submission_ref='', updated_at=now()
+		where id=$1 and status in ('rejected','failed') returning `+reportCols, id)
+	if err != nil {
+		return rep, httpx.Conflict("only rejected or failed reports can be resubmitted")
+	}
+	if _, err := tx.Exec(ctx, `update alert set status='resolved', resolved_at=now() where entity='regulatory_report' and entity_id=$1 and status='open'`, id.String()); err != nil {
+		return rep, err
+	}
+	if _, err := jobs.Enqueue(ctx, tx, &tenant, JobSubmit, map[string]any{"reportId": id}, jobs.MaxAttempts(6)); err != nil {
+		return rep, err
+	}
+	_, err = audit.Write(ctx, tx, audit.Record{Action: "report.resubmit", Entity: "regulatory_report", EntityID: id.String(), After: map[string]any{"kind": rep.Kind}})
+	return rep, err
+}
+
 func (m *Module) resubmit(w http.ResponseWriter, r *http.Request) error {
 	id, err := ids.Param(r, "id")
 	if err != nil {
 		return err
 	}
-	tenant := kernel.TenantOf(r.Context())
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		rep, err := db.One[Report](r.Context(), tx, `update regulatory_report set status='queued', submission_ref='', updated_at=now()
-			where id=$1 and status in ('rejected','failed') returning `+reportCols, id)
-		if err != nil {
-			return httpx.Conflict("only rejected or failed reports can be resubmitted")
+		rep, err := Resubmit(r.Context(), tx, kernel.TenantOf(r.Context()), id)
+		if err == nil {
+			httpx.JSON(w, http.StatusAccepted, rep)
 		}
-		if _, err := tx.Exec(r.Context(), `update alert set status='resolved', resolved_at=now() where entity='regulatory_report' and entity_id=$1 and status='open'`, id.String()); err != nil {
-			return err
-		}
-		if _, err := jobs.Enqueue(r.Context(), tx, &tenant, JobSubmit, map[string]any{"reportId": id}, jobs.MaxAttempts(6)); err != nil {
-			return err
-		}
-		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "report.resubmit", Entity: "regulatory_report", EntityID: id.String(), After: map[string]any{"kind": rep.Kind}}); err != nil {
-			return err
-		}
-		httpx.JSON(w, http.StatusAccepted, rep)
-		return nil
+		return err
 	})
 }
 

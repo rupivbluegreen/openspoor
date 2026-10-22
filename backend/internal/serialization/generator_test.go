@@ -78,3 +78,13 @@ func BenchmarkAllocate100k(b *testing.B) {
 	}
 	b.ReportMetric(float64(100_000*b.N)/b.Elapsed().Seconds(), "serials/s")
 }
+
+func TestLowWatermarkNoOverflow(t *testing.T) {
+	const capacity = int64(1) << 62
+	if lowWatermark(capacity-1, capacity, 10) {
+		t.Fatal("full pool reported low")
+	}
+	if !lowWatermark(capacity/20, capacity, 10) {
+		t.Fatal("5% remaining not reported low at 10% watermark")
+	}
+}

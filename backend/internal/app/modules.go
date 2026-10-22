@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/openspoor/openspoor/internal/act"
 
 	"github.com/google/uuid"
 
@@ -39,5 +40,6 @@ func buildModules(d kernel.Deps, plat *platform.Module) ([]kernel.Module, error)
 	plat.HostTenant = sa.SlugFromHost
 	fd := food.New(d, ep)
 	lk := link.New(d, ep)
-	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd, lk}, nil
+	ac := act.New(d)
+	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd, lk, ac}, nil
 }
