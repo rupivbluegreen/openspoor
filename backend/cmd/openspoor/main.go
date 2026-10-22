@@ -28,6 +28,7 @@ Commands:
   migrate    apply database migrations
   bootstrap  create the first tenant and admin (--slug --name --email --password)
   seed       load the demo data set (3 fictional companies, --packs N serialized packs)
+  openapi    print the OpenAPI 3.1 document generated from the router
   version    print the version
 `
 
@@ -50,6 +51,14 @@ func main() {
 	switch cmd := os.Args[1]; cmd {
 	case "version":
 		fmt.Println(app.Version)
+	case "openapi":
+		a := mustApp(ctx, cfg)
+		defer a.Close()
+		b, err := a.OpenAPI()
+		if err != nil {
+			fatal(err)
+		}
+		_, _ = os.Stdout.Write(b)
 	case "migrate":
 		if err := migrations.Up(ctx, migrateURL(cfg)); err != nil {
 			fatal(err)
