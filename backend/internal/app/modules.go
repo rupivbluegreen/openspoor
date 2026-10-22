@@ -10,6 +10,7 @@ import (
 	"github.com/openspoor/openspoor/internal/dscsa"
 	"github.com/openspoor/openspoor/internal/epcis"
 	"github.com/openspoor/openspoor/internal/food"
+	"github.com/openspoor/openspoor/internal/link"
 	"github.com/openspoor/openspoor/internal/masterdata"
 	"github.com/openspoor/openspoor/internal/partners"
 	"github.com/openspoor/openspoor/internal/platform"
@@ -37,5 +38,6 @@ func buildModules(d kernel.Deps, plat *platform.Module) ([]kernel.Module, error)
 	sa.Wire(func(g func(context.Context, uuid.UUID, int) error) { ep.Gate = g })
 	plat.HostTenant = sa.SlugFromHost
 	fd := food.New(d, ep)
-	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd}, nil
+	lk := link.New(d, ep)
+	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd, lk}, nil
 }

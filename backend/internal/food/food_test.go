@@ -115,7 +115,9 @@ func TestFoodTraceabilityRecallAndEUDR(t *testing.T) {
 	if strings.Join(rc.AffectedLots, ",") != "LET-001,SALAD-77" || len(rc.AffectedCustomers) != 3 {
 		t.Fatalf("recall scope: lots=%v customers=%+v", rc.AffectedLots, rc.AffectedCustomers)
 	}
-	var lots struct{ Items []struct{ TLC, Status string } }
+	var lots struct {
+		Items []struct{ TLC, Status string }
+	}
 	do(http.StatusOK, "GET", "/api/v1/food/lots?status=recalled", nil, &lots)
 	if len(lots.Items) != 2 {
 		t.Fatalf("recalled lots: %+v", lots.Items)

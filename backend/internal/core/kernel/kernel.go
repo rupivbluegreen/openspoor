@@ -63,3 +63,8 @@ type Schedule struct {
 type Scheduled interface {
 	Schedules() []Schedule
 }
+
+// RootRoutes is implemented by modules serving paths outside /api/v1 (e.g. /.well-known).
+type RootRoutes interface {
+	Root(r chi.Router)
+}

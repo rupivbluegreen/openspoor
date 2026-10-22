@@ -98,3 +98,6 @@ func (k *Keyring) Open(ctx context.Context, tenant uuid.UUID, sealed, aad []byte
 	}
 	return s.Open(sealed, aad)
 }
+
+// Master returns the installation-level sealer (for node identity keys, not tenant data).
+func (k *Keyring) Master() *Sealer { return k.master }

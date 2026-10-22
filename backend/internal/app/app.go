@@ -167,6 +167,11 @@ func (a *App) routes() http.Handler {
 		_, _ = w.Write([]byte("ready"))
 	})
 	r.Handle("/metrics", promhttp.Handler())
+	for _, m := range a.Modules {
+		if rr, ok := m.(kernel.RootRoutes); ok {
+			rr.Root(r)
+		}
+	}
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/meta", func(w http.ResponseWriter, _ *http.Request) {
 			names := make([]string, 0, len(a.Modules))
