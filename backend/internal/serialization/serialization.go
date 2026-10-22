@@ -167,7 +167,10 @@ func (m *Module) CreatePool(ctx context.Context, tx pgx.Tx, in PoolInput) (Pool,
 	if err != nil {
 		return Pool{}, httpx.BadRequest(err.Error())
 	}
-	sealed := m.Seal.Seal(key, []byte(id.String()))
+	sealed, err := m.Keys.Seal(ctx, kernel.TenantOf(ctx), key, []byte(id.String()))
+	if err != nil {
+		return Pool{}, err
+	}
 	p, err := db.One[Pool](ctx, tx, `insert into serial_pool (id, tenant_id, product_id, gtin, market, mode, alphabet, length, prefix, key_material, capacity, low_watermark_pct)
 		values ($1, app_tenant(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning `+poolCols,
 		id, prod.ID, prod.GTIN, in.Market, in.Mode, in.Alphabet, in.Length, in.Prefix, sealed, g.Capacity(), in.LowWatermarkPct)
@@ -201,12 +204,13 @@ func (m *Module) createPool(w http.ResponseWriter, r *http.Request) error {
 
 type poolKey struct {
 	Pool
-	KeyMaterial []byte `db:"key_material"`
+	TenantID    uuid.UUID `db:"tenant_id"`
+	KeyMaterial []byte    `db:"key_material"`
 }
 
 // generator returns (and caches) the pool's generator.
 func (m *Module) generator(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*Generator, Pool, error) {
-	pk, err := db.One[poolKey](ctx, tx, `select `+poolCols+`, key_material from serial_pool where id=$1`, id)
+	pk, err := db.One[poolKey](ctx, tx, `select `+poolCols+`, tenant_id, key_material from serial_pool where id=$1`, id)
 	if err != nil {
 		return nil, Pool{}, err
 	}
@@ -214,7 +218,7 @@ func (m *Module) generator(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*Gener
 	if g, ok := m.gens.Load(id); ok {
 		return g.(*Generator), pk.Pool, nil
 	}
-	key, err := m.Seal.Open(pk.KeyMaterial, []byte(id.String()))
+	key, err := m.Keys.Open(ctx, pk.TenantID, pk.KeyMaterial, []byte(id.String()))
 	if err != nil {
 		return nil, pk.Pool, fmt.Errorf("unseal pool key: %w", err)
 	}

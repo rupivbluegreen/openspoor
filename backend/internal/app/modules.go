@@ -1,6 +1,10 @@
 package app
 
 import (
+	"context"
+
+	"github.com/google/uuid"
+
 	"github.com/openspoor/openspoor/internal/connectors"
 	"github.com/openspoor/openspoor/internal/core/kernel"
 	"github.com/openspoor/openspoor/internal/dscsa"
@@ -8,6 +12,7 @@ import (
 	"github.com/openspoor/openspoor/internal/masterdata"
 	"github.com/openspoor/openspoor/internal/partners"
 	"github.com/openspoor/openspoor/internal/platform"
+	"github.com/openspoor/openspoor/internal/saas"
 	"github.com/openspoor/openspoor/internal/serialization"
 	"github.com/openspoor/openspoor/internal/trace"
 	"github.com/openspoor/openspoor/internal/verify"
@@ -27,5 +32,8 @@ func buildModules(d kernel.Deps, plat *platform.Module) ([]kernel.Module, error)
 		return nil, err
 	}
 	ep.OnCapture(connectors.JobDispatch)
-	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co}, nil
+	sa := saas.New(d, plat)
+	sa.Wire(func(g func(context.Context, uuid.UUID, int) error) { ep.Gate = g })
+	plat.HostTenant = sa.SlugFromHost
+	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa}, nil
 }

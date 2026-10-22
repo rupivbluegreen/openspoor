@@ -23,7 +23,11 @@ import (
 )
 
 // Module is the platform bounded context.
-type Module struct{ kernel.Deps }
+type Module struct {
+	kernel.Deps
+	// HostTenant resolves a tenant slug from the request host (SaaS subdomains, custom domains).
+	HostTenant func(ctx context.Context, host string) (string, bool)
+}
 
 // New creates the module.
 func New(d kernel.Deps) *Module { return &Module{Deps: d} }

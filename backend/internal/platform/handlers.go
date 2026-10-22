@@ -164,6 +164,11 @@ func (m *Module) login(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Decode(r, &in); err != nil {
 		return err
 	}
+	if in.Tenant == "" && m.HostTenant != nil {
+		if slug, ok := m.HostTenant(r.Context(), r.Host); ok {
+			in.Tenant = slug
+		}
+	}
 	p, err := m.Login(r.Context(), in.Tenant, in.Email, in.Password)
 	if err != nil {
 		return err

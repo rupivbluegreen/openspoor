@@ -24,7 +24,7 @@ type Deps struct {
 	Bus  *bus.Bus
 	Jobs *jobs.Runner
 	Auth *auth.Authenticator
-	Seal *secrets.Sealer
+	Keys *secrets.Keyring
 }
 
 // Module is implemented by each bounded context.

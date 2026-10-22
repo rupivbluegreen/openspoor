@@ -57,7 +57,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		d.Close()
 		return nil, err
 	}
-	deps := kernel.Deps{Cfg: cfg, DB: d, Bus: b, Jobs: jobs.NewRunner(d.Pool, cfg.WorkerConcurrency), Seal: sealer}
+	deps := kernel.Deps{Cfg: cfg, DB: d, Bus: b, Jobs: jobs.NewRunner(d.Pool, cfg.WorkerConcurrency), Keys: secrets.NewKeyring(sealer, d.Pool)}
 	plat := platform.New(deps)
 	a, err := auth.New(ctx, cfg.JWTSecret, cfg.JWTTTL, plat, cfg.OIDCIssuer, cfg.OIDCAudience)
 	if err != nil {

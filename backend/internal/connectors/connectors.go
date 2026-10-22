@@ -114,16 +114,17 @@ type Instance struct {
 	Enabled   bool              `json:"enabled" db:"enabled"`
 	CreatedAt time.Time         `json:"createdAt" db:"created_at"`
 	Secrets   []byte            `json:"-" db:"secrets"`
+	TenantID  uuid.UUID         `json:"-" db:"tenant_id"`
 	HasSecret map[string]bool   `json:"secretsSet" db:"-"`
 }
 
-const instCols = `id, connector, name, config, enabled, created_at, secrets`
+const instCols = `id, connector, name, config, enabled, created_at, secrets, tenant_id`
 
 func (m *Module) listInstances(w http.ResponseWriter, r *http.Request) error {
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
 		items, err := db.List[Instance](r.Context(), tx, `select `+instCols+` from connector_instance order by created_at`)
 		for i := range items {
-			items[i].HasSecret = m.secretKeys(items[i])
+			items[i].HasSecret = m.secretKeys(r.Context(), items[i])
 		}
 		if err == nil {
 			httpx.JSON(w, http.StatusOK, httpx.Page[Instance]{Items: items, Total: len(items)})
@@ -132,12 +133,12 @@ func (m *Module) listInstances(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (m *Module) secretKeys(in Instance) map[string]bool {
+func (m *Module) secretKeys(ctx context.Context, in Instance) map[string]bool {
 	out := map[string]bool{}
 	if len(in.Secrets) == 0 {
 		return out
 	}
-	b, err := m.Seal.Open(in.Secrets, []byte(in.ID.String()))
+	b, err := m.Keys.Open(ctx, in.TenantID, in.Secrets, []byte(in.ID.String()))
 	if err != nil {
 		return out
 	}
@@ -157,11 +158,12 @@ type instanceInput struct {
 }
 
 // split separates secret config values (sealed at rest) from plain ones.
-func (m *Module) split(c connector.Connector, id uuid.UUID, cfg map[string]string, prev []byte) (map[string]string, []byte, error) {
+func (m *Module) split(ctx context.Context, c connector.Connector, id uuid.UUID, cfg map[string]string, prev []byte) (map[string]string, []byte, error) {
+	tenant := kernel.TenantOf(ctx)
 	plain := map[string]string{}
 	secret := map[string]string{}
 	if len(prev) > 0 {
-		if b, err := m.Seal.Open(prev, []byte(id.String())); err == nil {
+		if b, err := m.Keys.Open(ctx, tenant, prev, []byte(id.String())); err == nil {
 			_ = json.Unmarshal(b, &secret)
 		}
 	}
@@ -193,7 +195,10 @@ func (m *Module) split(c connector.Connector, id uuid.UUID, cfg map[string]strin
 	var sealed []byte
 	if len(secret) > 0 {
 		b, _ := json.Marshal(secret)
-		sealed = m.Seal.Seal(b, []byte(id.String()))
+		var err error
+		if sealed, err = m.Keys.Seal(ctx, tenant, b, []byte(id.String())); err != nil {
+			return nil, nil, err
+		}
 	}
 	return plain, sealed, nil
 }
@@ -211,7 +216,7 @@ func (m *Module) createInstance(w http.ResponseWriter, r *http.Request) error {
 		in.Name = c.Info().Name
 	}
 	id := ids.New()
-	plain, sealed, err := m.split(c, id, in.Config, nil)
+	plain, sealed, err := m.split(r.Context(), c, id, in.Config, nil)
 	if err != nil {
 		return err
 	}
@@ -222,7 +227,7 @@ func (m *Module) createInstance(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		inst.HasSecret = m.secretKeys(inst)
+		inst.HasSecret = m.secretKeys(r.Context(), inst)
 		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "connector.create", Entity: "connector_instance", EntityID: id.String(), After: inst}); err != nil {
 			return err
 		}
@@ -249,7 +254,7 @@ func (m *Module) updateInstance(w http.ResponseWriter, r *http.Request) error {
 		if in.Config == nil {
 			in.Config = cur.Config
 		}
-		plain, sealed, err := m.split(c, id, in.Config, cur.Secrets)
+		plain, sealed, err := m.split(r.Context(), c, id, in.Config, cur.Secrets)
 		if err != nil {
 			return err
 		}
@@ -265,7 +270,7 @@ func (m *Module) updateInstance(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		inst.HasSecret = m.secretKeys(inst)
+		inst.HasSecret = m.secretKeys(r.Context(), inst)
 		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "connector.update", Entity: "connector_instance", EntityID: id.String(), Before: cur, After: inst}); err != nil {
 			return err
 		}
@@ -275,13 +280,13 @@ func (m *Module) updateInstance(w http.ResponseWriter, r *http.Request) error {
 }
 
 // effectiveConfig merges plain and decrypted secret config and resolves "local-mock".
-func (m *Module) effectiveConfig(in Instance) connector.Config {
+func (m *Module) effectiveConfig(ctx context.Context, in Instance) connector.Config {
 	cfg := connector.Config{}
 	for k, v := range in.Config {
 		cfg[k] = v
 	}
 	if len(in.Secrets) > 0 {
-		if b, err := m.Seal.Open(in.Secrets, []byte(in.ID.String())); err == nil {
+		if b, err := m.Keys.Open(ctx, in.TenantID, in.Secrets, []byte(in.ID.String())); err == nil {
 			var s map[string]string
 			_ = json.Unmarshal(b, &s)
 			for k, v := range s {
@@ -569,7 +574,7 @@ func (m *Module) submitJob(ctx context.Context, j jobs.Job) error {
 		return nil
 	}
 	c := m.registry[inst.Connector]
-	sub, err := c.Submit(ctx, m.effectiveConfig(inst), connector.Payload{Kind: rep.Kind, Key: rep.Key, Body: rep.Payload, Packs: rep.Packs})
+	sub, err := c.Submit(ctx, m.effectiveConfig(ctx, inst), connector.Payload{Kind: rep.Kind, Key: rep.Key, Body: rep.Payload, Packs: rep.Packs})
 	return m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
 		if err != nil {
 			last := j.Attempts >= j.MaxAttempts
@@ -618,7 +623,7 @@ func (m *Module) pollJob(ctx context.Context, j jobs.Job) error {
 		return nil
 	}
 	c := m.registry[inst.Connector]
-	st, err := c.PollStatus(ctx, m.effectiveConfig(inst), connector.Submission{Ref: rep.SubmissionRef})
+	st, err := c.PollStatus(ctx, m.effectiveConfig(ctx, inst), connector.Submission{Ref: rep.SubmissionRef})
 	if err != nil {
 		return err
 	}

@@ -133,6 +133,10 @@ func (e *Env) Call(token, method, path string, body any, headers ...string) Resp
 		}
 	}
 	for i := 0; i+1 < len(headers); i += 2 {
+		if headers[i] == "Host" {
+			req.Host = headers[i+1]
+			continue
+		}
 		req.Header.Set(headers[i], headers[i+1])
 	}
 	res, err := http.DefaultClient.Do(req)

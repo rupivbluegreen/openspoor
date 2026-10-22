@@ -22,6 +22,7 @@ import (
 	"github.com/openspoor/openspoor/internal/core/db"
 	"github.com/openspoor/openspoor/internal/core/httpx"
 	"github.com/openspoor/openspoor/internal/core/ids"
+	"github.com/openspoor/openspoor/internal/core/kernel"
 	"github.com/openspoor/openspoor/internal/masterdata"
 	"github.com/openspoor/openspoor/internal/trace"
 	lib "github.com/openspoor/openspoor/pkg/epcis"
@@ -199,7 +200,10 @@ func (m *Module) putDirectory(w http.ResponseWriter, r *http.Request) error {
 	id := ids.New()
 	var creds []byte
 	if in.APIKey != "" {
-		creds = m.Seal.Seal([]byte(in.APIKey), []byte("vrs:"+in.GTINPrefix))
+		var err error
+		if creds, err = m.Keys.Seal(r.Context(), kernel.TenantOf(r.Context()), []byte(in.APIKey), []byte("vrs:"+in.GTINPrefix)); err != nil {
+			return err
+		}
 	}
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
 		d, err := db.One[dirEntry](r.Context(), tx, `insert into vrs_directory (id, tenant_id, gtin_prefix, responder_url, responder_gln, credentials) values ($1, app_tenant(), $2,$3,$4,$5)
@@ -312,7 +316,7 @@ func (m *Module) vrsRequest(w http.ResponseWriter, r *http.Request) error {
 	} else {
 		apiKey := ""
 		if len(target.creds) > 0 {
-			if b, err := m.Seal.Open(target.creds, []byte("vrs:"+target.prefix)); err == nil {
+			if b, err := m.Keys.Open(ctx, kernel.TenantOf(ctx), target.creds, []byte("vrs:"+target.prefix)); err == nil {
 				apiKey = string(b)
 			}
 		}

@@ -55,6 +55,8 @@ type Module struct {
 	Serials   *serialization.Module
 	Client    *http.Client
 	onCapture []string
+	// Gate, when set, may refuse a capture before it is stored (SaaS quotas).
+	Gate func(ctx context.Context, tenant uuid.UUID, events int) error
 }
 
 // OnCapture registers a job kind enqueued (payload {"captureId"}) in every capture
@@ -186,6 +188,11 @@ func (m *Module) Capture(ctx context.Context, contentType string, body []byte, s
 		return Capture{}, httpx.BadRequest("document has no events")
 	}
 	mark("parse", t0)
+	if m.Gate != nil {
+		if err := m.Gate(ctx, p.TenantID, len(doc.Body.EventList)); err != nil {
+			return Capture{}, err
+		}
+	}
 	t0 = time.Now()
 	errs := lib.ValidateDocument(doc)
 	mark("validate", t0)
