@@ -1,0 +1,12 @@
+Open Spoor
+Copyright 2026 The Open Spoor Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It implements public standards published by GS1 (EPCIS 2.0, CBV 2.0, GS1 Digital
+Link, EPC Tag Data Standard, Lightweight Messaging Standard for Verification of
+Product Identifiers) and W3C. GS1 and EPCIS are trademarks of GS1 AISBL; Open Spoor
+is not affiliated with or endorsed by GS1.
+
+Third-party Go and JavaScript dependencies are listed in backend/go.mod and the
+frontend package.json files with their own licences.

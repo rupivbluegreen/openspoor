@@ -1,0 +1,32 @@
+version: "2"
+linters:
+  default: standard
+  enable:
+    - depguard
+    - errorlint
+    - gosec
+    - misspell
+    - revive
+    - bodyclose
+  settings:
+    depguard:
+      rules:
+        pkg-is-standalone:
+          files: ["**/pkg/**"]
+          deny:
+            - pkg: github.com/openspoor/openspoor/internal
+              desc: pkg/ libraries must stay reusable without Open Spoor internals
+        no-minio:
+          deny:
+            - pkg: github.com/minio/minio-go
+              desc: use the S3 API (SeaweedFS), never MinIO (ADR-005)
+    gosec:
+      excludes: [G115, G404]
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [gosec, errcheck]

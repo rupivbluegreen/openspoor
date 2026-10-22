@@ -1,0 +1,76 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    env:
+      OPENSPOOR_TEST_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      OPENSPOOR_TEST_DATABASE_URL: postgres://openspoor:openspoor@localhost:5432/postgres?sslmode=disable
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Create non-superuser app role (RLS is enforced for it)
+        run: psql "$OPENSPOOR_TEST_ADMIN_URL" -c "create role openspoor login password 'openspoor' createdb"
+      - run: go build ./...
+      - run: go vet ./...
+      - name: Tests (unit + integration against PostgreSQL 16)
+        run: go test -race -count=1 -coverpkg=./internal/...,./pkg/... -coverprofile=coverage.out ./...
+      - run: go tool cover -func=coverage.out | tail -1
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: backend
+          version: latest
+      - name: go-arch-lint (module boundaries)
+        run: |
+          go install github.com/fe3dback/go-arch-lint@latest
+          go-arch-lint check
+      - name: OpenAPI diff against main
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin ${{ github.base_ref }}
+          git show origin/${{ github.base_ref }}:backend/internal/app/openapi.yaml > /tmp/base.yaml || exit 0
+          docker run --rm -v /tmp:/base -v $PWD/internal/app:/head tufin/oasdiff breaking /base/base.yaml /head/openapi.yaml --fail-on ERR
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      - run: pnpm -r build

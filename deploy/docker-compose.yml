@@ -1,0 +1,69 @@
+# Development stack. `docker compose -f deploy/docker-compose.yml up -d`
+# then `make -C backend migrate seed run` and `pnpm -C frontend dev:console`.
+name: openspoor
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    command: [redpanda, start, --smp, "1", --memory, 1G, --overprovisioned, --node-id, "0",
+      --kafka-addr, PLAINTEXT://0.0.0.0:9092, --advertise-kafka-addr, PLAINTEXT://localhost:9092]
+    ports: ["9092:9092"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: [start-dev, --import-realm]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+    volumes: ["./keycloak:/opt/keycloak/data/import:ro"]
+    ports: ["8180:8080"]
+    depends_on: { postgres: { condition: service_healthy } }
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: postgres
+    ports: ["7233:7233"]
+    depends_on: { postgres: { condition: service_healthy } }
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.80
+    command: server -s3 -dir=/data
+    ports: ["8333:8333"]
+    volumes: [seaweed:/data]
+
+  openspoor:
+    profiles: [app]
+    build: { context: .., dockerfile: deploy/Dockerfile }
+    environment:
+      OPENSPOOR_MODE: single
+      OPENSPOOR_DEV_AUTH: "true"
+      OPENSPOOR_DATABASE_URL: postgres://openspoor:openspoor@postgres:5432/openspoor?sslmode=disable
+      OPENSPOOR_KAFKA_BROKERS: redpanda:9092
+      OPENSPOOR_S3_ENDPOINT: http://seaweedfs:8333
+    ports: ["8080:8080"]
+    depends_on: { postgres: { condition: service_healthy } }
+
+volumes:
+  pgdata: {}
+  seaweed: {}

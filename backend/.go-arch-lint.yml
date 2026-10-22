@@ -1,0 +1,46 @@
+# Module boundaries: modules depend on core and on other modules' exported
+# interfaces only in the directions listed here (no cycles, no reaching into internals).
+version: 3
+workdir: .
+allow:
+  depOnAnyVendor: true
+components:
+  cmd:           { in: cmd/** }
+  app:           { in: internal/app }
+  core:          { in: internal/core/** }
+  testkit:       { in: internal/testkit }
+  platform:      { in: internal/platform }
+  masterdata:    { in: internal/masterdata }
+  serialization: { in: internal/serialization }
+  epcis:         { in: internal/epcis }
+  trace:         { in: internal/trace }
+  dscsa:         { in: internal/dscsa }
+  connectors:    { in: internal/connectors/** }
+  partners:      { in: internal/partners }
+  saas:          { in: internal/saas }
+  food:          { in: internal/food }
+  link:          { in: internal/link }
+  act:           { in: internal/act }
+  ecosystem:     { in: internal/ecosystem }
+  verify:        { in: internal/verify }
+  pkg:           { in: pkg/** }
+  migrations:    { in: migrations }
+commonComponents: [core, pkg]
+deps:
+  cmd:           { mayDependOn: [app, platform, migrations] }
+  app:           { anyProjectDeps: true }
+  testkit:       { mayDependOn: [app, platform, migrations] }
+  platform:      { mayDependOn: [] }
+  masterdata:    { mayDependOn: [] }
+  serialization: { mayDependOn: [masterdata] }
+  epcis:         { mayDependOn: [masterdata, serialization] }
+  trace:         { mayDependOn: [] }
+  dscsa:         { mayDependOn: [masterdata, epcis, trace, partners] }
+  connectors:    { mayDependOn: [masterdata, trace] }
+  partners:      { mayDependOn: [] }
+  saas:          { mayDependOn: [platform] }
+  food:          { mayDependOn: [masterdata, epcis, trace] }
+  link:          { mayDependOn: [partners] }
+  act:           { mayDependOn: [trace] }
+  ecosystem:     { mayDependOn: [trace] }
+  verify:        { mayDependOn: [masterdata, serialization, trace] }
