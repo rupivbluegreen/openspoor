@@ -1,6 +1,6 @@
 const en = {
   app: { name: 'Open Spoor', tagline: 'Open Agentic Supply Chain OS', console: 'Console', operator: 'Operator console' },
-  pillar: { trace: 'Trace', link: 'Link', act: 'Act', comply: 'Comply', food: 'Food', settings: 'Settings' },
+  pillar: { trace: 'Trace', link: 'Link', act: 'Act', comply: 'Comply', food: 'Food', settings: 'Settings', ecosystem: 'Ecosystem' },
   nav: {
     dashboard: 'Dashboard', serialization: 'Serialization', epcisInbox: 'EPCIS Inbox', serialLookup: 'Serial lookup',
     eventQuery: 'Event query', subscriptions: 'Subscriptions', partners: 'Partners', shipments: 'Shipments',
@@ -12,6 +12,8 @@ const en = {
     recalls: 'Recalls', eudr: 'EUDR due diligence', products: 'Master data', organizations: 'Organizations', sites: 'Sites',
     licenses: 'Licenses', users: 'Users & roles', apiKeys: 'API keys', branding: 'Branding', usage: 'Usage & plan',
     dataExport: 'Data export', tenants: 'Tenants', verify: 'Scan & verify', playground: 'EPCIS Playground',
+    marketplace: 'Marketplace', developerApps: 'Developer apps', learn: 'Learning hub', benchmarks: 'Benchmarks',
+    udiDevices: 'UDI devices', coldChain: 'Cold chain',
   },
   action: {
     create: 'Create', edit: 'Edit', save: 'Save', cancel: 'Cancel', delete: 'Delete', submit: 'Submit', search: 'Search',

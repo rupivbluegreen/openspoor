@@ -2,7 +2,7 @@ import type { Messages } from './en';
 
 const nl: Messages = {
   app: { name: 'Open Spoor', tagline: 'Open agentisch supply-chain-OS', console: 'Console', operator: 'Beheerdersconsole' },
-  pillar: { trace: 'Traceren', link: 'Verbinden', act: 'Handelen', comply: 'Naleven', food: 'Voedsel', settings: 'Instellingen' },
+  pillar: { trace: 'Traceren', link: 'Verbinden', act: 'Handelen', comply: 'Naleven', food: 'Voedsel', settings: 'Instellingen', ecosystem: 'Ecosysteem' },
   nav: {
     dashboard: 'Dashboard', serialization: 'Serialisatie', epcisInbox: 'EPCIS-inbox', serialLookup: 'Serienummer opzoeken',
     eventQuery: 'Gebeurtenissen zoeken', subscriptions: 'Abonnementen', partners: 'Partners', shipments: 'Zendingen',
@@ -14,6 +14,8 @@ const nl: Messages = {
     recalls: 'Terugroepacties', eudr: 'EUDR-zorgvuldigheid', products: 'Stamgegevens', organizations: 'Organisaties', sites: 'Locaties',
     licenses: 'Vergunningen', users: 'Gebruikers & rollen', apiKeys: 'API-sleutels', branding: 'Huisstijl', usage: 'Gebruik & abonnement',
     dataExport: 'Gegevensexport', tenants: 'Tenants', verify: 'Scannen & verifiëren', playground: 'EPCIS-speeltuin',
+    marketplace: 'Marktplaats', developerApps: 'Ontwikkelaarsapps', learn: 'Kennisbank', benchmarks: 'Benchmarks',
+    udiDevices: 'UDI-hulpmiddelen', coldChain: 'Koudeketen',
   },
   action: {
     create: 'Aanmaken', edit: 'Bewerken', save: 'Opslaan', cancel: 'Annuleren', delete: 'Verwijderen', submit: 'Indienen', search: 'Zoeken',

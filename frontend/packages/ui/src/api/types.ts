@@ -577,3 +577,137 @@ export interface JsonSchema {
   format?: string;
   items?: JsonSchema;
 }
+
+// --- ecosystem ---
+
+export type AppKind = 'connector' | 'agent' | 'rulepack' | 'integration' | 'app';
+
+/** App/agent package manifest (`POST /apps`). */
+export interface AppManifest {
+  id: string;
+  name: string;
+  kind: AppKind | string;
+  publisher: string;
+  version: string;
+  description?: string;
+  roles?: string[] | null;
+  webhook?: string;
+  homepage?: string;
+}
+
+/** Marketplace listing (`GET /marketplace`, `GET /apps`). */
+export interface AppListing extends AppManifest {
+  verified: boolean;
+  installed: boolean;
+  createdAt?: string;
+}
+
+export interface AppInstall {
+  appId: string;
+  installedBy: string;
+  createdAt: string;
+}
+
+export interface AppInstallResult {
+  app: AppManifest;
+  apiKey: string;
+  note?: string;
+}
+
+export interface SandboxResult {
+  tenant: string;
+  apiKey: string;
+  adminPassword: string;
+  sampleGtin: string;
+  note?: string;
+}
+
+export interface LearnArticle {
+  slug: string;
+  title: string;
+  tags?: string[] | null;
+  body?: string;
+}
+
+export interface BenchmarkKpi {
+  key: string;
+  name: string;
+  unit: string;
+  yours: number | null;
+  peerMedian: number | null;
+  peerP90: number | null;
+  peers: number;
+  lowerIsBetter: boolean;
+}
+
+export interface Benchmarks {
+  kpis: BenchmarkKpi[];
+  minPeers: number;
+  note?: string;
+}
+
+export interface BenchmarkRun {
+  id: string;
+  measuredAt: string;
+  environment: string;
+  version?: string;
+  results: Record<string, unknown>;
+}
+
+export type UdiRiskClass = 'US-I' | 'US-II' | 'US-III' | 'EU-I' | 'EU-IIa' | 'EU-IIb' | 'EU-III';
+
+export interface UdiSubmission {
+  status: string;
+  at: string;
+  ref: string;
+  note?: string;
+}
+
+export interface UdiDevice {
+  id: string;
+  di: string;
+  brandName: string;
+  model?: string;
+  version?: string;
+  description?: string;
+  riskClass: UdiRiskClass | string;
+  gmdnCode?: string;
+  emdnCode?: string;
+  basicUdiDi?: string;
+  sterile: boolean;
+  singleUse: boolean;
+  rx: boolean;
+  labeler: string;
+  submissions?: Record<string, UdiSubmission> | null;
+  createdAt: string;
+}
+
+export interface UdiSubmitResult {
+  submission: UdiSubmission;
+  payload: string;
+}
+
+export interface SensorExcursion {
+  id: string;
+  deviceId: string;
+  epc?: string;
+  shipmentId?: string;
+  minC: number;
+  maxC: number;
+  startedAt: string;
+  endedAt: string;
+  peakC: number;
+  minutes: number;
+  status: string;
+}
+
+export interface SensorReading {
+  time: string;
+  tempC?: number | null;
+  humidity?: number | null;
+}
+
+export interface SensorIngestResult {
+  stored: number;
+  excursions: SensorExcursion[];
+}

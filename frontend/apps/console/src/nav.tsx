@@ -8,6 +8,7 @@ import {
   RobotOutlined, RollbackOutlined, SafetyCertificateOutlined, SafetyOutlined, SearchOutlined,
   SettingOutlined, ShopOutlined, SolutionOutlined, TagsOutlined, TeamOutlined, ThunderboltOutlined,
   TruckOutlined, UserOutlined, AimOutlined, ControlOutlined, SwapOutlined,
+  AppstoreAddOutlined, AppstoreOutlined, BarChartOutlined, CodeOutlined, FieldTimeOutlined, MedicineBoxOutlined, ReadOutlined,
 } from '@ant-design/icons';
 
 type Page = LazyExoticComponent<ComponentType>;
@@ -23,7 +24,7 @@ export interface NavItem {
 }
 
 export interface NavGroup {
-  key: 'trace' | 'link' | 'act' | 'comply' | 'food' | 'settings';
+  key: 'trace' | 'link' | 'act' | 'comply' | 'food' | 'ecosystem' | 'settings';
   icon: ReactNode;
   items: NavItem[];
   foodOnly?: boolean;
@@ -94,6 +95,21 @@ export const NAV: NavGroup[] = [
       { path: '/food/fsma', label: 'fsmaExport', icon: <CloudDownloadOutlined />, page: p(() => import('./pages/food/Fsma')) },
       { path: '/food/recalls', label: 'recalls', icon: <RollbackOutlined />, page: p(() => import('./pages/food/Recalls')) },
       { path: '/food/eudr', label: 'eudr', icon: <GlobalOutlined />, page: p(() => import('./pages/food/Eudr')) },
+      { path: '/food/cold-chain', label: 'coldChain', icon: <FieldTimeOutlined />, page: p(() => import('./pages/food/ColdChain')) },
+    ],
+  },
+  {
+    key: 'ecosystem',
+    icon: <AppstoreAddOutlined />,
+    items: [
+      { path: '/ecosystem/marketplace', label: 'marketplace', icon: <AppstoreOutlined />, page: p(() => import('./pages/ecosystem/Marketplace')) },
+      { path: '/ecosystem/developer', label: 'developerApps', icon: <CodeOutlined />, page: p(() => import('./pages/ecosystem/DeveloperApps')) },
+      {
+        path: '/ecosystem/learn', label: 'learn', icon: <ReadOutlined />, page: p(() => import('./pages/ecosystem/Learn')),
+        children: [{ path: '/ecosystem/learn/:slug', page: p(() => import('./pages/ecosystem/LearnArticle')) }],
+      },
+      { path: '/ecosystem/benchmarks', label: 'benchmarks', icon: <BarChartOutlined />, page: p(() => import('./pages/ecosystem/Benchmarks')) },
+      { path: '/ecosystem/udi', label: 'udiDevices', icon: <MedicineBoxOutlined />, page: p(() => import('./pages/ecosystem/UdiDevices')) },
     ],
   },
   {

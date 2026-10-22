@@ -2,7 +2,7 @@ import type { Messages } from './en';
 
 const ar: Messages = {
   app: { name: 'أوبن سبور', tagline: 'نظام تشغيل مفتوح وذكي لسلاسل الإمداد', console: 'وحدة التحكم', operator: 'وحدة تحكم المشغّل' },
-  pillar: { trace: 'التتبع', link: 'الربط', act: 'التنفيذ', comply: 'الامتثال', food: 'الأغذية', settings: 'الإعدادات' },
+  pillar: { trace: 'التتبع', link: 'الربط', act: 'التنفيذ', comply: 'الامتثال', food: 'الأغذية', settings: 'الإعدادات', ecosystem: 'المنظومة' },
   nav: {
     dashboard: 'لوحة المعلومات', serialization: 'الترقيم التسلسلي', epcisInbox: 'صندوق وارد EPCIS', serialLookup: 'البحث عن رقم تسلسلي',
     eventQuery: 'استعلام الأحداث', subscriptions: 'الاشتراكات', partners: 'الشركاء', shipments: 'الشحنات',
@@ -14,6 +14,8 @@ const ar: Messages = {
     recalls: 'عمليات السحب', eudr: 'العناية الواجبة EUDR', products: 'البيانات الرئيسية', organizations: 'المؤسسات', sites: 'المواقع',
     licenses: 'التراخيص', users: 'المستخدمون والأدوار', apiKeys: 'مفاتيح API', branding: 'الهوية البصرية', usage: 'الاستخدام والخطة',
     dataExport: 'تصدير البيانات', tenants: 'المستأجرون', verify: 'المسح والتحقق', playground: 'ساحة تجربة EPCIS',
+    marketplace: 'السوق', developerApps: 'تطبيقات المطورين', learn: 'مركز التعلم', benchmarks: 'المقارنات المعيارية',
+    udiDevices: 'أجهزة UDI', coldChain: 'سلسلة التبريد',
   },
   action: {
     create: 'إنشاء', edit: 'تعديل', save: 'حفظ', cancel: 'إلغاء', delete: 'حذف', submit: 'إرسال', search: 'بحث',

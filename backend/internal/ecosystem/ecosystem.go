@@ -111,6 +111,10 @@ func (mf Manifest) Validate() error {
 	if mf.Webhook != "" && !strings.HasPrefix(mf.Webhook, "https://") {
 		return httpx.BadRequest("webhook must be https")
 	}
+	// The homepage is rendered as a link in every tenant's catalogue.
+	if mf.Homepage != "" && !strings.HasPrefix(mf.Homepage, "https://") {
+		return httpx.BadRequest("homepage must be https")
+	}
 	return nil
 }
 

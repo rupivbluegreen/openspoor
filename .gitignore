@@ -10,3 +10,4 @@ dist/
 /site/_site/
 .DS_Store
 bench-results/*.tmp
+/backend/openspoor
