@@ -1,0 +1,26 @@
+# Saudi Arabia — SFDA Drug Track and Trace System (RSD).
+id: sa-rsd
+name: Saudi Arabia SFDA drug track and trace (RSD)
+version: "2026.1"
+market: SA
+vertical: pharma
+sources:
+  - title: SFDA Drug Barcoding Specifications
+    url: https://www.sfda.gov.sa/en
+    note: "TODO(spec): cite the exact document version and section numbers"
+rules:
+  - id: serial-max-20
+    description: Serial number (AI 21) up to 20 alphanumeric characters (GS1 General Specifications).
+    source: "GS1 General Specifications, AI (21); SFDA Drug Barcoding Specifications"
+    appliesTo: serial_pool
+    check: { field: total_length, op: lte, value: 20 }
+    severity: error
+  - id: batch-and-expiry
+    description: The 2D DataMatrix carries GTIN (01), serial (21), batch (10) and expiry (17).
+    source: "SFDA Drug Barcoding Specifications"
+    appliesTo: commissioning
+    check: { field: has_lot_and_expiry, op: eq, value: true }
+    severity: error
+reporting:
+  connector: sa-rsd
+  triggers: [commissioning, shipping, receiving, decommissioning, destroying, dispensing]

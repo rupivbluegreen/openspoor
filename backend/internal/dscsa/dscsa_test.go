@@ -88,7 +88,7 @@ func TestDSCSAManufacturerToWholesaler(t *testing.T) {
 	var in struct {
 		Items []struct {
 			ID, Status, PONumber string
-			Reconciliation      struct{ Matched bool }
+			Reconciliation       struct{ Matched bool }
 		}
 	}
 	e.Must(http.StatusOK, e.Call(whTok, "GET", "/api/v1/shipments?direction=inbound", nil), &in)

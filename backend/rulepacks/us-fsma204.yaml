@@ -1,0 +1,27 @@
+# US FDA Food Traceability Rule (FSMA section 204), 21 CFR Part 1 Subpart S.
+id: us-fsma204
+name: US FSMA 204 Food Traceability Rule
+version: "2026.1"
+market: US
+vertical: food
+sources:
+  - title: 21 CFR Part 1 Subpart S — Additional Traceability Records for Certain Foods
+    url: https://www.ecfr.gov/current/title-21/chapter-I/subchapter-A/part-1/subpart-S
+rules:
+  - id: tlc-assigned
+    description: A traceability lot code is assigned when a food on the Food Traceability List is initially packed, received from a fishing vessel, or transformed.
+    source: "21 CFR 1.1320"
+    appliesTo: food_lot
+    check: { field: has_tlc, op: eq, value: true }
+    severity: error
+  - id: sortable-spreadsheet-24h
+    description: Provide an electronic sortable spreadsheet of the KDEs within 24 hours of an FDA request.
+    source: "21 CFR 1.1455(c)(3)(ii)"
+    appliesTo: info
+    severity: info
+  - id: retention-2y
+    description: Keep traceability records for 2 years.
+    source: "21 CFR 1.1460(c)"
+    appliesTo: info
+    severity: info
+retentionYears: 2

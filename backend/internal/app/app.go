@@ -67,7 +67,11 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	deps.Auth = a
 	plat.Deps = deps
 	app := &App{Deps: deps, Platform: plat}
-	app.Modules = buildModules(deps, plat)
+	app.Modules, err = buildModules(deps, plat)
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
 	for _, m := range app.Modules {
 		if w, ok := m.(kernel.Worker); ok {
 			w.RegisterJobs(deps.Jobs)
@@ -148,7 +152,7 @@ func securityHeaders(next http.Handler) http.Handler {
 
 func (a *App) routes() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, securityHeaders, logRequests, metrics, a.cors)
+	r.Use(middleware.RequestID, middleware.Recoverer, securityHeaders, logRequests, metrics, a.cors)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

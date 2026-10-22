@@ -1,0 +1,51 @@
+# EU Falsified Medicines Directive — safety features for medicinal products for human use.
+# Community-editable: every rule must cite the public source. Version = pack release (YYYY.N).
+id: eu-fmd
+name: EU Falsified Medicines Directive (safety features)
+version: "2026.1"
+market: EU
+vertical: pharma
+sources:
+  - title: Directive 2011/62/EU (Falsified Medicines Directive)
+    url: https://eur-lex.europa.eu/eli/dir/2011/62/oj
+  - title: Commission Delegated Regulation (EU) 2016/161
+    url: https://eur-lex.europa.eu/eli/reg_del/2016/161/oj
+rules:
+  - id: serial-max-20
+    description: Serial number is a numeric or alphanumeric sequence of at most 20 characters.
+    source: "Delegated Regulation 2016/161, Art. 4(b)"
+    appliesTo: serial_pool
+    check: { field: total_length, op: lte, value: 20 }
+    severity: error
+  - id: serial-randomised
+    description: The probability that a serial number can be guessed must be negligible (below 1 in 10,000); use randomised serials.
+    source: "Delegated Regulation 2016/161, Art. 4(b)"
+    appliesTo: serial_pool
+    check: { field: mode, op: eq, value: random }
+    severity: error
+  - id: guess-probability
+    description: Pool capacity must exceed 10,000 times the number of packs serialized from it.
+    source: "Delegated Regulation 2016/161, Art. 4(b)"
+    appliesTo: serial_pool
+    check: { field: capacity_per_issued, op: gte, value: 10000 }
+    severity: warning
+  - id: product-code-gtin
+    description: The product code identifies at least the name, common name, pharmaceutical form, strength, pack size and pack type.
+    source: "Delegated Regulation 2016/161, Art. 4(a)"
+    appliesTo: product
+    check: { field: has_name_form_strength_packsize, op: eq, value: true }
+    severity: warning
+  - id: batch-and-expiry
+    description: The unique identifier includes the batch number and expiry date.
+    source: "Delegated Regulation 2016/161, Art. 4(c)-(d)"
+    appliesTo: commissioning
+    check: { field: has_lot_and_expiry, op: eq, value: true }
+    severity: error
+  - id: datamatrix-carrier
+    description: The unique identifier is encoded in a two-dimensional Data Matrix (ECC200).
+    source: "Delegated Regulation 2016/161, Art. 5"
+    appliesTo: info
+    severity: info
+reporting:
+  connector: eu-fmd-emvs
+  triggers: [commissioning, dispensing, destroying, decommissioning, sampling]

@@ -17,6 +17,8 @@ require (
 	golang.org/x/crypto v0.58.0
 )
 
+require gopkg.in/yaml.v3 v3.0.1 // indirect
+
 require (
 	github.com/MicahParks/jwkset v0.11.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -29,6 +31,7 @@ require (
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/openspoor/openspoor/connectors-sdk v0.0.0
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
 	github.com/prometheus/common v0.72.0 // indirect
@@ -42,3 +45,5 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+replace github.com/openspoor/openspoor/connectors-sdk => ../connectors-sdk

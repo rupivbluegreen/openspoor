@@ -1,0 +1,39 @@
+# US Drug Supply Chain Security Act (Title II of the Drug Quality and Security Act).
+id: us-dscsa
+name: US Drug Supply Chain Security Act
+version: "2026.1"
+market: US
+vertical: pharma
+sources:
+  - title: Federal Food, Drug, and Cosmetic Act, sections 581–585 (21 U.S.C. 360eee)
+    url: https://www.fda.gov/drugs/drug-supply-chain-integrity/drug-supply-chain-security-act-dscsa
+  - title: FDA guidance — Product Identifiers under the DSCSA
+    url: https://www.fda.gov/regulatory-information/search-fda-guidance-documents
+rules:
+  - id: serial-max-20
+    description: The serial number is an alphanumeric code of up to 20 characters.
+    source: "FD&C Act 581(20) (standardized numerical identifier)"
+    appliesTo: serial_pool
+    check: { field: total_length, op: lte, value: 20 }
+    severity: error
+  - id: ndc-present
+    description: The standardized numerical identifier is built from the NDC; products for the US market need an NDC.
+    source: "FD&C Act 581(20)"
+    appliesTo: product
+    check: { field: has_ndc, op: eq, value: true }
+    severity: error
+  - id: lot-and-expiry
+    description: The product identifier includes lot number and expiration date.
+    source: "FD&C Act 581(14)"
+    appliesTo: commissioning
+    check: { field: has_lot_and_expiry, op: eq, value: true }
+    severity: error
+  - id: retention-6y
+    description: Transaction information, history and statements are kept for not less than 6 years.
+    source: "FD&C Act 582(b)(1)(A)(ii), 582(c)(1)(A)(ii), 582(d)(1)(A)(ii), 582(e)(1)(A)(ii)"
+    appliesTo: info
+    severity: info
+reporting:
+  connector: ""
+  triggers: []
+retentionYears: 6

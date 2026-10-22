@@ -52,9 +52,14 @@ var (
 // Module is the EPCIS bounded context.
 type Module struct {
 	kernel.Deps
-	Serials *serialization.Module
-	Client  *http.Client
+	Serials   *serialization.Module
+	Client    *http.Client
+	onCapture []string
 }
+
+// OnCapture registers a job kind enqueued (payload {"captureId"}) in every capture
+// transaction — the outbox through which other modules react to new events.
+func (m *Module) OnCapture(kind string) { m.onCapture = append(m.onCapture, kind) }
 
 // New creates the module.
 func New(d kernel.Deps, s *serialization.Module) *Module {
@@ -316,6 +321,11 @@ func (m *Module) Capture(ctx context.Context, contentType string, body []byte, s
 		}
 		if _, err := jobs.Enqueue(ctx, tx, &tid, JobNotify, payload); err != nil {
 			return err
+		}
+		for _, kind := range m.onCapture {
+			if _, err := jobs.Enqueue(ctx, tx, &tid, kind, payload); err != nil {
+				return err
+			}
 		}
 		_, err = audit.Write(ctx, tx, audit.Record{Action: "epcis.capture", Entity: "epcis_capture", EntityID: c.ID.String(),
 			After: map[string]any{"events": n, "duplicates": c.Duplicates, "format": format, "source": source}})
