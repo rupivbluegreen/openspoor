@@ -1,0 +1,37 @@
+env:
+  contexts:
+    - name: openspoor
+      urls: ["http://127.0.0.1:18082"]
+  parameters:
+    failOnError: false
+    progressToStdout: true
+jobs:
+  - type: replacer
+    parameters:
+      deleteAllRules: true
+    rules:
+      - description: auth
+        matchType: req_header
+        matchString: Authorization
+        replacementString: "Bearer ${TOKEN}"
+  - type: openapi
+    parameters:
+      apiUrl: "http://127.0.0.1:18082/api/v1/openapi.yaml"
+      targetUrl: "http://127.0.0.1:18082"
+  - type: spider
+    parameters:
+      url: "http://127.0.0.1:18082/api/v1/meta"
+      maxDuration: 1
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: bench-results
+      reportFile: zap-baseline.json
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: bench-results
+      reportFile: zap-baseline.md

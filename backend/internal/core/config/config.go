@@ -22,6 +22,7 @@ const (
 type Config struct {
 	Mode              Mode
 	HTTPAddr          string
+	WebRoot           string // directory holding the console, verify and operator builds; empty disables static serving
 	DatabaseURL       string
 	JWTSecret         []byte
 	JWTTTL            time.Duration
@@ -49,6 +50,7 @@ func Load() (Config, error) {
 	c := Config{
 		Mode:              Mode(env("OPENSPOOR_MODE", "single")),
 		HTTPAddr:          env("OPENSPOOR_HTTP_ADDR", ":8080"),
+		WebRoot:           os.Getenv("OPENSPOOR_WEB_ROOT"),
 		DatabaseURL:       env("OPENSPOOR_DATABASE_URL", "postgres://openspoor:openspoor@localhost:5432/openspoor?sslmode=disable"),
 		JWTSecret:         []byte(env("OPENSPOOR_JWT_SECRET", "")),
 		JWTTTL:            envDuration("OPENSPOOR_JWT_TTL", 12*time.Hour),

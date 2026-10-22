@@ -1,0 +1,28 @@
+{
+  "allocatePerSec": 207341.60881920255,
+  "allocateSeconds": 0.217033138,
+  "allocateSerials": 45000,
+  "capture1kMaxMs": 210.568,
+  "capture1kP50Ms": 126.81,
+  "capture1kP95Ms": 196.178,
+  "captureEventsPerSec": 7538.610509929644,
+  "captureSeconds": 2.653008797,
+  "captureTimingMs": {
+    "businessRules": 247.606,
+    "commit_prep": 174.285,
+    "copy": 774.632,
+    "dedupe": 98.36,
+    "parse": 608.626,
+    "prepare": 292.459,
+    "stageCopy": 373.35,
+    "total": 2631.868,
+    "validate": 14.894
+  },
+  "cpus": 4,
+  "documentBytes": 6577954,
+  "events": 20000,
+  "goVersion": "go1.26.0",
+  "measuredAt": "2026-10-22T23:12:18Z",
+  "projectionPerSec": 11905.839680899018,
+  "projectionSeconds": 1.679847918
+}

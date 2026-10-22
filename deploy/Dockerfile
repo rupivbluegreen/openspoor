@@ -1,6 +1,8 @@
 # One image for every mode (saas | single | hub): the mode is configuration.
 FROM golang:1.26-alpine AS build
-WORKDIR /src
+WORKDIR /src/backend
+# backend/go.mod replaces the connector SDK with ../connectors-sdk.
+COPY connectors-sdk/ /src/connectors-sdk/
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./

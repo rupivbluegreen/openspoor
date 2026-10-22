@@ -146,6 +146,12 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Ant Design injects runtime styles, hence 'unsafe-inline' for styles only; scripts stay same-origin.
+		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; "+
+			"font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -201,6 +207,10 @@ func (a *App) routes() http.Handler {
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			httpx.Fail(w, r, httpx.NotFound("no such endpoint"))
+			return
+		}
+		if a.Deps.Cfg.WebRoot != "" {
+			webHandler(a.Deps.Cfg.WebRoot)(w, r)
 			return
 		}
 		http.NotFound(w, r)

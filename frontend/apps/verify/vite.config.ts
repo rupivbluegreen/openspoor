@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 const api = process.env.OPENSPOOR_API ?? 'http://localhost:8080';
 
 export default defineConfig({
+  base: '/verify/',
   plugins: [react()],
   server: {
     port: 5175,

@@ -106,6 +106,12 @@ export default function Scan() {
     verify.mutate(v);
   };
 
+  // A scanned brand Digital Link (/01/{gtin}/21/{serial}) arrives as /verify/?code=<link>.
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get('code');
+    if (c) submit(c);
+  }, []);
+
   const r = verify.data;
   const kind = r ? classify(r) : null;
   const look = kind ? LOOK[kind] : null;
