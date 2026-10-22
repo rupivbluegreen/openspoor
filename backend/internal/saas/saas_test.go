@@ -131,7 +131,9 @@ func TestSaaSLifecycle(t *testing.T) {
 	e.Must(http.StatusOK, e.Call(op.Token, "POST", "/api/v1/operator/tenants/"+su.Tenant.ID+"/impersonate", map[string]any{"reason": "customer ticket 1234"}), &imp)
 	e.Must(http.StatusOK, e.Call(imp.Token, "GET", "/api/v1/orgs", nil), nil)
 	e.Must(http.StatusForbidden, e.Call(imp.Token, "POST", "/api/v1/orgs", map[string]any{"name": "x", "kind": "manufacturer"}), nil)
-	var aud struct{ Items []struct{ Action, Actor, Reason string } }
+	var aud struct {
+		Items []struct{ Action, Actor, Reason string }
+	}
 	e.Must(http.StatusOK, e.Call(su.Token, "GET", "/api/v1/audit?action=operator.", nil), &aud)
 	if len(aud.Items) != 2 || aud.Items[0].Reason == "" {
 		t.Fatalf("operator actions not audited in tenant: %+v", aud.Items)
