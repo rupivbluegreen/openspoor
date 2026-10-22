@@ -113,7 +113,9 @@ func TestAgentsApprovalsAndControlTower(t *testing.T) {
 	if len(ct.Queue) != 0 {
 		t.Fatalf("revert did not resolve the case: %+v", ct.Queue)
 	}
-	var aud struct{ Items []struct{ Action, Actor string } }
+	var aud struct {
+		Items []struct{ Action, Actor string }
+	}
 	e.Must(http.StatusOK, e.Do("GET", "/api/v1/audit?action=agent.", nil), &aud)
 	if len(aud.Items) < 3 {
 		t.Fatalf("agent audit trail: %+v", aud.Items)

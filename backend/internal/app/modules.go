@@ -9,6 +9,7 @@ import (
 	"github.com/openspoor/openspoor/internal/connectors"
 	"github.com/openspoor/openspoor/internal/core/kernel"
 	"github.com/openspoor/openspoor/internal/dscsa"
+	"github.com/openspoor/openspoor/internal/ecosystem"
 	"github.com/openspoor/openspoor/internal/epcis"
 	"github.com/openspoor/openspoor/internal/food"
 	"github.com/openspoor/openspoor/internal/link"
@@ -41,5 +42,6 @@ func buildModules(d kernel.Deps, plat *platform.Module) ([]kernel.Module, error)
 	fd := food.New(d, ep)
 	lk := link.New(d, ep)
 	ac := act.New(d)
-	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd, lk, ac}, nil
+	ec := ecosystem.New(d, plat, ep)
+	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd, lk, ac, ec}, nil
 }
