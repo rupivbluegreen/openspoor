@@ -94,7 +94,9 @@ func TestMarketplaceSandboxColdChainUDI(t *testing.T) {
 	}
 
 	// Learning hub (public).
-	var learn struct{ Items []struct{ Slug, Title string } }
+	var learn struct {
+		Items []struct{ Slug, Title string }
+	}
 	e.Must(http.StatusOK, e.Call("", "GET", "/api/v1/learn", nil), &learn)
 	if len(learn.Items) != 6 {
 		t.Fatalf("learn: %+v", learn.Items)

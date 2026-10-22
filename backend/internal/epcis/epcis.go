@@ -29,6 +29,7 @@ import (
 	"github.com/openspoor/openspoor/internal/masterdata"
 	"github.com/openspoor/openspoor/internal/serialization"
 	lib "github.com/openspoor/openspoor/pkg/epcis"
+	"github.com/openspoor/openspoor/pkg/gs1"
 )
 
 // Job kinds enqueued in the capture transaction (transactional outbox).
@@ -170,6 +171,16 @@ func rawOrNil(v any, empty bool) []byte {
 	b, _ := json.Marshal(v)
 	return b
 }
+
+type migrationKey struct{}
+
+// WithMigration marks a capture as a legacy migration: serials need not come from Open Spoor
+// pools (they were issued by the previous system); GTIN and double-commission checks still apply.
+func WithMigration(ctx context.Context) context.Context {
+	return context.WithValue(ctx, migrationKey{}, true)
+}
+
+func isMigration(ctx context.Context) bool { v, _ := ctx.Value(migrationKey{}).(bool); return v }
 
 // Capture validates and persists a document atomically. Either every event is stored
 // or none is and the per-event errors are returned (never silently dropped).
@@ -467,6 +478,27 @@ func (m *Module) validateBusiness(ctx context.Context, tx pgx.Tx, doc *lib.Docum
 	for i := range cs {
 		statusOf[cg[i]+"|"+cs[i]] = statuses[i]
 	}
+	// Serials of GTINs without an Open Spoor pool (partner or legacy serials): reject
+	// commissioning of a serial that already exists in the repository.
+	var unmanaged []string
+	for i := range cs {
+		if statuses[i] == serialization.StatusUnmanaged || (isMigration(ctx) && statuses[i] == serialization.StatusUnallocated) {
+			unmanaged = append(unmanaged, gs1.DigitalLink(gs1.DefaultResolver, gs1.Pack{GTIN: cg[i], Serial: cs[i]}))
+		}
+	}
+	existing := map[string]bool{}
+	if len(unmanaged) > 0 {
+		rows, err := tx.Query(ctx, `select epc from serial_state where epc = any($1) and status <> 'decommissioned'`, unmanaged)
+		if err == nil {
+			for rows.Next() {
+				var e string
+				if rows.Scan(&e) == nil {
+					existing[e] = true
+				}
+			}
+			rows.Close()
+		}
+	}
 	seenComm := map[string]int{}
 	inDocParent := map[string]string{}
 	for i := range doc.Body.EventList {
@@ -487,7 +519,15 @@ func (m *Module) validateBusiness(ctx context.Context, tx pgx.Tx, doc *lib.Docum
 					continue
 				}
 				seenComm[c] = i
-				switch statusOf[g+"|"+s] {
+				if existing[c] {
+					add(i, e, "epcList", "serial "+s+" already exists in the repository (serials are never reissued)")
+					continue
+				}
+				st := statusOf[g+"|"+s]
+				if isMigration(ctx) && st == serialization.StatusUnallocated {
+					continue
+				}
+				switch st {
 				case serialization.StatusUnallocated:
 					add(i, e, "epcList", "serial "+s+" was never allocated from a pool for GTIN "+g)
 				case serialization.StatusCommitted:

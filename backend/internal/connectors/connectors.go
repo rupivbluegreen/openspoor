@@ -862,3 +862,6 @@ func (m *Module) evaluate(w http.ResponseWriter, r *http.Request) error {
 }
 
 var _ = trace.Lookup
+
+// RegisterDemoHubProduct registers a GTIN in the in-process EU mock hub (demo seed).
+func (m *Module) RegisterDemoHubProduct(gtin string) { m.Mocks.RegisterEUProduct(gtin) }

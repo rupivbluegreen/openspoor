@@ -80,7 +80,7 @@ func Load() (Config, error) {
 		}
 		c.JWTSecret = []byte("dev-only-insecure-secret-change-me")
 	}
-	if len(c.JWTSecret) < 16 {
+	if len(c.JWTSecret) < 16 && !c.DevAuth {
 		return c, fmt.Errorf("OPENSPOOR_JWT_SECRET must be at least 16 bytes")
 	}
 	c.MasterKey = []byte(env("OPENSPOOR_MASTER_KEY", ""))

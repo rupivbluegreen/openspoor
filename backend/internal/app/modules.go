@@ -14,6 +14,7 @@ import (
 	"github.com/openspoor/openspoor/internal/food"
 	"github.com/openspoor/openspoor/internal/link"
 	"github.com/openspoor/openspoor/internal/masterdata"
+	"github.com/openspoor/openspoor/internal/migration"
 	"github.com/openspoor/openspoor/internal/partners"
 	"github.com/openspoor/openspoor/internal/platform"
 	"github.com/openspoor/openspoor/internal/saas"
@@ -43,5 +44,6 @@ func buildModules(d kernel.Deps, plat *platform.Module) ([]kernel.Module, error)
 	lk := link.New(d, ep)
 	ac := act.New(d)
 	ec := ecosystem.New(d, plat, ep)
-	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd, lk, ac, ec}, nil
+	mg := migration.New(d, ep, tr)
+	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd, lk, ac, ec, mg}, nil
 }

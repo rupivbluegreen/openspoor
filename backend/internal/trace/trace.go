@@ -530,3 +530,28 @@ func keysOf(m map[string]bool) []string {
 	}
 	return out
 }
+
+// Delta is the exported view of what a batch of events implies for one identifier.
+type Delta struct {
+	Status      string `json:"status,omitempty"`
+	Disposition string `json:"disposition,omitempty"`
+	Parent      string `json:"parent,omitempty"`
+	ParentSet   bool   `json:"parentSet"`
+	ParentClear bool   `json:"parentCleared"`
+}
+
+// FinalStates folds events (any order) into the final state each identifier should have.
+func FinalStates(events []lib.Event) map[string]Delta {
+	out := map[string]Delta{}
+	for k, c := range Fold(events) {
+		d := Delta{ParentSet: c.parentOp == "set", ParentClear: c.parentOp == "clear", Parent: c.parent}
+		if c.status != nil {
+			d.Status = *c.status
+		}
+		if c.disposition != nil {
+			d.Disposition = *c.disposition
+		}
+		out[k] = d
+	}
+	return out
+}
