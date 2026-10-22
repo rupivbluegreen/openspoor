@@ -1,0 +1,12 @@
+{
+  "measuredAt": null,
+  "environment": null,
+  "headline": [
+    {"id": "epcis_capture_100k", "label": "EPCIS events captured (100k-event document)", "value": null, "unit": "events/s", "detail": null},
+    {"id": "serial_alloc", "label": "Serials allocated (FF1 random)", "value": null, "unit": "serials/s", "detail": null},
+    {"id": "capture_p95", "label": "Capture ack p95 (1k-event document)", "value": null, "unit": "ms", "detail": null},
+    {"id": "vrs_p95", "label": "VRS verify p95", "value": null, "unit": "ms", "detail": null}
+  ],
+  "rows": [],
+  "howToReproduce": null
+}
