@@ -58,6 +58,7 @@ services:
     environment:
       OPENSPOOR_MODE: single
       OPENSPOOR_DEV_AUTH: "true"
+      OPENSPOOR_MIGRATE_ON_START: "true"
       OPENSPOOR_DATABASE_URL: postgres://openspoor:openspoor@postgres:5432/openspoor?sslmode=disable
       OPENSPOOR_KAFKA_BROKERS: redpanda:9092
       OPENSPOOR_S3_ENDPOINT: http://seaweedfs:8333

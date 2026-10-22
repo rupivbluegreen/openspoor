@@ -1,12 +1,32 @@
 {
-  "measuredAt": null,
-  "environment": null,
+  "measuredAt": "2026-10-22T23:27:11Z",
+  "environment": {
+    "Host": "4 vCPU Intel Xeon @ 2.80 GHz cloud VM",
+    "Database": "PostgreSQL 16 on the same host, fsync on",
+    "Runtime": "Go 1.26, one openspoor process"
+  },
   "headline": [
-    {"id": "epcis_capture_100k", "label": "EPCIS events captured (100k-event document)", "value": null, "unit": "events/s", "detail": null},
-    {"id": "serial_alloc", "label": "Serials allocated (FF1 random)", "value": null, "unit": "serials/s", "detail": null},
-    {"id": "capture_p95", "label": "Capture ack p95 (1k-event document)", "value": null, "unit": "ms", "detail": null},
-    {"id": "vrs_p95", "label": "VRS verify p95", "value": null, "unit": "ms", "detail": null}
+    {"id": "epcis_capture_100k", "label": "to capture one 100,000-event EPCIS document", "value": 6.1, "unit": "s",
+     "detail": "≈16,400 events/s. 33 MB of EPCIS 2.0 JSON-LD validated, deduplicated, rule-checked and committed in one transaction. Three runs: 5.97–6.10 s."},
+    {"id": "serial_alloc", "label": "serials allocated per second (FF1 random)", "value": 234715, "unit": "/s",
+     "detail": "Through the API, including the database commit, on a busy host. 475k–530k/s when the host was idle; FF1 generation alone ≈658k/s."},
+    {"id": "capture_p95", "label": "capture acknowledgement p95, 1k-event document", "value": 121, "unit": "ms",
+     "detail": "Budget: under 200 ms. Over HTTP with k6: 130 ms (1 client), 163 ms (2 clients)."},
+    {"id": "vrs_p95", "label": "VRS verification p95 at 200 requests/s", "value": 18.7, "unit": "ms",
+     "detail": "Budget: under 1 s. k6 constant arrival rate, 0 failed requests."}
   ],
-  "rows": [],
-  "howToReproduce": null
+  "rows": [
+    {"name": "Capture, 100,000-event document", "value": 16393, "unit": "events/s", "notes": "6.10 s end to end, atomic"},
+    {"name": "Projection into serial state", "value": 19347, "unit": "events/s", "notes": "Background worker, same 100k events"},
+    {"name": "k6 capture, 1 client, 1k-event documents", "value": 130, "unit": "ms p95", "notes": "8.3 documents/s, 0 errors"},
+    {"name": "k6 capture, 2 clients, 1k-event documents", "value": 163, "unit": "ms p95", "notes": "13 documents/s (13k events/s), 0 errors"},
+    {"name": "k6 capture, 4 clients, 1k-event documents", "value": 234, "unit": "ms p95", "notes": "Over the 200 ms budget at this load on 4 vCPU; 18.6k events/s, 0 errors"},
+    {"name": "k6 VRS verify, 200 requests/s", "value": 18.7, "unit": "ms p95", "notes": "Median 7.6 ms, 0 errors"}
+  ],
+  "howToReproduce": [
+    "git clone https://github.com/rupivbluegreen/openspoor && cd openspoor",
+    "make -C backend bench                     # 100k capture, projection, allocation -> bench-results/",
+    "K6=$(command -v k6) VUS=2 scripts/loadtest.sh   # HTTP load: 1k-event capture and VRS",
+    "# Needs Go 1.26 and PostgreSQL 16 binaries (scripts/testdb.sh starts a throwaway instance)."
+  ]
 }

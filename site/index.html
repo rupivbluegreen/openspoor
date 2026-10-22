@@ -51,6 +51,7 @@
           <a class="btn btn-primary" href="https://github.com/rupivbluegreen/openspoor">View on GitHub</a>
           <a class="btn btn-ghost" href="#quick-start">Quick start</a>
         </div>
+        <a class="hero-stat" id="hero-stat" href="#performance" hidden></a>
         <p class="note"><em>Spoor</em> is Dutch for track or trace.</p>
       </div>
     </section>
@@ -102,7 +103,7 @@
           </article>
           <article>
             <h3><span class="tag">02</span> Link</h3>
-            <p>Partner directory and connections. DSCSA TI/TS exchange over HTTPS or AS2, and VRS.</p>
+            <p>Partner directory and connections. DSCSA TI/TS exchange over HTTPS (AS2 through a pluggable gateway), and VRS.</p>
             <p>B2B documents with EDI X12/EDIFACT mappers, plus node-to-node federation with signed messages.</p>
           </article>
           <article>
@@ -140,7 +141,8 @@
             <li>GS1 CBV 2.0</li>
             <li>GS1 Digital Link</li>
             <li>GS1 Lightweight Messaging for VRS</li>
-            <li>W3C Verifiable Credentials</li>
+            <li>W3C Decentralized Identifiers (did:web)</li>
+            <li>OpenAPI 3.1 · RFC 9457 problem details</li>
           </ul>
         </div>
       </div>
@@ -255,10 +257,10 @@
           <button class="copy" type="button" data-copy="qs-code">Copy</button>
           <pre><code id="qs-code">git clone https://github.com/rupivbluegreen/openspoor
 cd openspoor
-docker compose -f deploy/docker-compose.yml up -d
-make -C backend migrate seed run</code></pre>
+docker compose -f deploy/docker-compose.yml --profile app up -d --build
+docker compose -f deploy/docker-compose.yml --profile app run --rm openspoor seed --packs 1000</code></pre>
         </div>
-        <p>Then open <a href="http://localhost:5173">http://localhost:5173</a>.</p>
+        <p>Then open <a href="http://localhost:8080">http://localhost:8080</a> and sign in to tenant <code>nordwind</code> as <code>admin@nordwind.example</code> with password <code>openspoor-demo</code>. The public verify page is at <code>/verify/</code>.</p>
       </div>
     </section>
   </main>

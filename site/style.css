@@ -124,6 +124,13 @@ section { padding: clamp(64px, 9vw, 112px) 0; }
 .muted { color: var(--muted); }
 .lede { font-size: clamp(1.1rem, 1rem + 0.4vw, 1.3rem); color: var(--muted); max-width: 60ch; }
 .note { color: var(--muted); font-size: 0.9rem; margin-top: 28px; }
+.hero-stat {
+  display: inline-block; margin-top: 28px; padding: 10px 16px; border-radius: 14px;
+  background: var(--accent-soft); color: var(--text); text-decoration: none; font-size: 0.95rem;
+}
+.hero-stat strong { color: var(--accent-strong); }
+.hero-stat:hover { color: var(--accent-strong); }
+.hero-stat[hidden] { display: none; }
 
 /* Hero */
 .hero { padding-top: clamp(72px, 12vw, 140px); }

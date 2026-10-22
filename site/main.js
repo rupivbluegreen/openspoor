@@ -54,6 +54,18 @@
     });
   }
 
+  // Hero proof line, from the same measured data as the performance section.
+  function renderHero(list) {
+    var h = (list || []).filter(function (x) { return x.id === 'epcis_capture_100k'; })[0];
+    var v = h && fmt(h.value);
+    if (!v) return;
+    var a = document.getElementById('hero-stat');
+    a.textContent = '';
+    a.appendChild(el('strong', null, '100,000 EPCIS events'));
+    a.appendChild(document.createTextNode(' captured in ' + v + ' ' + h.unit + ' on 4 vCPUs — see the benchmarks'));
+    a.hidden = false;
+  }
+
   function renderMeta(data) {
     var env = fmtEnv(data.environment);
     var date = fmtDate(data.measuredAt);
@@ -91,6 +103,7 @@
       })
       .then(function (data) {
         renderHeadline(data.headline);
+        renderHero(data.headline);
         renderMeta(data);
         renderRows(data.rows);
         renderRepro(data.howToReproduce);

@@ -66,6 +66,11 @@ func main() {
 		v, _ := migrations.Status(ctx, migrateURL(cfg))
 		slog.Info("migrations applied", "version", v)
 	case "api", "worker", "all":
+		if os.Getenv("OPENSPOOR_MIGRATE_ON_START") == "true" {
+			if err := migrations.Up(ctx, migrateURL(cfg)); err != nil {
+				fatal(err)
+			}
+		}
 		a := mustApp(ctx, cfg)
 		defer a.Close()
 		if cmd != "api" {
