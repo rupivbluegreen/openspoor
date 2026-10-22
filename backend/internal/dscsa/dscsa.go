@@ -226,8 +226,8 @@ func tree(ctx context.Context, tx pgx.Tx, top []string) (map[string][]string, ma
 	children := map[string][]string{}
 	states := map[string]trace.State{}
 	rows, err := tx.Query(ctx, `with recursive t(epc, depth) as (
-			select epc, 0 from serial_state where epc = any($1)
-			union all select s.epc, t.depth+1 from serial_state s join t on s.parent_epc = t.epc where t.depth < 6)
+			select epc, 0 from serial_state where tenant_id = app_tenant() and epc = any($1)
+			union all select s.epc, t.depth+1 from serial_state s join t on s.tenant_id = app_tenant() and s.parent_epc = t.epc where t.depth < 6)
 		select s.epc, s.gtin, s.serial, s.lot, s.expiry, s.status, s.disposition, s.biz_location, s.parent_epc, s.last_event_time, s.last_event_id
 		from t join serial_state s on s.epc = t.epc`, top)
 	if err != nil {

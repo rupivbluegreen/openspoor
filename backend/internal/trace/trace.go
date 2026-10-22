@@ -201,7 +201,7 @@ func (m *Module) projectJob(ctx context.Context, j jobs.Job) error {
 func (m *Module) Project(ctx context.Context, tenant uuid.UUID, captureID uuid.UUID) (int, error) {
 	var updated int
 	err := m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `select doc, event_type, action, parent_id, epcs from epcis_event where capture_id=$1`, captureID)
+		rows, err := tx.Query(ctx, `select doc, event_type, action, parent_id, epcs from epcis_event where tenant_id = app_tenant() and capture_id=$1`, captureID)
 		if err != nil {
 			return err
 		}
@@ -324,7 +324,7 @@ const stateCols = `epc, gtin, serial, lot, expiry, status, disposition, biz_loca
 
 // Lookup returns the state of one identifier (any form) inside tx.
 func Lookup(ctx context.Context, tx pgx.Tx, id string) (State, error) {
-	return db.One[State](ctx, tx, `select `+stateCols+` from serial_state where epc=$1`, lib.Canonical(id))
+	return db.One[State](ctx, tx, `select `+stateCols+` from serial_state where tenant_id = app_tenant() and epc=$1`, lib.Canonical(id))
 }
 
 // Ancestors walks up the aggregation chain (nearest first).
@@ -332,7 +332,7 @@ func Ancestors(ctx context.Context, tx pgx.Tx, s State) ([]State, error) {
 	var out []State
 	cur := s
 	for i := 0; i < 10 && cur.ParentEPC != nil; i++ {
-		p, err := db.One[State](ctx, tx, `select `+stateCols+` from serial_state where epc=$1`, *cur.ParentEPC)
+		p, err := db.One[State](ctx, tx, `select `+stateCols+` from serial_state where tenant_id = app_tenant() and epc=$1`, *cur.ParentEPC)
 		if err != nil {
 			break
 		}
@@ -344,7 +344,7 @@ func Ancestors(ctx context.Context, tx pgx.Tx, s State) ([]State, error) {
 
 // History returns every event touching the identifier, oldest first.
 func History(ctx context.Context, tx pgx.Tx, id string, limit int) ([]lib.Event, error) {
-	rows, err := tx.Query(ctx, `select doc from epcis_event where epcs @> array[$1]::text[] order by event_time limit $2`, lib.Canonical(id), limit)
+	rows, err := tx.Query(ctx, `select doc from epcis_event where tenant_id = app_tenant() and epcs @> array[$1]::text[] order by event_time limit $2`, lib.Canonical(id), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +391,7 @@ func (m *Module) serial(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		kids, err := db.List[State](r.Context(), tx, `select `+stateCols+` from serial_state where parent_epc=$1 order by epc limit 1000`, st.EPC)
+		kids, err := db.List[State](r.Context(), tx, `select `+stateCols+` from serial_state where tenant_id = app_tenant() and parent_epc=$1 order by epc limit 1000`, st.EPC)
 		if err != nil {
 			return err
 		}
@@ -414,15 +414,15 @@ type Node struct {
 func (m *Module) tree(w http.ResponseWriter, r *http.Request) error {
 	id := lib.Canonical(epcParam(r))
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		st, err := db.One[State](r.Context(), tx, `select `+stateCols+` from serial_state where epc=$1`, id)
+		st, err := db.One[State](r.Context(), tx, `select `+stateCols+` from serial_state where tenant_id = app_tenant() and epc=$1`, id)
 		if err != nil {
 			return httpx.NotFound("unknown identifier")
 		}
 		// Recursive CTE over the parent links, depth-limited.
 		rows, err := tx.Query(r.Context(), `with recursive t(epc, parent_epc, status, depth) as (
-				select epc, parent_epc, status, 0 from serial_state where epc=$1
+				select epc, parent_epc, status, 0 from serial_state where tenant_id = app_tenant() and epc=$1
 				union all
-				select s.epc, s.parent_epc, s.status, t.depth+1 from serial_state s join t on s.parent_epc = t.epc where t.depth < 6
+				select s.epc, s.parent_epc, s.status, t.depth+1 from serial_state s join t on s.tenant_id = app_tenant() and s.parent_epc = t.epc where t.depth < 6
 			) select epc, parent_epc, status from t limit 50000`, st.EPC)
 		if err != nil {
 			return err
@@ -514,7 +514,7 @@ func (m *Module) listState(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	limit := httpx.IntQuery(r, "limit", 100, 1, 1000)
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		items, err := db.List[State](r.Context(), tx, `select `+stateCols+` from serial_state where ($1='' or gtin=$1) and ($2='' or status=$2) and ($3='' or lot=$3)
+		items, err := db.List[State](r.Context(), tx, `select `+stateCols+` from serial_state where tenant_id = app_tenant() and ($1='' or gtin=$1) and ($2='' or status=$2) and ($3='' or lot=$3)
 			order by last_event_time desc limit $4`, q.Get("gtin"), q.Get("status"), q.Get("lot"), limit)
 		if err == nil {
 			httpx.JSON(w, http.StatusOK, httpx.Page[State]{Items: items, Total: len(items)})

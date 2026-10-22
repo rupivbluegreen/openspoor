@@ -181,7 +181,7 @@ func gather(ctx context.Context, tx pgx.Tx, question string) (map[string]any, []
 	}
 	if m := tlcPattern.FindStringSubmatch(question); m != nil {
 		if err := q("lot:"+m[1], `select tlc, description, status, quantity, uom from food_lot where tlc=$1
-			union all select coalesce(lot,''), coalesce(gtin,''), status, count(*)::numeric, 'packs' from serial_state where lot=$1 group by lot, gtin, status`, m[1]); err != nil {
+			union all select coalesce(lot,''), coalesce(gtin,''), status, count(*)::numeric, 'packs' from serial_state where tenant_id = app_tenant() and lot=$1 group by lot, gtin, status`, m[1]); err != nil {
 			return nil, nil, err
 		}
 		cites = append(cites, Citation{Title: "Lot " + m[1], Ref: "lot/" + m[1]})

@@ -298,7 +298,7 @@ func Compare(ctx context.Context, tx pgx.Tx, legacy []lib.Event) (int, []Mismatc
 	}
 	sort.Strings(keys)
 	ours := map[string]trace.State{}
-	rows, err := tx.Query(ctx, `select epc, status, coalesce(parent_epc,'') from serial_state where epc = any($1)`, keys)
+	rows, err := tx.Query(ctx, `select epc, status, coalesce(parent_epc,'') from serial_state where tenant_id = app_tenant() and epc = any($1)`, keys)
 	if err != nil {
 		return 0, nil, err
 	}

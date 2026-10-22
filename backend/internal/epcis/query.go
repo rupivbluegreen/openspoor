@@ -172,7 +172,7 @@ func (q Query) Run(ctx context.Context, tx pgx.Tx) ([]lib.Event, string, error) 
 		where += fmt.Sprintf(" and (%s, id) %s ($%d, $%d)", col, cmp, len(args)-1, len(args))
 	}
 	args = append(args, per+1)
-	rows, err := tx.Query(ctx, fmt.Sprintf(`select id, %s, doc from epcis_event where %s order by %s %s, id %s limit $%d`, col, where, col, dir, dir, len(args)), args...)
+	rows, err := tx.Query(ctx, fmt.Sprintf(`select id, %s, doc from epcis_event where tenant_id = app_tenant() and %s order by %s %s, id %s limit $%d`, col, where, col, dir, dir, len(args)), args...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -249,7 +249,7 @@ func (m *Module) getEvent(w http.ResponseWriter, r *http.Request) error {
 	id, _ := url.PathUnescape(chi.URLParam(r, "eventID"))
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
 		var doc json.RawMessage
-		if err := tx.QueryRow(r.Context(), `select doc from epcis_event where event_id=$1 limit 1`, id).Scan(&doc); err != nil {
+		if err := tx.QueryRow(r.Context(), `select doc from epcis_event where tenant_id = app_tenant() and event_id=$1 limit 1`, id).Scan(&doc); err != nil {
 			return db.MapErr(err)
 		}
 		w.Header().Set("Content-Type", "application/ld+json")

@@ -325,7 +325,7 @@ func glnOf(id string) string {
 
 // toEvents converts a capture's events into the connector SDK view.
 func toEvents(ctx context.Context, tx pgx.Tx, captureID uuid.UUID) ([]connector.Event, error) {
-	rows, err := tx.Query(ctx, `select doc from epcis_event where capture_id=$1 order by event_time`, captureID)
+	rows, err := tx.Query(ctx, `select doc from epcis_event where tenant_id = app_tenant() and capture_id=$1 order by event_time`, captureID)
 	if err != nil {
 		return nil, err
 	}
@@ -381,8 +381,8 @@ func toEvents(ctx context.Context, tx pgx.Tx, captureID uuid.UUID) ([]connector.
 			}
 		}
 		if len(ce.Containers) > 0 {
-			r, err := tx.Query(ctx, `with recursive t(epc, d) as (select epc, 0 from serial_state where parent_epc = any($1)
-				union all select s.epc, t.d+1 from serial_state s join t on s.parent_epc=t.epc where t.d < 5) select epc from t`, ce.Containers)
+			r, err := tx.Query(ctx, `with recursive t(epc, d) as (select epc, 0 from serial_state where tenant_id = app_tenant() and parent_epc = any($1)
+				union all select s.epc, t.d+1 from serial_state s join t on s.tenant_id = app_tenant() and s.parent_epc=t.epc where t.d < 5) select epc from t`, ce.Containers)
 			if err != nil {
 				return nil, err
 			}
@@ -398,7 +398,7 @@ func toEvents(ctx context.Context, tx pgx.Tx, captureID uuid.UUID) ([]connector.
 		}
 		lotOf := map[string][2]string{}
 		if len(expand) > 0 {
-			r, err := tx.Query(ctx, `select epc, coalesce(lot,''), coalesce(to_char(expiry,'YYYY-MM-DD'),'') from serial_state where epc = any($1)`, expand)
+			r, err := tx.Query(ctx, `select epc, coalesce(lot,''), coalesce(to_char(expiry,'YYYY-MM-DD'),'') from serial_state where tenant_id = app_tenant() and epc = any($1)`, expand)
 			if err != nil {
 				return nil, err
 			}

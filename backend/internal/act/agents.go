@@ -549,7 +549,7 @@ func (serialStatusTool) Execute(ctx context.Context, tx pgx.Tx, input json.RawMe
 	if in.Status != "expired" && in.Status != "quarantined" {
 		return nil, nil, fmt.Errorf("agents may only set expired or quarantined")
 	}
-	rows, err := tx.Query(ctx, `select epc, status from serial_state where epc = any($1) for update`, in.EPCs)
+	rows, err := tx.Query(ctx, `select epc, status from serial_state where tenant_id = app_tenant() and epc = any($1) for update`, in.EPCs)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -223,7 +223,7 @@ func (m *Module) Capture(ctx context.Context, contentType string, body []byte, s
 			eventIDs[i] = e.EventID
 			return nil
 		})
-		dupRows, err := tx.Query(ctx, `select event_id from epcis_event where event_id = any($1)`, eventIDs)
+		dupRows, err := tx.Query(ctx, `select event_id from epcis_event where tenant_id = app_tenant() and event_id = any($1)`, eventIDs)
 		if err != nil {
 			return err
 		}
@@ -450,7 +450,7 @@ func (m *Module) validateBusiness(ctx context.Context, tx pgx.Tx, doc *lib.Docum
 	// Current parents of children being packed.
 	curParent := map[string]string{}
 	if len(children) > 0 {
-		rows, err := tx.Query(ctx, `select epc, parent_epc from serial_state where epc = any($1) and parent_epc is not null`, children)
+		rows, err := tx.Query(ctx, `select epc, parent_epc from serial_state where tenant_id = app_tenant() and epc = any($1) and parent_epc is not null`, children)
 		if err == nil {
 			for rows.Next() {
 				var c, p string
@@ -488,7 +488,7 @@ func (m *Module) validateBusiness(ctx context.Context, tx pgx.Tx, doc *lib.Docum
 	}
 	existing := map[string]bool{}
 	if len(unmanaged) > 0 {
-		rows, err := tx.Query(ctx, `select epc from serial_state where epc = any($1) and status <> 'decommissioned'`, unmanaged)
+		rows, err := tx.Query(ctx, `select epc from serial_state where tenant_id = app_tenant() and epc = any($1) and status <> 'decommissioned'`, unmanaged)
 		if err == nil {
 			for rows.Next() {
 				var e string
