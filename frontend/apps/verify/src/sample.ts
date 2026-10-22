@@ -1,0 +1,51 @@
+/** A small, valid EPCIS 2.0 JSON-LD document: commission → pack → ship. */
+export const SAMPLE_EPCIS = JSON.stringify(
+  {
+    '@context': ['https://ref.gs1.org/standards/epcis/2.0.0/epcis-context.jsonld'],
+    type: 'EPCISDocument',
+    schemaVersion: '2.0',
+    creationDate: '2026-10-01T08:00:00Z',
+    epcisBody: {
+      eventList: [
+        {
+          type: 'ObjectEvent',
+          eventTime: '2026-10-01T08:05:00Z',
+          eventTimeZoneOffset: '+00:00',
+          epcList: ['urn:epc:id:sgtin:0614141.107346.2017', 'urn:epc:id:sgtin:0614141.107346.2018'],
+          action: 'ADD',
+          bizStep: 'commissioning',
+          disposition: 'active',
+          readPoint: { id: 'urn:epc:id:sgln:0614141.00777.0' },
+          bizLocation: { id: 'urn:epc:id:sgln:0614141.00777.0' },
+          ilmd: { 'cbvmda:lotNumber': 'LOT2026A', 'cbvmda:itemExpirationDate': '2028-09-30' },
+        },
+        {
+          type: 'AggregationEvent',
+          eventTime: '2026-10-01T09:00:00Z',
+          eventTimeZoneOffset: '+00:00',
+          parentID: 'urn:epc:id:sscc:0614141.1234567890',
+          childEPCs: ['urn:epc:id:sgtin:0614141.107346.2017', 'urn:epc:id:sgtin:0614141.107346.2018'],
+          action: 'ADD',
+          bizStep: 'packing',
+          disposition: 'in_progress',
+          readPoint: { id: 'urn:epc:id:sgln:0614141.00777.0' },
+        },
+        {
+          type: 'ObjectEvent',
+          eventTime: '2026-10-02T14:30:00Z',
+          eventTimeZoneOffset: '+00:00',
+          epcList: ['urn:epc:id:sscc:0614141.1234567890'],
+          action: 'OBSERVE',
+          bizStep: 'shipping',
+          disposition: 'in_transit',
+          readPoint: { id: 'urn:epc:id:sgln:0614141.00777.0' },
+          bizTransactionList: [{ type: 'po', bizTransaction: 'urn:epcglobal:cbv:bt:0614141000005:PO-1001' }],
+          sourceList: [{ type: 'owning_party', source: 'urn:epc:id:pgln:0614141.00000' }],
+          destinationList: [{ type: 'owning_party', destination: 'urn:epc:id:pgln:0012345.00000' }],
+        },
+      ],
+    },
+  },
+  null,
+  2,
+);
