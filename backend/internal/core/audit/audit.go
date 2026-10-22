@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -69,7 +70,7 @@ func WriteAs(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, actor string, rec
 	var prevHash string
 	var prevSeq int64
 	err = tx.QueryRow(ctx, `select seq, hash from audit_entry where tenant_id=$1 order by seq desc limit 1`, tenant).Scan(&prevSeq, &prevHash)
-	if err != nil && err != pgx.ErrNoRows {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Entry{}, err
 	}
 	e := Entry{

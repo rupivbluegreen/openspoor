@@ -3,6 +3,7 @@ package secrets
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
@@ -44,7 +45,7 @@ func (k *Keyring) For(ctx context.Context, tenant uuid.UUID) (*Sealer, error) {
 	aad := []byte("dek:" + tenant.String())
 	var wrapped []byte
 	err = tx.QueryRow(ctx, `select wrapped_dek from tenant_key where tenant_id=$1`, tenant).Scan(&wrapped)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		dek := make([]byte, 32)
 		_, _ = rand.Read(dek)
 		wrapped = k.master.Seal(dek, aad)

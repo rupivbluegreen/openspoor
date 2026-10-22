@@ -424,7 +424,7 @@ func (m *Module) buildTITS(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		w.Header().Set("Content-Type", "application/ld+json")
-		_, _ = w.Write(b)
+		_, _ = w.Write(b) //nolint:gosec // G705: server-built JSON-LD with nosniff, not HTML
 		return nil
 	})
 }

@@ -91,7 +91,7 @@ func TestEUFMDRejectionFixResubmit(t *testing.T) {
 	if len(alerts.Items) != 1 || alerts.Items[0].Detail["suggestedFix"] == "" || alerts.Items[0].Detail["reportId"] != rs[0].ID {
 		t.Fatalf("alert: %+v", alerts.Items)
 	}
-	if packs, _ := alerts.Items[0].Detail["packs"].([]any); packs != nil && len(packs) > 3 {
+	if packs, _ := alerts.Items[0].Detail["packs"].([]any); len(packs) > 3 {
 		t.Fatalf("packs: %v", packs)
 	}
 

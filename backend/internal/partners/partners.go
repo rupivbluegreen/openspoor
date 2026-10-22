@@ -528,7 +528,7 @@ func (m *Module) probe(ctx context.Context, p Partner) map[string]any {
 		if err != nil {
 			h["status"], h["detail"] = "down", err.Error()
 		} else {
-			res.Body.Close()
+			_ = res.Body.Close()
 			if res.StatusCode >= 500 {
 				h["status"], h["detail"] = "down", res.Status
 			} else {

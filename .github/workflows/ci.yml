@@ -43,10 +43,10 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           working-directory: backend
-          version: latest
+          version: v2.15.0
       - name: go-arch-lint (module boundaries)
         run: |
-          go install github.com/fe3dback/go-arch-lint@latest
+          go install github.com/fe3dback/go-arch-lint@v1.19.0
           go-arch-lint check
       - name: OpenAPI diff against main
         if: github.event_name == 'pull_request'

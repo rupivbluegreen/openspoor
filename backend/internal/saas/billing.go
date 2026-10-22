@@ -67,7 +67,7 @@ func (l *Lago) ReportUsage(ctx context.Context, customer, metric, period string,
 	if err != nil {
 		return err
 	}
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode >= 300 {
 		return fmt.Errorf("lago returned %s", res.Status)
 	}

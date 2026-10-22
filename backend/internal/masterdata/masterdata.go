@@ -316,7 +316,7 @@ func (m *Module) ImportCSV(ctx context.Context, rd io.Reader) (ImportResult, err
 		for {
 			rec, err := cr.Read()
 			line++
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			if err != nil {

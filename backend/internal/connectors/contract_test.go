@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	connector "github.com/openspoor/openspoor/connectors-sdk"
-	"github.com/openspoor/openspoor/connectors-sdk/contracttest"
+	connector "github.com/openspoor/connectors-sdk"
+	"github.com/openspoor/connectors-sdk/contracttest"
 	"github.com/openspoor/openspoor/internal/connectors/eufmd"
 	"github.com/openspoor/openspoor/internal/connectors/mockhub"
 	"github.com/openspoor/openspoor/internal/connectors/sarsd"

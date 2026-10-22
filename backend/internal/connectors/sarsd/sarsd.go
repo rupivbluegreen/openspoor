@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	connector "github.com/openspoor/openspoor/connectors-sdk"
+	connector "github.com/openspoor/connectors-sdk"
 )
 
 // Connector implements connector.Connector.

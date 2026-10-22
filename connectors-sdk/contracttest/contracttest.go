@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	connector "github.com/openspoor/openspoor/connectors-sdk"
+	connector "github.com/openspoor/connectors-sdk"
 )
 
 // Case is one scenario.

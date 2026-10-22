@@ -132,7 +132,7 @@ func readTree(r io.Reader) (*node, error) {
 	var root *node
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -430,7 +430,7 @@ func isXMLName(s string) bool {
 		return false
 	}
 	for i, r := range s {
-		if !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && (r >= '0' && r <= '9' || r == '-' || r == '.')) {
+		if r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (i == 0 || (r < '0' || r > '9') && r != '-' && r != '.') {
 			return false
 		}
 	}

@@ -20,7 +20,7 @@ func Up(ctx context.Context, url string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	goose.SetBaseFS(FS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		return err
@@ -35,7 +35,7 @@ func Status(ctx context.Context, url string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	goose.SetBaseFS(FS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		return 0, err

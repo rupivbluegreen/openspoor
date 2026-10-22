@@ -128,7 +128,7 @@ func serve(ctx context.Context, a *app.App, cfg config.Config) {
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: a.Router, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second}
 	go func() {
 		<-ctx.Done()
-		sctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(sctx)
 	}()

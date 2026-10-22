@@ -2,8 +2,14 @@
 # interfaces only in the directions listed here (no cycles, no reaching into internals).
 version: 3
 workdir: .
+# Black-box tests (package x_test) import testkit and the module under test; boundaries apply to production code.
+excludeFiles:
+  - "^.*_test\\.go$"
 allow:
   depOnAnyVendor: true
+  # core/auth declares the user-store interface that app wires to platform (dependency inversion);
+  # deep scan reports that injection as platform -> core, so only import edges are checked.
+  deepScan: false
 components:
   cmd:           { in: cmd/** }
   app:           { in: internal/app }
@@ -15,7 +21,8 @@ components:
   epcis:         { in: internal/epcis }
   trace:         { in: internal/trace }
   dscsa:         { in: internal/dscsa }
-  connectors:    { in: internal/connectors/** }
+  connectors:    { in: internal/connectors }
+  adapters:      { in: internal/connectors/* }
   partners:      { in: internal/partners }
   saas:          { in: internal/saas }
   food:          { in: internal/food }
@@ -25,22 +32,23 @@ components:
   verify:        { in: internal/verify }
   pkg:           { in: pkg/** }
   migrations:    { in: migrations }
+  migration:     { in: internal/migration }
+  rulepacks:     { in: rulepacks }
 commonComponents: [core, pkg]
+# Components absent from deps (platform, masterdata, trace, partners, migrations, rulepacks) are leaves:
+# they may use only the common components.
 deps:
   cmd:           { mayDependOn: [app, platform, migrations] }
   app:           { anyProjectDeps: true }
   testkit:       { mayDependOn: [app, platform, migrations] }
-  platform:      { mayDependOn: [] }
-  masterdata:    { mayDependOn: [] }
   serialization: { mayDependOn: [masterdata] }
   epcis:         { mayDependOn: [masterdata, serialization] }
-  trace:         { mayDependOn: [] }
   dscsa:         { mayDependOn: [masterdata, epcis, trace, partners] }
-  connectors:    { mayDependOn: [masterdata, trace] }
-  partners:      { mayDependOn: [] }
+  connectors:    { mayDependOn: [adapters, masterdata, trace, rulepacks] }
   saas:          { mayDependOn: [platform] }
-  food:          { mayDependOn: [masterdata, epcis, trace] }
-  link:          { mayDependOn: [partners] }
-  act:           { mayDependOn: [trace] }
-  ecosystem:     { mayDependOn: [trace] }
+  food:          { mayDependOn: [epcis] }
+  link:          { mayDependOn: [epcis, partners] }
+  act:           { mayDependOn: [connectors, trace] }
+  ecosystem:     { mayDependOn: [epcis, platform] }
   verify:        { mayDependOn: [masterdata, serialization, trace] }
+  migration:     { mayDependOn: [epcis, trace] }

@@ -8,9 +8,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -149,7 +151,9 @@ func (q Query) Run(ctx context.Context, tx pgx.Tx) ([]lib.Event, string, error) 
 	}
 	per := 100
 	if v := q["perPage"]; v != "" {
-		fmt.Sscan(v, &per)
+		if n, err := strconv.Atoi(v); err == nil {
+			per = n
+		}
 	}
 	if per < 1 || per > 1000 {
 		per = 100
@@ -497,7 +501,7 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 			q["nextPageToken"] = next
 		}
 	})
-	if err == db.ErrNotFound {
+	if errors.Is(err, db.ErrNotFound) {
 		return nil // subscription removed
 	}
 	if err != nil || len(events) == 0 {
@@ -514,7 +518,7 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 	status := 0
 	if err == nil {
 		status = res.StatusCode
-		res.Body.Close()
+		_ = res.Body.Close()
 	}
 	ok := err == nil && status < 300
 	msg := ""

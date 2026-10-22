@@ -94,19 +94,19 @@ func ValidateData(schema map[string]any, data map[string]any) []string {
 			continue
 		}
 		t := fmt.Sprint(p["type"])
-		switch v.(type) {
+		switch v := v.(type) {
 		case string:
 			if t != "string" {
 				errs = append(errs, k+" must be "+t)
 			} else if pat, ok := p["pattern"].(string); ok {
-				if re, err := regexp.Compile(pat); err == nil && !re.MatchString(v.(string)) {
+				if re, err := regexp.Compile(pat); err == nil && !re.MatchString(v) {
 					errs = append(errs, k+" does not match the required format")
 				}
 			}
 		case float64:
 			if t != "number" && t != "integer" {
 				errs = append(errs, k+" must be "+t)
-			} else if t == "integer" && v.(float64) != float64(int64(v.(float64))) {
+			} else if t == "integer" && v != float64(int64(v)) {
 				errs = append(errs, k+" must be an integer")
 			}
 		case bool:

@@ -92,7 +92,7 @@ type userRow struct {
 }
 
 func (u userRow) user() User {
-	return User{ID: u.ID, Email: u.Email, Name: u.Name, Roles: u.Roles, Status: u.Status, Locale: u.Locale, CreatedAt: u.CreatedAt}
+	return User(u)
 }
 
 // Public mounts unauthenticated routes.

@@ -5,7 +5,6 @@
 package edi
 
 import (
-	"bufio"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -487,7 +486,7 @@ type idocSegment struct {
 func IDoc(d Document, env Envelope) (string, error) {
 	basic, msg := IDocType(d.Type)
 	var b strings.Builder
-	w := bufio.NewWriter(&b)
+	w := &b
 	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>`+"\n<%s>\n <IDOC BEGIN=\"1\">\n", basic)
 	f := func(indent, name, v string) {
 		if v == "" {
@@ -550,9 +549,6 @@ func IDoc(d Document, env Envelope) (string, error) {
 		fmt.Fprint(w, "  </E1EDP01>\n")
 	}
 	fmt.Fprintf(w, " </IDOC>\n</%s>\n", basic)
-	if err := w.Flush(); err != nil {
-		return "", err
-	}
 	return b.String(), nil
 }
 

@@ -17,7 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	connector "github.com/openspoor/openspoor/connectors-sdk"
+	connector "github.com/openspoor/connectors-sdk"
 	"github.com/openspoor/openspoor/internal/connectors/eufmd"
 	"github.com/openspoor/openspoor/internal/connectors/mockhub"
 	"github.com/openspoor/openspoor/internal/connectors/sarsd"

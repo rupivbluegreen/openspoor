@@ -67,7 +67,12 @@ func main() {
 	}
 	sort.Strings(names)
 	w := bufio.NewWriter(os.Stdout)
-	defer w.Flush()
+	defer func() {
+		if err := w.Flush(); err != nil {
+			fmt.Fprintln(os.Stderr, "write report:", err)
+			os.Exit(1)
+		}
+	}()
 	fmt.Fprintf(w, "# Operational Qualification report — Open Spoor\n\n")
 	fmt.Fprintf(w, "- Generated: %s\n- Commit: `%s`\n- Platform: %s/%s, %d CPUs, %s\n- Tests: **%d passed, %d failed, %d skipped**\n\n",
 		time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(string(commit)), runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), runtime.Version(), pass, fail, skip)

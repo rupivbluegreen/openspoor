@@ -349,7 +349,7 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 		status, detail["error"] = "retrying", err.Error()
 	} else {
 		body, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
-		res.Body.Close()
+		_ = res.Body.Close()
 		detail["status"], detail["response"] = res.StatusCode, string(body)
 		switch {
 		case res.StatusCode == http.StatusConflict: // already received (replay) counts as delivered

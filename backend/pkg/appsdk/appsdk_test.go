@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -57,7 +58,8 @@ func TestClientErrors(t *testing.T) {
 }
 
 func asErr(err error, target **APIError) bool {
-	e, ok := err.(*APIError)
+	var e *APIError
+	ok := errors.As(err, &e)
 	if ok {
 		*target = e
 	}

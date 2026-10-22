@@ -117,7 +117,7 @@ func TestFederationTwoNodes(t *testing.T) {
 	a.Must(http.StatusCreated, a.Do("POST", "/api/v1/b2b/documents", order), &d)
 	for _, f := range []string{"x12", "edifact", "idoc"} {
 		r := a.Do("GET", "/api/v1/b2b/documents/"+d.ID+"/edi?format="+f, nil)
-		if r.Status != 200 || !(strings.Contains(string(r.Body), "PO1*1*10*EA*2.5") || strings.Contains(string(r.Body), "QTY+21:10:EA") || strings.Contains(string(r.Body), "<MENGE>10</MENGE>")) {
+		if body := string(r.Body); r.Status != 200 || !strings.Contains(body, "PO1*1*10*EA*2.5") && !strings.Contains(body, "QTY+21:10:EA") && !strings.Contains(body, "<MENGE>10</MENGE>") {
 			t.Fatalf("%s rendering: %d %s", f, r.Status, r.Body)
 		}
 	}

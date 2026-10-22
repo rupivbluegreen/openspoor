@@ -6,6 +6,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -148,7 +149,7 @@ func (r *Runner) RunOnce(ctx context.Context) (int, error) {
 		            order by run_at, id for update skip locked limit 1)
 		returning id, tenant_id, kind, payload, attempts, max_attempts, run_at, created_at`, kinds).
 		Scan(&j.ID, &j.TenantID, &j.Kind, &j.Payload, &j.Attempts, &j.MaxAttempts, &j.RunAt, &j.CreatedAt)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}
 	if err != nil {
@@ -162,7 +163,8 @@ func (r *Runner) RunOnce(ctx context.Context) (int, error) {
 		_, err = r.pool.Exec(ctx, `update job set status='done', last_error='', updated_at=now() where id=$1`, j.ID)
 		return 1, err
 	}
-	_, permanent := runErr.(Permanent)
+	var perm Permanent
+	permanent := errors.As(runErr, &perm)
 	if permanent || j.Attempts >= j.MaxAttempts {
 		slog.Warn("job failed permanently", "id", j.ID, "kind", j.Kind, "err", runErr)
 		_, err = r.pool.Exec(ctx, `update job set status='failed', last_error=$2, updated_at=now() where id=$1`, j.ID, runErr.Error())
