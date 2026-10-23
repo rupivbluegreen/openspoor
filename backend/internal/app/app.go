@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/openspoor/openspoor/internal/core/audit"
 	"github.com/openspoor/openspoor/internal/core/auth"
 	"github.com/openspoor/openspoor/internal/core/bus"
 	"github.com/openspoor/openspoor/internal/core/config"
@@ -68,6 +69,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		return nil, err
 	}
 	deps.Auth = a
+	audit.SetPseudonymizer(deps.Keys.Pseudonym)
 	plat.Deps = deps
 	app := &App{Deps: deps, Platform: plat}
 	app.Modules, err = buildModules(deps, plat)

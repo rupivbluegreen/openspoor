@@ -493,6 +493,7 @@ func TestFormsAndWorkflowDesigner(t *testing.T) {
 	e := testkit.New(t)
 	ops := login(t, e, "ops@acme.test", "Ops")
 	viewer := login(t, e, "viewer@acme.test", "Viewer")
+	serial := login(t, e, "serial@acme.test", "Serialization")
 	obj := func(props map[string]any) map[string]any {
 		return map[string]any{"type": "object", "properties": props}
 	}
@@ -603,7 +604,12 @@ func TestFormsAndWorkflowDesigner(t *testing.T) {
 	adv := func(token string, id string, data any) testkit.Response {
 		return e.Call(token, "POST", "/api/v1/workflow-runs/"+id+"/advance", map[string]any{"data": data})
 	}
-	problem(t, adv(viewer, rn.ID, map[string]any{"tempC": 9}), 403, "step Assess needs role Ops")
+	problem(t, adv(serial, rn.ID, map[string]any{"tempC": 9}), 403, "step Assess needs role Ops")
+	// Viewer is strictly read-only: it can read runs but cannot start, advance or submit.
+	problem(t, adv(viewer, rn.ID, map[string]any{"tempC": 9}), 403, "missing role")
+	problem(t, e.Call(viewer, "POST", "/api/v1/workflows/returns-v1/start", nil), 403, "missing role")
+	problem(t, e.Call(viewer, "POST", "/api/v1/forms/"+f1.ID+"/submit", map[string]any{"data": map[string]any{"pallets": 1}}), 403, "missing role")
+	e.Must(http.StatusOK, e.Call(viewer, "GET", "/api/v1/workflow-runs/"+rn.ID, nil), nil)
 	problem(t, adv(ops, rn.ID, map[string]any{"tempC": "hot"}), 422, "step data is invalid")
 	e.Must(http.StatusOK, adv(ops, rn.ID, map[string]any{"tempC": 9.5}), &rn)
 	if rn.Step != 1 || rn.CurrentStep.Key != "close" || rn.Context["tempC"] != 9.5 || len(rn.History) != 1 || rn.History[0]["by"] != "user:ops@acme.test" {

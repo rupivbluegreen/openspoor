@@ -273,7 +273,7 @@ func TestAuthorityRequests(t *testing.T) {
 		Items []struct{ Actor, Action, EntityID string }
 	}
 	e.Must(http.StatusOK, e.Call(tok, "GET", "/api/v1/audit?action=food.oneupdown.authority_request.export", nil), &au)
-	if au.Total != 2 || !strings.Contains(au.Items[1].Actor, "viewer@green.test") || au.Items[0].EntityID != ar.ID.String() {
+	if au.Total != 2 || !strings.HasPrefix(au.Items[1].Actor, "user:") || strings.Contains(au.Items[1].Actor, "@") || au.Items[0].EntityID != ar.ID.String() {
 		t.Fatalf("audit: %+v", au)
 	}
 	e.Must(http.StatusOK, e.Call(tok, "GET", "/api/v1/audit?action=food.oneupdown.authority_request.create", nil), &au)

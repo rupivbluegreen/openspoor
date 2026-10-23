@@ -19,3 +19,4 @@ All notable changes. Dates are UTC.
 - Performance: a 100,000-event EPCIS document is captured atomically in 6.1 s (≈16.4k events/s) on 4 vCPU. Hot queries carry an explicit tenant predicate, because the RLS `OR` operator-bypass prevented index use under generic plans. Bulk capture stages through COPY into a temporary table, since PostgreSQL forbids COPY into RLS tables.
 - Frontend: console, operator and verify apps (React 19, Ant Design 6, pro-components) in English, Dutch and Arabic (RTL); EPCIS playground.
 - Site: GitHub Pages site with the measured benchmarks.
+- Decisions (2026-10-23): capture stays acknowledged on the PostgreSQL commit (ADR-009 accepted); Viewer is strictly read-only, including forms and workflows; audit entries are pseudonymised at write time (user ids as actors, keyed hashes for e-mail, phone and person names, per-tenant key); the assistant keeps the hosted model and the local-model option.

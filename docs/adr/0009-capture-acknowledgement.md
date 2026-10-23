@@ -1,7 +1,8 @@
 # ADR-009: Acknowledge EPCIS capture on the PostgreSQL commit
 
-- Status: proposed (needs the project owner's decision)
+- Status: accepted (option 3: keep the commit acknowledgement as the default; build the opt-in log-first mode when a deployment needs ingest beyond one PostgreSQL primary)
 - Date: 2026-10-23
+- Decided: 2026-10-23 by the project owner
 
 ## Context
 The serialization plan asks for capture to be acknowledged once events are durable in the

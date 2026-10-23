@@ -24,16 +24,18 @@ func idsParam(r *http.Request) (uuid.UUID, error) { return ids.Param(r, "id") }
 func (m *Module) workflowRoutes(r chi.Router) {
 	r.Get("/forms", httpx.Handler(m.listForms))
 	r.With(auth.Require(auth.RoleAdmin)).Post("/forms", httpx.Handler(m.createForm))
-	r.Post("/forms/{id}/submit", httpx.Handler(m.submitForm))
+	// Viewer is strictly read-only: submitting forms and running workflows need a working role.
+	writer := auth.Require(auth.RoleAdmin, auth.RoleSerialization, auth.RoleCompliance, auth.RoleOps, auth.RoleIntegration)
+	r.With(writer).Post("/forms/{id}/submit", httpx.Handler(m.submitForm))
 	r.Get("/forms/{id}/submissions", httpx.Handler(m.listSubmissions))
 	r.Get("/workflows", httpx.Handler(m.listWorkflows))
 	r.With(auth.Require(auth.RoleAdmin)).Post("/workflows", httpx.Handler(m.createWorkflow))
 	r.Get("/processes", httpx.Handler(m.listProcesses))
-	r.Post("/workflows/{key}/start", httpx.Handler(m.startRun))
-	r.Post("/processes/{key}/start", httpx.Handler(m.startRun))
+	r.With(writer).Post("/workflows/{key}/start", httpx.Handler(m.startRun))
+	r.With(writer).Post("/processes/{key}/start", httpx.Handler(m.startRun))
 	r.Get("/workflow-runs", httpx.Handler(m.listRuns))
 	r.Get("/workflow-runs/{id}", httpx.Handler(m.getRun))
-	r.Post("/workflow-runs/{id}/advance", httpx.Handler(m.advanceRun))
+	r.With(writer).Post("/workflow-runs/{id}/advance", httpx.Handler(m.advanceRun))
 }
 
 // --- forms (JSON Schema) ---

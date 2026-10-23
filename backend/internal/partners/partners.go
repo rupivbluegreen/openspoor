@@ -454,10 +454,10 @@ func (m *Module) accept(w http.ResponseWriter, r *http.Request) error {
 		if _, err := tx.Exec(r.Context(), `update partner_invitation set status='accepted', accepted_by=$2 where id=$1`, invID, me.TenantID); err != nil {
 			return err
 		}
-		if _, err := audit.WriteAs(r.Context(), tx, me.TenantID, me.Actor(), audit.Record{Action: "partner.accept", Entity: "partner", EntityID: mine.ID.String(), After: mine}); err != nil {
+		if _, err := audit.WriteAs(r.Context(), tx, me.TenantID, me.AuditActor(), audit.Record{Action: "partner.accept", Entity: "partner", EntityID: mine.ID.String(), After: mine}); err != nil {
 			return err
 		}
-		_, err = audit.WriteAs(r.Context(), tx, inviter, me.Actor(), audit.Record{Action: "partner.invitation_accepted", Entity: "partner", EntityID: theirs.String(),
+		_, err = audit.WriteAs(r.Context(), tx, inviter, me.AuditActor(), audit.Record{Action: "partner.invitation_accepted", Entity: "partner", EntityID: theirs.String(),
 			After: map[string]any{"by": b.Name}})
 		return err
 	})

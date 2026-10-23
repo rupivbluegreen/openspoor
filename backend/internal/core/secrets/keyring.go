@@ -75,6 +75,15 @@ func (k *Keyring) For(ctx context.Context, tenant uuid.UUID) (*Sealer, error) {
 	return s, nil
 }
 
+// Pseudonym tokenises a personal value for one tenant (see Sealer.Pseudonym).
+func (k *Keyring) Pseudonym(ctx context.Context, tenant uuid.UUID, value string) (string, error) {
+	s, err := k.For(ctx, tenant)
+	if err != nil {
+		return "", err
+	}
+	return s.Pseudonym(value), nil
+}
+
 // Forget drops a cached DEK (after crypto-shredding).
 func (k *Keyring) Forget(tenant uuid.UUID) {
 	k.mu.Lock()

@@ -46,6 +46,15 @@ type Principal struct {
 }
 
 // Actor is the audit label for the principal.
+// AuditActor identifies the principal in the audit trail without personal data: users by id
+// (resolvable while the tenant exists), never by e-mail address.
+func (p Principal) AuditActor() string {
+	if p.Kind == "user" && p.UserID != uuid.Nil {
+		return "user:" + p.UserID.String()
+	}
+	return p.Actor()
+}
+
 func (p Principal) Actor() string {
 	switch p.Kind {
 	case "apikey":

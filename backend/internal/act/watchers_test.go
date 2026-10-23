@@ -83,7 +83,9 @@ func TestWatchers(t *testing.T) {
 	}
 
 	// Proposals wait for a person: approving opens the case.
-	var acts struct{ Items []struct{ ID, Agent, Title string } }
+	var acts struct {
+		Items []struct{ ID, Agent, Title string }
+	}
 	e.Must(http.StatusOK, e.Do("GET", "/api/v1/agents/actions?status=proposed", nil), &acts)
 	if len(acts.Items) != 3 {
 		t.Fatalf("pending watcher proposals: %+v", acts.Items)

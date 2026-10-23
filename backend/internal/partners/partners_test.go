@@ -342,7 +342,7 @@ func TestInvitationsAndAcceptance(t *testing.T) {
 		Items []struct{ Action, Actor string }
 	}
 	e.Must(http.StatusOK, e.Do("GET", "/api/v1/audit?action=partner.invitation_accepted", nil), &aud)
-	if len(aud.Items) != 1 || aud.Items[0].Actor != "user:admin@globex.test" {
+	if len(aud.Items) != 1 || !strings.HasPrefix(aud.Items[0].Actor, "user:") || strings.Contains(aud.Items[0].Actor, "@") {
 		t.Fatalf("inviter audit: %+v", aud)
 	}
 	e.Must(http.StatusOK, e.Call(gtok, "GET", "/api/v1/audit?action=partner.accept", nil), &aud)

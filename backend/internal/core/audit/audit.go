@@ -50,7 +50,7 @@ func Write(ctx context.Context, tx pgx.Tx, rec Record) (Entry, error) {
 	if !ok {
 		return Entry{}, fmt.Errorf("audit: no principal")
 	}
-	return WriteAs(ctx, tx, p.TenantID, p.Actor(), rec)
+	return WriteAs(ctx, tx, p.TenantID, p.AuditActor(), rec)
 }
 
 // WriteAs appends an entry for an explicit tenant and actor.
@@ -61,6 +61,15 @@ func WriteAs(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, actor string, rec
 	}
 	after, err := marshal(rec.After)
 	if err != nil {
+		return Entry{}, err
+	}
+	if before, err = scrub(ctx, tenant, rec, before); err != nil {
+		return Entry{}, err
+	}
+	if after, err = scrub(ctx, tenant, rec, after); err != nil {
+		return Entry{}, err
+	}
+	if actor, err = scrubActor(ctx, tenant, actor); err != nil {
 		return Entry{}, err
 	}
 	// Serialize appends per tenant so the chain has no forks.

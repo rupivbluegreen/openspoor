@@ -99,7 +99,7 @@ func (m *Module) deleteTenant(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx := r.Context()
 	err = m.DB.OperatorTx(ctx, func(tx pgx.Tx) error {
-		if _, err := audit.WriteAs(ctx, tx, t.ID, p.Actor(), audit.Record{Action: "tenant.delete", Entity: "tenant", EntityID: t.ID.String(), Reason: in.Reason}); err != nil {
+		if _, err := audit.WriteAs(ctx, tx, t.ID, p.AuditActor(), audit.Record{Action: "tenant.delete", Entity: "tenant", EntityID: t.ID.String(), Reason: in.Reason}); err != nil {
 			return err
 		}
 		for _, q := range []string{

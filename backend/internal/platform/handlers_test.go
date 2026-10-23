@@ -96,7 +96,7 @@ func TestOrganizationsAndSites(t *testing.T) {
 	}
 	var aud auditPage
 	e.Must(http.StatusOK, e.Do("GET", "/api/v1/audit?action=org.update&entityId="+org.ID, nil), &aud)
-	if aud.Total != 1 || aud.Items[0].Before["name"] != "Acme Pharma" || aud.Items[0].After["name"] != "Acme Pharma BV" || aud.Items[0].Actor != "user:admin@acme.test" {
+	if aud.Total != 1 || aud.Items[0].Before["name"] != "Acme Pharma" || aud.Items[0].After["name"] != "Acme Pharma BV" || aud.Items[0].Actor != "user:"+adminID(t, e) {
 		t.Fatalf("org.update audit: %+v", aud)
 	}
 	problem(t, e.Do("PUT", "/api/v1/orgs/00000000-0000-0000-0000-000000000001", map[string]any{"name": "Y", "kind": "cmo"}), 404, "not found")
@@ -525,7 +525,7 @@ func TestSignaturesAuditAndAlerts(t *testing.T) {
 		t.Fatalf("all alerts: %+v", alerts)
 	}
 	e.Must(http.StatusOK, e.Do("GET", "/api/v1/audit?action=alert.resolve&entityId="+a1, nil), &aud)
-	if aud.Total != 1 || aud.Items[0].Actor != "user:ops@acme.test" {
+	if aud.Total != 1 || strings.Contains(aud.Items[0].Actor, "@") || !strings.HasPrefix(aud.Items[0].Actor, "user:") {
 		t.Fatalf("alert.resolve audit: %+v", aud)
 	}
 	// Other tenants see none of it.
@@ -533,5 +533,51 @@ func TestSignaturesAuditAndAlerts(t *testing.T) {
 	e.Must(http.StatusOK, e.Call(other, "GET", "/api/v1/esignatures", nil), &sigs)
 	if alerts.Total != 0 || sigs.Total != 0 {
 		t.Fatalf("cross-tenant alerts/signatures: %d %d", alerts.Total, sigs.Total)
+	}
+}
+
+// adminID is the user id of the default test tenant's admin, as audit entries record it.
+func adminID(t *testing.T, e *testkit.Env) string {
+	t.Helper()
+	var me struct{ UserID string }
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/me", nil), &me)
+	return me.UserID
+}
+
+func TestAuditHoldsNoPersonalData(t *testing.T) {
+	e := testkit.New(t)
+	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/users", map[string]any{"email": "jane.doe@acme.test", "name": "Jane Doe", "roles": []string{"Ops"}, "password": testkit.Password}), nil)
+	raw := e.Do("GET", "/api/v1/audit?limit=200", nil)
+	if raw.Status != http.StatusOK {
+		t.Fatalf("audit: %d", raw.Status)
+	}
+	body := string(raw.Body)
+	for _, leak := range []string{"jane.doe@acme.test", "Jane Doe", "admin@acme.test"} {
+		if strings.Contains(body, leak) {
+			t.Fatalf("audit trail contains %q: %s", leak, body)
+		}
+	}
+	var page struct {
+		Items []struct {
+			Action string
+			Actor  string
+			After  map[string]any
+		}
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/audit?action=user.create", nil), &page)
+	if len(page.Items) < 1 {
+		t.Fatal("no user.create entry")
+	}
+	if em, _ := page.Items[0].After["email"].(string); !strings.HasPrefix(em, "pseudo:") || !strings.HasPrefix(page.Items[0].Actor, "user:") {
+		t.Fatalf("user.create entry: %+v", page.Items[0])
+	}
+	// The hash chain still verifies over the pseudonymised entries.
+	var v struct {
+		Intact   bool
+		BrokenAt int64
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/audit/verify", nil), &v)
+	if !v.Intact {
+		t.Fatalf("chain broken at %d", v.BrokenAt)
 	}
 }

@@ -578,7 +578,7 @@ func (m *Module) opUpdate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		_, err = audit.WriteAs(r.Context(), tx, id, "operator:"+op.Email, audit.Record{Action: "operator.tenant.update", Entity: "tenant", EntityID: id.String(), Before: before, After: in, Reason: in.Reason})
+		_, err = audit.WriteAs(r.Context(), tx, id, "operator:"+op.UserID.String(), audit.Record{Action: "operator.tenant.update", Entity: "tenant", EntityID: id.String(), Before: before, After: in, Reason: in.Reason})
 		return err
 	})
 	if err != nil {
@@ -613,7 +613,7 @@ func (m *Module) opImpersonate(w http.ResponseWriter, r *http.Request) error {
 		if level == "none" || until == nil || until.Before(time.Now()) {
 			return httpx.Forbidden("the tenant has not granted support access")
 		}
-		_, err := audit.WriteAs(r.Context(), tx, id, "operator:"+op.Email, audit.Record{Action: "operator.impersonate", Entity: "tenant", EntityID: id.String(),
+		_, err := audit.WriteAs(r.Context(), tx, id, "operator:"+op.UserID.String(), audit.Record{Action: "operator.impersonate", Entity: "tenant", EntityID: id.String(),
 			After: map[string]any{"level": level, "until": until}, Reason: in.Reason})
 		return err
 	})

@@ -290,10 +290,10 @@ func (m *Module) verifyProfile(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		rec := audit.Record{Action: "directory.verify", Entity: "directory_listing", EntityID: id.String(), Before: l, After: after}
-		if _, err := audit.WriteAs(r.Context(), tx, id, me.Actor(), rec); err != nil {
+		if _, err := audit.WriteAs(r.Context(), tx, id, me.AuditActor(), rec); err != nil {
 			return err
 		}
-		if _, err := audit.WriteAs(r.Context(), tx, me.TenantID, me.Actor(), rec); err != nil {
+		if _, err := audit.WriteAs(r.Context(), tx, me.TenantID, me.AuditActor(), rec); err != nil {
 			return err
 		}
 		httpx.JSON(w, http.StatusOK, after)
@@ -353,10 +353,10 @@ func (m *Module) requestConnection(w http.ResponseWriter, r *http.Request) error
 			return err
 		}
 		rec := audit.Record{Action: "directory.connection_request", Entity: "directory_connection_request", EntityID: req.ID.String(), After: req}
-		if _, err := audit.WriteAs(r.Context(), tx, id, me.Actor(), rec); err != nil {
+		if _, err := audit.WriteAs(r.Context(), tx, id, me.AuditActor(), rec); err != nil {
 			return err
 		}
-		_, err = audit.WriteAs(r.Context(), tx, me.TenantID, me.Actor(), rec)
+		_, err = audit.WriteAs(r.Context(), tx, me.TenantID, me.AuditActor(), rec)
 		return err
 	})
 	if err != nil {
