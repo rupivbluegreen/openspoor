@@ -8,8 +8,17 @@ benchmark dashboards (measured system performance and anonymized peer comparison
 KPI library (formula-defined indicators over data the platform already holds, with daily series
 and per-tenant goals).
 
-KPI library (`kpi.go`, `kpi_defs.go`): 36 indicators in 7 categories (delivery, partner exchange,
-compliance, operations, verification, inventory, recall and cold chain). Each has an id, name,
+KPI library (`kpi.go`, `kpi_defs.go`): 61 indicators in 11 categories (delivery 4, partner exchange 8,
+compliance 6, operations 9, verification 4, inventory 4, recall and cold chain 8, traceability 5,
+serialization and aggregation 5, agents and exceptions 4, security and audit 4). The 25 added to
+the first 36 are: event recording delay, events recorded more than 24 h late, capture processing time
+(p95), events without a location, critical-tracking-event recording delay; serial numbers allocated,
+packs commissioned, packing (aggregation) events, saleable packs packed into a parent, serial numbers
+left in active pools; recalls not closed, recall duration, excursion severity; partner connection
+tests passed, AS2 messages delivered, SFTP files failed, time to acknowledgement; agent proposals
+accepted, proposals waiting, time to decide, partner files waiting for a mapping; electronic
+signatures captured, API keys unused for 90 days, API keys expiring in 30 days, active administrators.
+Each has an id, name,
 category, unit, direction (higher or lower is better), a description of the formula and a SQL
 definition over existing tables. Four kinds: ratio (numerator and denominator per event; means
 are ratios), sum, quantile (p95, median) and snapshot (value as of now; a daily history only

@@ -31,8 +31,8 @@ create table agent_eval_policy (
 );
 select enable_tenant_rls('agent_eval_policy');
 
--- Uploaded documents: only the extracted text is kept (no original file, no OCR).
-create table document (
+-- The document library: uploaded documents; only the extracted text is kept (no original file, no OCR).
+create table library_document (
   id          uuid primary key,
   tenant_id   uuid not null references tenant(id) on delete cascade,
   name        text not null,
@@ -48,20 +48,20 @@ create table document (
   created_at  timestamptz not null default now(),
   unique (tenant_id, sha256)
 );
-select enable_tenant_rls('document');
+select enable_tenant_rls('library_document');
 
-create table document_chunk (
+create table library_chunk (
   id          uuid primary key,
   tenant_id   uuid not null references tenant(id) on delete cascade,
-  document_id uuid not null references document(id) on delete cascade,
+  document_id uuid not null references library_document(id) on delete cascade,
   seq         int not null,
   body        text not null,
   -- 'simple' keeps the search language-neutral (English, Dutch, Arabic documents share one index).
   tsv         tsvector generated always as (to_tsvector('simple', body)) stored,
   unique (document_id, seq)
 );
-create index document_chunk_tsv_idx on document_chunk using gin (tsv);
-select enable_tenant_rls('document_chunk');
+create index library_chunk_tsv_idx on library_chunk using gin (tsv);
+select enable_tenant_rls('library_chunk');
 
 -- +goose Down
-drop table document_chunk, document, agent_eval_policy, agent_eval_score cascade;
+drop table library_chunk, library_document, agent_eval_policy, agent_eval_score cascade;

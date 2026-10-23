@@ -95,7 +95,7 @@ func TestSemanticQueries(t *testing.T) {
 	if got := r.byKey(); len(got) != 1 || got[today] != 4 {
 		t.Fatalf("by day: %+v", r)
 	}
-	r = sem(t, e, viewer, map[string]any{"metric": "alerts", "dimension": "month", "from": "2020-01-01T00:00:00Z", "to": time.Now().UTC().Add(time.Hour).Format(time.RFC3339), "days": 0})
+	r = sem(t, e, viewer, map[string]any{"metric": "alerts", "dimension": "month", "from": "2025-01-01T00:00:00Z", "to": time.Now().UTC().Add(time.Hour).Format(time.RFC3339), "days": 0})
 	if len(r.Rows) == 0 {
 		t.Fatalf("by month: %+v", r)
 	}
@@ -272,11 +272,11 @@ func TestAssistantUsesTheSemanticLayerAndDocuments(t *testing.T) {
 
 	// Document passages are cited.
 	var d struct{ ID string }
-	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/documents", map[string]any{"name": "SOP-12 quarantine.txt", "content": "Quarantined stock is stored in cage 4 until the qualified person signs the release."}), &d)
+	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/library", map[string]any{"name": "SOP-12 quarantine.txt", "content": "Quarantined stock is stored in cage 4 until the qualified person signs the release."}), &d)
 	reply, cites = chat(t, e, "Where is quarantined stock stored?")
 	hit := false
 	for _, c := range cites {
-		hit = hit || c.Ref == "document/"+d.ID+"#0"
+		hit = hit || c.Ref == "library/"+d.ID+"#0"
 	}
 	if !hit || !strings.Contains(reply, "From your documents") || !strings.Contains(reply, "cage 4") {
 		t.Fatalf("document citation: %s %+v", reply, cites)
@@ -299,7 +299,7 @@ func TestAssistantUsesTheSemanticLayerAndDocuments(t *testing.T) {
 	}
 	for _, bad := range []string{`{"metric": "alerts; drop table alert"}`, `{"metric": "app_user", "days": 3}`, `{"metric": "alerts", "dimension": "gtin"}`, `{"metric": ""}`, `not json`, `{"metric": 5}`} {
 		llm.reply = bad
-		reply, cites = chat(t, e, "What is the overall count of things needing human attention?")
+		_, cites = chat(t, e, "What is the overall count of things needing human attention?")
 		for _, c := range cites {
 			if strings.HasPrefix(c.Ref, "metric/") {
 				t.Fatalf("model output %q produced %+v", bad, c)

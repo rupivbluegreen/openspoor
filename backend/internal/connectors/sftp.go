@@ -214,6 +214,75 @@ func (m *Module) processSFTPFile(ctx context.Context, in Instance, cfg connector
 	return rec
 }
 
+// DropDocument writes a B2B document as an X12 or EDIFACT file into the document folder of the
+// enabled SFTP instance bound to the partner (config partnerId and documentDir). It returns the
+// delivery details for the document and true; false (and no error) when no instance is bound, so
+// the caller can fall back to another channel. The upload is logged in sftp_file (direction
+// outbound) and audited; a failed upload is logged, audited and raises an alert, and is returned
+// as an error (400 when the document type has no writer in the configured format, 502 otherwise).
+// ctx must carry a principal of the document's tenant.
+func (m *Module) DropDocument(ctx context.Context, partnerID uuid.UUID, d edi.Document) (map[string]any, bool, error) {
+	var in Instance
+	err := m.Tx(ctx, func(tx pgx.Tx) error {
+		var err error
+		in, err = db.One[Instance](ctx, tx, `select `+instCols+` from connector_instance where enabled and connector=$1
+			and config->>'partnerId' = $2 and coalesce(config->>'documentDir', '') <> '' order by created_at limit 1`, sftpdrop.ID, partnerID.String())
+		return err
+	})
+	if errors.Is(err, db.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	cfg := m.effectiveConfig(ctx, in)
+	name, data, format, err := sftpdrop.DocumentFile(cfg, d)
+	if err != nil {
+		return nil, true, httpx.BadRequest("SFTP document drop: " + err.Error())
+	}
+	rec := SFTPFile{ID: ids.New(), InstanceID: in.ID, Direction: "outbound", Name: name, Size: int64(len(data)), Format: format, Status: "processed"}
+	sum := sha256.Sum256(data)
+	rec.SHA256 = hex.EncodeToString(sum[:])
+	sess, err := m.dialSFTP(ctx, cfg)
+	if err == nil {
+		defer func() { _ = sess.Close() }()
+		rec.MovedTo, err = sess.Put(cfg["documentDir"], name, data)
+	}
+	if err != nil {
+		rec.Status, rec.Error = "failed", err.Error()
+	}
+	werr := m.DB.Tx(ctx, in.TenantID, func(tx pgx.Tx) error {
+		r, err := db.One[SFTPFile](ctx, tx, `insert into sftp_file (id, tenant_id, instance_id, direction, name, size, sha256, format, status, capture_id, document_id, moved_to, error)
+			values ($1, app_tenant(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning `+sftpFileCols,
+			rec.ID, rec.InstanceID, rec.Direction, rec.Name, rec.Size, rec.SHA256, rec.Format, rec.Status, nil, d.Type+"/"+d.Number, rec.MovedTo, rec.Error)
+		if err != nil {
+			return err
+		}
+		rec = r
+		if _, err := audit.Write(ctx, tx, audit.Record{Action: "sftp.outbound." + rec.Status, Entity: "sftp_file", EntityID: rec.ID.String(), After: rec}); err != nil {
+			return err
+		}
+		if rec.Status == "failed" {
+			return m.raiseAlert(ctx, tx, "integration.sftp", "error", in.Name+": outbound document "+rec.Name+" failed", map[string]any{
+				"instanceId": in.ID, "connector": in.Connector, "file": rec.Name, "reason": rec.Error, "retryable": true,
+				"suggestedFix": "Check the SFTP host, credentials, pinned host key and the document folder permissions in the connector settings, then send the document again.",
+			}, "sftp_file", rec.ID.String(), "sftp-file:"+in.ID.String()+":"+rec.Name+":"+rec.SHA256)
+		}
+		return nil
+	})
+	switch {
+	case werr != nil:
+		return nil, true, werr
+	case rec.Status == "failed":
+		var hk *sftpdrop.HostKeyError
+		if errors.As(err, &hk) {
+			m.connectionAlert(ctx, in, err)
+		}
+		return nil, true, &httpx.Error{Status: http.StatusBadGateway, Msg: "SFTP delivery failed: " + rec.Error}
+	}
+	return map[string]any{"channel": "sftp", "instanceId": in.ID, "file": rec.MovedTo, "format": format, "fileId": rec.ID}, true, nil
+}
+
 // ingest captures (EPCIS) or parses (EDI) one file.
 func (m *Module) ingest(ctx context.Context, in Instance, name string, data []byte) (string, *edi.Document, *uuid.UUID, error) {
 	body := bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))

@@ -40,6 +40,10 @@ import (
 // (agent_eval_score) and consulted by the autonomy ladder: a tool cannot be raised above "approve"
 // unless every evaluated agent that uses it has a recorded score at or above the threshold.
 
+// TODO(spec): the pass thresholds and the tenant minimum score are engineering defaults; whether a score
+// should expire or be bound to the dataset version and agent code it was measured on is not decided
+// (docs/OPEN_QUESTIONS.md).
+
 //go:embed testdata/evals/*.json
 var evalFS embed.FS
 
@@ -275,8 +279,6 @@ func checkExpect(w EvalExpect, g observed) (bad []string) {
 }
 
 // --- running ---
-
-var errRollback = errors.New("rollback")
 
 var evalNS = uuid.MustParse("5b0b3f0e-7f0a-4a52-9a53-0a1d5e1a6e11")
 

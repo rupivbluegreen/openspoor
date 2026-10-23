@@ -23,15 +23,18 @@ import (
 	"net"
 	"os"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
 	connector "github.com/openspoor/connectors-sdk"
+	"github.com/openspoor/openspoor/pkg/edi"
 	lib "github.com/openspoor/openspoor/pkg/epcis"
 )
 
@@ -371,6 +374,9 @@ func (c *Connector) Info() connector.Info {
 			{Key: "outboundFormat", Label: "Outbound format", Default: "json", Help: "json (EPCIS 2.0 JSON-LD) or xml (EPCIS 2.0 XML)."},
 			{Key: "bizSteps", Label: "Business steps", Help: "Comma-separated CBV business steps to send; empty sends every event."},
 			{Key: "filePrefix", Label: "File name prefix", Default: "openspoor"},
+			{Key: "partnerId", Label: "Partner (B2B documents)", Help: "Open Spoor partner id. B2B documents sent to this partner are dropped as EDI files in the document folder. Empty: EPCIS only."},
+			{Key: "documentDir", Label: "Document folder", Help: "B2B documents (X12 or EDIFACT) for the partner above are written here. Empty disables the document drop."},
+			{Key: "documentFormat", Label: "Document format", Default: "auto", Help: "x12, edifact or auto (X12 where the document type has an X12 writer, otherwise EDIFACT)."},
 			{Key: "inboundDir", Label: "Inbound folder", Default: "inbound", Help: "Polled for EPCIS (.json, .jsonld, .xml) and EDI (X12, EDIFACT) files. Empty disables polling."},
 			{Key: "archiveDir", Label: "Archive folder", Default: "archive", Help: "Processed inbound files are moved here."},
 			{Key: "errorDir", Label: "Error folder", Default: "error", Help: "Inbound files that fail are moved here and raise an alert."},
@@ -386,7 +392,18 @@ func (c *Connector) Validate(cfg connector.Config) error {
 	if f := cfg["outboundFormat"]; f != "" && f != "json" && f != "xml" {
 		return errors.New("outboundFormat must be json or xml")
 	}
-	for _, k := range []string{"outboundDir", "inboundDir", "archiveDir", "errorDir"} {
+	if f := cfg["documentFormat"]; f != "" && f != "auto" && f != "x12" && f != "edifact" {
+		return errors.New("documentFormat must be auto, x12 or edifact")
+	}
+	if id := cfg["partnerId"]; id != "" {
+		if _, err := uuid.Parse(id); err != nil {
+			return errors.New("partnerId must be a partner id (UUID)")
+		}
+	}
+	if cfg["documentDir"] != "" && cfg["partnerId"] == "" {
+		return errors.New("documentDir needs partnerId: the partner whose documents are dropped there")
+	}
+	for _, k := range []string{"outboundDir", "inboundDir", "archiveDir", "errorDir", "documentDir"} {
 		if strings.Contains(cfg[k], "..") {
 			return errors.New(k + " must not contain ..")
 		}
@@ -395,6 +412,51 @@ func (c *Connector) Validate(cfg connector.Config) error {
 		return errors.New("archiveDir is required and must differ from inboundDir")
 	}
 	return nil
+}
+
+// DocumentFolder reports whether the instance drops B2B documents (documentDir and partnerId set).
+func DocumentFolder(cfg connector.Config) bool {
+	return cfg["documentDir"] != "" && cfg["partnerId"] != ""
+}
+
+var unsafeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+
+// DocumentFile renders a B2B document as the file to drop: the file name (prefix, type, number
+// and a short content hash, so a corrected document with the same number is a new file and a
+// resend of the same content is idempotent), the content and the format used. The format is the
+// configured documentFormat; "auto" is X12 where the document type has an X12 writer, otherwise
+// EDIFACT. It is an error when the type has no writer in the chosen format.
+func DocumentFile(cfg connector.Config, d edi.Document) (name string, data []byte, format string, err error) {
+	t, ok := edi.Lookup(d.Type)
+	if !ok {
+		return "", nil, "", fmt.Errorf("unknown document type %q", d.Type)
+	}
+	format = cfg["documentFormat"]
+	if format == "" || format == "auto" {
+		format = "edifact"
+		if t.CanWriteX12() {
+			format = "x12"
+		}
+	}
+	var out, ext string
+	switch format {
+	case "x12":
+		out, ext = edi.X12(d, edi.Envelope{}), ".x12"
+	case "edifact":
+		out, ext = edi.EDIFACT(d, edi.Envelope{}), ".edi"
+	default:
+		return "", nil, "", fmt.Errorf("unknown document format %q", format)
+	}
+	if out == "" {
+		return "", nil, "", fmt.Errorf("document type %s has no %s writer", d.Type, strings.ToUpper(format))
+	}
+	prefix := cfg["filePrefix"]
+	if prefix == "" {
+		prefix = "openspoor"
+	}
+	sum := sha256.Sum256([]byte(out))
+	base := strings.Trim(unsafeName.ReplaceAllString(d.Type+"-"+d.Number, "_"), "_")
+	return prefix + "-" + base + "-" + hex.EncodeToString(sum[:4]) + ext, []byte(out), format, nil
 }
 
 // Outbound reports whether the instance drops files (outboundDir set).

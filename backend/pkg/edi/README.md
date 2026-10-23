@@ -15,13 +15,14 @@ parties and amounts, and declarative validation rules. Everything else follows f
 `Document.Validate`, the mapping-studio target list (`Type.Targets`), the API listing
 (`Infos`) and the generic X12 and EDIFACT writers and readers.
 
-There are **60 types**: 14 with an X12 writer (the 6 hand-written mappers plus 8 template-driven
-ones), 25 with an EDIFACT writer, 9 with an X12 reader, and the rest catalogued (identifiers,
-required fields and validation, canonical JSON, but no rendering yet). Adding a type is adding an
-entry; adding an EDIFACT writer needs no code, adding an X12 writer needs a template (a few
-header segments and a line profile). 65 was not reached: every entry is a standard-backed type
-with its own X12 set or EDIFACT message, and those are all that could be attributed with
-certainty.
+There are **60 types**: 19 with an X12 writer (the 6 hand-written mappers plus 13 template-driven
+ones), 35 with an EDIFACT writer, 14 with an X12 reader (the 850 and the 13 templates), 35 with an
+EDIFACT reader (a message is read exactly where it can be written), 6 with an IDoc writer, and the
+rest catalogued (identifiers, required fields and validation, canonical JSON, but no rendering
+yet). Adding a type is adding an entry; adding an EDIFACT writer needs no code, adding an X12
+writer needs a template (a few header segments and a line profile). 65 was not reached: every
+entry is a standard-backed type with its own X12 set or EDIFACT message, and those are all that
+could be attributed with certainty. The counts are asserted by `TestFormatCounts`.
 
 **planning**
 
@@ -159,18 +160,23 @@ validate exactly as before.
 | Function | Purpose |
 |---|---|
 | `X12(doc, env)` | X12 004010 interchange with one transaction set; `""` when the type has no X12 writer |
-| `ParseX12(s)` | Reads the 850 and every type with an X12 template (830, 862, 855, 860, 865, 820, 824, 997) |
+| `ParseX12(s)` | Reads the 850 and every type with an X12 template (830, 862, 855, 860, 865, 820, 824, 997, 861, 852, 867, 990, 999) |
 | `EDIFACT(doc, env)` | UN/EDIFACT D.96A interchange with one message; `""` when the type has no writer |
 | `ParseEDIFACT(s)` | Reads a message into the registry type chosen by message type and document name code; where several types share both it returns the first that validates |
 | `ParseEDIFACTAs(s, key)` | Same, with the type named by the caller |
+| `ParseSegments(s)` | Syntax-level reader for any X12 or EDIFACT interchange: separators from ISA or UNA (release character honoured), envelope and message segments, each element split into components. Used by the mapping studio to offer segments and elements as source fields; it interprets nothing and accepts any transaction set or message |
 | `IDoc(doc, env)` | IDoc XML for the six original types (write only); error for other types |
 | `X12Set`, `EDIFACTType`, `IDocType`, `Lookup`, `LookupX12`, `LookupEDIFACT`, `Keys`, `Infos` | Registry lookups |
 
 The six original types keep their hand-written X12 writers (856 with its HL hierarchy, 810, 846,
 180, 844; the 850 reader). Template-driven X12 types are described by a header (segment IDs with
 element roles such as `number`, `date:period_start`, `status`, `ref:po`, `amount:payment`), a line
-profile (`po1ack`, `poc`, `fst`, `rmt`, `oti`, `ak2`) and status code tables; the same template
-drives writing and reading. The generic EDIFACT writer emits one common segment set (BGM, DTM,
+profile (`po1ack`, `poc`, `fst`, `rmt`, `oti`, `ak2`, `lin`, `none`) and status code tables; the same template
+drives writing and reading. The `lin` profile (861, 852, 867) writes LIN with the GTIN, the set's own quantity segment (RCD, ZA, SN1),
+PID, the lot as REF*LT, the expiry as DTM*036, a reason as NTE*ADD and the line status as MSG text,
+because no code list for it is verified; `none` is for sets that are their header (990); 999 reuses
+the `ak2` profile with IK5. The generic EDIFACT writer (which also covers IFTMIN, IFTSTA, IFTMBF,
+IFTMBC, INSDES, PAYORD, CUSDEC, CUSRES, PRODAT and PARTIN) emits one common segment set (BGM, DTM,
 RFF, NAD, CUX, LIN with IMD/QTY/PIA/PRI/GIN/FTX, UNS, MOA, CNT) parameterised by the registry
 entry. It does not generate message-specific mandatory segments beyond that, so conformance with
 an implementation guide must be checked per message before production use.
@@ -182,7 +188,9 @@ types whose flow is buyer to seller.
 
 Every registry entry with an unverified identifier carries a `TODO(spec)` note in its `TODO`
 field (56 entries); the consolidated list is in `docs/OPEN_QUESTIONS.md` (B2B transaction
-types, X12 segment templates, EDIFACT common subset, ORDRSP type ambiguity).
+types, X12 segment templates, EDIFACT common subset, ORDRSP type ambiguity). EDIFACT CONTRL
+(syntax and service report) has no writer: its UCI/UCM structure refers to EDIFACT messages while the
+canonical `functional_ack` refers to X12 sets, so it needs its own canonical type.
 
 ## Tests
 
@@ -191,4 +199,7 @@ entry is internally consistent (unique keys and X12 codes, well-formed codes, re
 rules known, template roles valid, status tables complete); every X12 template and every EDIFACT
 writer round-trips a generated document (document to message, parse, equal); hand-written samples
 cover forecast, order acknowledgement, remittance, functional and application acknowledgement,
-credit note and receiving advice; validation messages and rules have their own cases.
+credit note and receiving advice; the 861, 852, 867, 990 and 999 sets and the transport, payment
+order, party and customs messages have their own samples; `ParseSegments` is tested on custom
+separators, release characters and malformed input; `TestFormatCounts` pins the writer and reader
+counts above. Not covered: conformance to any implementation guide (see Spec gaps).

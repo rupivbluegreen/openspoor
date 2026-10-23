@@ -20,6 +20,7 @@ const en = {
     mappingStudio: 'Mapping studio', messages: 'Messages', networkProfile: 'Network profile',
     oneUpOneDown: 'One-up/one-down',
     inspectionPackages: 'Inspection packages', watchedSources: 'Watched sources',
+    documentLibrary: 'Document library', agentEvals: 'Agent evaluation',
   },
   kpi: {
     subtitle: 'Formula-defined indicators computed from your own data. Each card shows the current value, a daily trend and your goal.',
@@ -362,6 +363,21 @@ const en = {
       enabled: 'Enabled', lastChecked: 'Last checked', lastChanged: 'Last changed', lastError: 'Last error', never: 'Never',
       add: 'Watch a source', confirmDelete: 'Stop watching this source?',
     },
+  },
+  library: {
+    subtitle: 'Upload documents to search them and to let the assistant cite passages. Only the extracted text is kept.',
+    limits: 'PDF (text layer only), CSV, XML, HTML and plain text, up to 5 MiB. Scanned documents are not read: there is no OCR.',
+    drop: 'Drop a file here or click to choose one', uploaded: 'Document added', search: 'Search the extracted text',
+    searchHint: 'Words, "exact phrases", or, -exclude', noHits: 'No passage matches', pages: 'Pages', passages: 'Passages',
+    format: 'Format', name: 'Name', size: 'Size', truncated: 'Text was cut at the size limit', cite: 'Citation', remove: 'Remove', removed: 'Document removed',
+  },
+  evals: {
+    subtitle: 'Each governed agent is run against a small synthetic dataset and scored (F1 of precision and recall over the proposals it should make). The score decides whether its tools may be raised above "apply after approval".',
+    syntheticNote: 'Scores are measured on small synthetic datasets. They say nothing about accuracy on your real data.',
+    run: 'Run evaluation', ran: 'Evaluation recorded', agent: 'Agent', cases: 'Cases', passed: 'Passed', precision: 'Precision', recall: 'Recall',
+    score: 'Score', required: 'Required', status: 'Status', lastRun: 'Last run', noScore: 'No score yet', meets: 'Meets the bar', below: 'Below the bar',
+    minScore: 'Minimum score for raising autonomy', minScoreHint: 'The higher of this value and the agent\'s own pass threshold applies.', default: 'default', save: 'Save',
+    blocked: 'Auto-apply paused: a score is below the bar',
   },
   playground: {
     title: 'EPCIS Playground', subtitle: 'Validate, convert and visualize EPCIS 1.2 / 2.0 documents',

@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/openspoor/openspoor/internal/core/egress"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -698,7 +700,7 @@ func (m *Module) clientFor(pin string) (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr := egress.NewTransport()
 	tr.TLSClientConfig = cfg
 	timeout := 15 * time.Second
 	if m.Client != nil && m.Client.Timeout > 0 {

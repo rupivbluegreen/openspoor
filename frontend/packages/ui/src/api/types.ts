@@ -528,6 +528,8 @@ export interface AgentTool {
   mode: 'suggest' | 'approve' | 'auto';
   configured: boolean;
   autoAllowed: boolean;
+  /** Evaluation scores that currently keep an auto setting from applying. */
+  evalBlocked?: string[];
 }
 
 export interface ChecklistItem {
@@ -1068,4 +1070,64 @@ export interface SearchHit {
 
 export interface SearchResponse {
   items: SearchHit[];
+}
+
+/** An uploaded document whose text was extracted (no original file is kept, no OCR). */
+export interface LibraryDocument {
+  id: string;
+  name: string;
+  format: 'pdf' | 'csv' | 'xml' | 'html' | 'text';
+  mediaType?: string;
+  sizeBytes: number;
+  sha256: string;
+  pages: number;
+  chars: number;
+  passages: number;
+  truncated: boolean;
+  warnings: string[];
+  createdBy?: string;
+  createdAt: string;
+}
+
+/** A cited piece of a document; matches in `text` are wrapped in [[ ]]. */
+export interface LibraryPassage {
+  documentId: string;
+  document: string;
+  seq: number;
+  ref: string;
+  text: string;
+  rank?: number;
+}
+
+export interface AgentEvalScore {
+  score: number;
+  precision: number;
+  recall: number;
+  cases: number;
+  passedCases: number;
+  passThreshold: number;
+  dataset: string;
+  synthetic: boolean;
+  runBy?: string;
+  runAt: string;
+  required: number;
+  meets: boolean;
+}
+
+/** Latest measured score of a governed agent on its small synthetic golden dataset. */
+export interface AgentEvalItem {
+  agent: string;
+  description: string;
+  cases: number;
+  passThreshold: number;
+  dataset: string;
+  latest: AgentEvalScore | null;
+}
+
+export interface AgentEvals {
+  items: AgentEvalItem[];
+  total: number;
+  minScore: number;
+  minScoreIsDefault: boolean;
+  note: string;
 }

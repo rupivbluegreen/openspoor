@@ -35,6 +35,7 @@ export function ToolAutonomy() {
                     title: t('agents.mode'),
                     dataIndex: 'mode',
                     render: (_v, r) => (
+                      <Space direction="vertical" size={4}>
                       <Select
                         size="small"
                         style={{ minWidth: 240 }}
@@ -47,6 +48,8 @@ export function ToolAutonomy() {
                           { value: 'auto', label: <Tooltip title={r.autoAllowed ? undefined : t('agents.autoNotAllowed')}>{t('agents.modeAuto')}</Tooltip>, disabled: !r.autoAllowed },
                         ]}
                       />
+                      {!!r.evalBlocked?.length && <Tooltip title={r.evalBlocked.join('; ')}><Tag color="warning">{t('evals.blocked')}</Tag></Tooltip>}
+                      </Space>
                     ),
                   },
                 ]}

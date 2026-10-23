@@ -2,6 +2,7 @@ package act
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -90,7 +91,7 @@ func TestPlannerRefusesAndBindsInjection(t *testing.T) {
 	for _, q := range bad {
 		if _, err := plan(t, c, q); err == nil {
 			t.Errorf("accepted %+v", q)
-		} else if e, ok := err.(*httpx.Error); !ok || e.Status != 400 {
+		} else if e := new(httpx.Error); !errors.As(err, &e) || e.Status != 400 {
 			t.Errorf("%+v: %v", q, err)
 		}
 	}

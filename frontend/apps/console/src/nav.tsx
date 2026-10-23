@@ -69,6 +69,8 @@ export const NAV: NavGroup[] = [
       { path: '/act/approvals', label: 'agentApprovals', icon: <RobotOutlined />, page: p(() => import('./pages/act/AgentApprovals')) },
       { path: '/act/inspection', label: 'inspectionPackages', icon: <FileProtectOutlined />, page: p(() => import('./pages/act/InspectionPackages')) },
       { path: '/act/cases', label: 'cases', icon: <SolutionOutlined />, page: p(() => import('./pages/act/Cases')) },
+      { path: '/act/library', label: 'documentLibrary', icon: <ReadOutlined />, page: p(() => import('./pages/act/DocumentLibrary')) },
+      { path: '/act/evals', label: 'agentEvals', icon: <ExperimentOutlined />, page: p(() => import('./pages/act/AgentEvals')) },
       { path: '/act/assistant', label: 'assistant', icon: <CommentOutlined />, page: p(() => import('./pages/act/Assistant')) },
       { path: '/act/designer', label: 'formsWorkflows', icon: <FormOutlined />, page: p(() => import('./pages/act/Designer')) },
     ],

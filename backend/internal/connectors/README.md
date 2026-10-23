@@ -20,7 +20,12 @@ Sub-packages:
   errorMessage, failedItems}`) against the mock hubs. Every element of it is `TODO(spec)`.
 - `sftpdrop` — SFTP integration connector (`sftp`): outbound EPCIS 2.0 file drop (one JSON-LD
   or XML document per capture, written as `.part` then renamed) and the session primitives for
-  inbound polling. Host keys are pinned by SHA-256 fingerprint; unknown keys are refused.
+  inbound polling. Host keys are pinned by SHA-256 fingerprint; unknown keys are refused. An instance
+  bound to a partner (`partnerId`, `documentDir`, `documentFormat` x12 / edifact / auto) also takes
+  outbound B2B documents: `Module.DropDocument` renders the document with `pkg/edi` and writes it
+  as `<prefix>-<type>-<number>-<hash>.x12|.edi` (same content: same name, so a resend is idempotent).
+  Wired into link's send by the application; logged in `sftp_file` (direction outbound) and audited as
+  `sftp.outbound.processed|failed`.
 - `mockhub` — in-memory mock hubs reachable at `http://<name>.mock.local` through an
   in-process transport (EU Hub, RSD, Tatmeen, EDA), and an in-process SFTP server with an
   in-memory file system for tests, for development, demos and contract tests.

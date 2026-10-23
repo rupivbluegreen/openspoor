@@ -24,6 +24,10 @@ import (
 // caller's tenant transaction set to read only with a statement timeout. A request, or a model's
 // suggestion, can name a metric or dimension but can never contribute SQL text.
 
+//
+// TODO(spec): the catalogue's metric definitions, its English-only question reader and the absence of
+// per-metric permissions are product decisions not yet settled (docs/OPEN_QUESTIONS.md).
+
 const (
 	semanticDefaultDays = 30
 	semanticMaxDays     = 1100

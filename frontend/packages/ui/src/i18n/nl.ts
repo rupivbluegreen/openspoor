@@ -22,6 +22,7 @@ const nl: Messages = {
     mappingStudio: 'Mappingstudio', messages: 'Berichten', networkProfile: 'Netwerkprofiel',
     oneUpOneDown: 'Eén stap terug/vooruit',
     inspectionPackages: 'Inspectiepakketten', watchedSources: 'Gevolgde bronnen',
+    documentLibrary: 'Documentbibliotheek', agentEvals: 'Agentevaluatie',
   },
   kpi: {
     subtitle: 'Indicatoren met een vaste formule, berekend op basis van uw eigen gegevens. Elke kaart toont de huidige waarde, de dagelijkse trend en uw doel.',
@@ -364,6 +365,21 @@ const nl: Messages = {
       enabled: 'Actief', lastChecked: 'Laatst gecontroleerd', lastChanged: 'Laatst gewijzigd', lastError: 'Laatste fout', never: 'Nooit',
       add: 'Bron volgen', confirmDelete: 'Deze bron niet langer volgen?',
     },
+  },
+  library: {
+    subtitle: 'Upload documenten om erin te zoeken en de assistent passages te laten citeren. Alleen de uitgelezen tekst wordt bewaard.',
+    limits: 'PDF (alleen tekstlaag), CSV, XML, HTML en platte tekst, tot 5 MiB. Gescande documenten worden niet gelezen: er is geen OCR.',
+    drop: 'Sleep een bestand hierheen of klik om er een te kiezen', uploaded: 'Document toegevoegd', search: 'Zoek in de uitgelezen tekst',
+    searchHint: 'Woorden, "exacte zinnen", or, -uitsluiten', noHits: 'Geen passage gevonden', pages: 'Pagina\'s', passages: 'Passages',
+    format: 'Formaat', name: 'Naam', size: 'Grootte', truncated: 'De tekst is bij de groottelimiet afgekapt', cite: 'Citaat', remove: 'Verwijderen', removed: 'Document verwijderd',
+  },
+  evals: {
+    subtitle: 'Elke gecontroleerde agent draait op een kleine synthetische dataset en krijgt een score (F1 van precisie en recall over de voorstellen die hij moet doen). De score bepaalt of zijn tools boven "toepassen na goedkeuring" mogen.',
+    syntheticNote: 'Scores zijn gemeten op kleine synthetische datasets. Ze zeggen niets over de nauwkeurigheid op uw echte data.',
+    run: 'Evaluatie uitvoeren', ran: 'Evaluatie vastgelegd', agent: 'Agent', cases: 'Gevallen', passed: 'Geslaagd', precision: 'Precisie', recall: 'Recall',
+    score: 'Score', required: 'Vereist', status: 'Status', lastRun: 'Laatste run', noScore: 'Nog geen score', meets: 'Haalt de norm', below: 'Onder de norm',
+    minScore: 'Minimumscore om autonomie te verhogen', minScoreHint: 'De hoogste van deze waarde en de eigen slaagdrempel van de agent geldt.', default: 'standaard', save: 'Opslaan',
+    blocked: 'Automatisch toepassen gepauzeerd: een score ligt onder de norm',
   },
   playground: {
     title: 'EPCIS-speeltuin', subtitle: 'Valideer, converteer en visualiseer EPCIS 1.2 / 2.0-documenten',

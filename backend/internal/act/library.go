@@ -27,9 +27,9 @@ import (
 
 // Document reading without external services. An uploaded PDF (text layer only), CSV, XML, HTML or
 // plain-text file is reduced to text by pkg/doctext within fixed size limits; only the extracted
-// text is stored (passages in document_chunk, per tenant, under row-level security). Search uses
+// text is stored (passages in library_chunk, per tenant, under row-level security). Search uses
 // PostgreSQL full-text search (tsvector, GIN index), so it needs no extension. The assistant cites
-// passages as document/<id>#<seq>.
+// passages as library/<id>#<seq>.
 //
 // TODO(spec): OCR for scanned documents is not built; a PDF without a text layer is refused.
 // TODO(spec): the text search configuration is 'simple' (no stemming, no stop words) so English,
@@ -59,7 +59,7 @@ type Document struct {
 }
 
 const docCols = `d.id, d.name, d.format, d.media_type, d.size_bytes, d.sha256, d.pages, d.chars, d.truncated, d.warnings, d.created_by, d.created_at,
-	(select count(*) from document_chunk c where c.document_id = d.id)`
+	(select count(*) from library_chunk c where c.document_id = d.id)`
 
 func scanDocument(row pgx.Row) (Document, error) {
 	var d Document
@@ -83,12 +83,12 @@ type Passage struct {
 	Rank       float64   `json:"rank,omitempty"`
 }
 
-func (m *Module) documentRoutes(r chi.Router) {
-	r.Get("/documents", httpx.Handler(m.listDocuments))
-	r.Get("/documents/search", httpx.Handler(m.searchDocumentsHandler))
-	r.Get("/documents/{id}", httpx.Handler(m.getDocument))
-	r.With(auth.Require(writerRoles...)).Post("/documents", httpx.Handler(m.uploadDocument))
-	r.With(auth.Require(writerRoles...)).Delete("/documents/{id}", httpx.Handler(m.deleteDocument))
+func (m *Module) libraryRoutes(r chi.Router) {
+	r.Get("/library", httpx.Handler(m.listDocuments))
+	r.Get("/library/search", httpx.Handler(m.searchDocumentsHandler))
+	r.Get("/library/{id}", httpx.Handler(m.getDocument))
+	r.With(auth.Require(writerRoles...)).Post("/library", httpx.Handler(m.uploadDocument))
+	r.With(auth.Require(writerRoles...)).Delete("/library/{id}", httpx.Handler(m.deleteDocument))
 }
 
 func (m *Module) uploadDocument(w http.ResponseWriter, r *http.Request) error {
@@ -139,24 +139,24 @@ func (m *Module) uploadDocument(w http.ResponseWriter, r *http.Request) error {
 	p := auth.MustFrom(r.Context())
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
 		var dup uuid.UUID
-		if err := tx.QueryRow(r.Context(), `select id from document where sha256=$1`, hash).Scan(&dup); err == nil {
+		if err := tx.QueryRow(r.Context(), `select id from library_document where sha256=$1`, hash).Scan(&dup); err == nil {
 			return httpx.Conflict("this file is already uploaded as document " + dup.String())
 		}
-		if _, err := tx.Exec(r.Context(), `insert into document (id, tenant_id, name, format, media_type, size_bytes, sha256, pages, chars, truncated, warnings, created_by)
+		if _, err := tx.Exec(r.Context(), `insert into library_document (id, tenant_id, name, format, media_type, size_bytes, sha256, pages, chars, truncated, warnings, created_by)
 			values ($1, app_tenant(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 			id, in.Name, string(res.Format), in.MediaType, len(data), hash, res.Pages, len(res.Text), res.Truncated, res.Warnings, p.Actor()); err != nil {
 			return err
 		}
 		for i, c := range chunks {
-			if _, err := tx.Exec(r.Context(), `insert into document_chunk (id, tenant_id, document_id, seq, body) values ($1, app_tenant(), $2,$3,$4)`, ids.New(), id, i, c); err != nil {
+			if _, err := tx.Exec(r.Context(), `insert into library_chunk (id, tenant_id, document_id, seq, body) values ($1, app_tenant(), $2,$3,$4)`, ids.New(), id, i, c); err != nil {
 				return err
 			}
 		}
-		d, err := scanDocument(tx.QueryRow(r.Context(), `select `+docCols+` from document d where d.id=$1`, id))
+		d, err := scanDocument(tx.QueryRow(r.Context(), `select `+docCols+` from library_document d where d.id=$1`, id))
 		if err != nil {
 			return err
 		}
-		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "document.upload", Entity: "document", EntityID: id.String(), After: d}); err != nil {
+		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "library.upload", Entity: "library_document", EntityID: id.String(), After: d}); err != nil {
 			return err
 		}
 		httpx.JSON(w, http.StatusCreated, d)
@@ -166,7 +166,7 @@ func (m *Module) uploadDocument(w http.ResponseWriter, r *http.Request) error {
 
 func (m *Module) listDocuments(w http.ResponseWriter, r *http.Request) error {
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		rows, err := tx.Query(r.Context(), `select `+docCols+` from document d order by d.created_at desc limit 200`)
+		rows, err := tx.Query(r.Context(), `select `+docCols+` from library_document d order by d.created_at desc limit 200`)
 		if err != nil {
 			return err
 		}
@@ -193,11 +193,11 @@ func (m *Module) getDocument(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		d, err := scanDocument(tx.QueryRow(r.Context(), `select `+docCols+` from document d where d.id=$1`, id))
+		d, err := scanDocument(tx.QueryRow(r.Context(), `select `+docCols+` from library_document d where d.id=$1`, id))
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(r.Context(), `select seq, body from document_chunk where document_id=$1 order by seq limit 50`, id)
+		rows, err := tx.Query(r.Context(), `select seq, body from library_chunk where document_id=$1 order by seq limit 50`, id)
 		if err != nil {
 			return err
 		}
@@ -225,14 +225,14 @@ func (m *Module) deleteDocument(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		d, err := scanDocument(tx.QueryRow(r.Context(), `select `+docCols+` from document d where d.id=$1`, id))
+		d, err := scanDocument(tx.QueryRow(r.Context(), `select `+docCols+` from library_document d where d.id=$1`, id))
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(r.Context(), `delete from document where id=$1`, id); err != nil {
+		if _, err := tx.Exec(r.Context(), `delete from library_document where id=$1`, id); err != nil {
 			return err
 		}
-		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "document.delete", Entity: "document", EntityID: id.String(), Before: d}); err != nil {
+		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "library.delete", Entity: "library_document", EntityID: id.String(), Before: d}); err != nil {
 			return err
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -257,7 +257,7 @@ func (m *Module) searchDocumentsHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func passageRef(id uuid.UUID, seq int) string {
-	return "document/" + id.String() + "#" + strconv.Itoa(seq)
+	return "library/" + id.String() + "#" + strconv.Itoa(seq)
 }
 
 // searchDocuments runs a full-text query over the tenant's passages (RLS-scoped through tx). q uses
@@ -266,7 +266,7 @@ func passageRef(id uuid.UUID, seq int) string {
 func searchDocuments(ctx context.Context, tx pgx.Tx, q string, limit int) ([]Passage, error) {
 	rows, err := tx.Query(ctx, `select d.id, d.name, c.seq,
 			ts_headline('simple', c.body, query, 'StartSel=[[,StopSel=]],MaxWords=40,MinWords=15,MaxFragments=1'), ts_rank(c.tsv, query)
-		from document_chunk c join document d on d.id = c.document_id, websearch_to_tsquery('simple', $1) query
+		from library_chunk c join library_document d on d.id = c.document_id, websearch_to_tsquery('simple', $1) query
 		where c.tsv @@ query order by ts_rank(c.tsv, query) desc, d.created_at desc, c.seq limit $2`, q, limit)
 	if err != nil {
 		return nil, err

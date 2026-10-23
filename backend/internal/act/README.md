@@ -83,6 +83,67 @@ Tools run in a savepoint, so a failing tool leaves the action recorded as failed
 
 Writes need a non-Viewer role; releasing and voiding packages need admin or compliance.
 
+### Agent evaluation and the autonomy ladder
+
+Each governed agent (`exception-triage`, `onboarding-helper`, `investigation-assistant`, `inspection-agent`,
+`mapping-agent`, `reg-watch`) has a golden dataset in `testdata/evals/<agent>.json`: fixture rows inserted into a
+throwaway tenant (inside a transaction that is always rolled back, so the caller's data is never seen or changed),
+and the proposals the agent should make. The harness (`eval.go`) runs the agent's own `Observe` (for the
+request-driven `inspection-agent`, its package builder with the food and tracing modules stubbed) and matches
+observed proposals to expected ones by tool and entity, then checks priority, title, reasoning, mapped fields or
+checklist statuses where the case states them. A proposal that is present but wrong counts as a false positive and
+a false negative. Per agent: precision, recall and score (F1) over all cases, against the pass threshold the
+dataset declares. The datasets are synthetic and small (8 to 10 cases); **a score is not an accuracy figure for
+real data**. `TestGoldenDatasets` runs them in CI; `openspoor eval-agents` prints the table (`--agent NAME`
+limits it, `--tenant SLUG` records the scores and exits non-zero when an agent fails).
+
+Recorded scores (`agent_eval_score`, one row per run, audited as `agent.eval.record`) gate autonomy above
+`approve`. Setting a tool to `auto` (`PUT /agents/tools/{name}`) or an agent to `auto_low_risk`
+(`PUT /agents/{name}`) is refused with 409 unless every evaluated agent that uses the tool (or the agent itself) has a
+latest score at or above the higher of the tenant's minimum (default 0.9, `PUT /agents/evals/policy`, admin or
+compliance, audited) and its dataset's threshold. A missing score counts as not meeting it. Refusals are audited
+(`agent.tool.autonomy.refused`, `agent.agent.autonomy.refused`). A setting that was accepted stops applying while the
+latest score is below the bar: proposals wait for approval, and `GET /agents/tools` lists the reason under
+`evalBlocked`. Agents without a dataset are not gated. `suggest` and `approve` are never gated.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/agents/evals` | Datasets, latest score per agent, the tenant's minimum (any role) |
+| POST | `/agents/evals/run` | Run the datasets (`{agents: [...]}` optional) and record the scores (admin or compliance) |
+| PUT | `/agents/evals/policy` | `{minScore}` between 0.5 and 1 (admin or compliance) |
+
+### Document library
+
+`POST /library` takes `{name, mediaType?, content | contentBase64}` (writer roles) and extracts text with
+`pkg/doctext` (PDF text layer, CSV, XML, HTML, plain text; at most 5 MiB; no OCR). Only the extracted text is kept,
+as passages of about 1,200 bytes in `library_chunk` (per tenant, row-level security) with a `tsvector` column and a
+GIN index; the same file cannot be added twice per tenant. `GET /library/search?q=` uses PostgreSQL
+`websearch_to_tsquery` (words, "phrases", `or`, `-exclude`) and returns highlighted excerpts with a citation
+`library/<id>#<n>`; `GET /library`, `GET /library/{id}` (passages) and `DELETE /library/{id}`. Uploads and removals
+are audited (`library.upload`, `library.delete`); Viewer can search and read, not change. The assistant adds the best
+three matching passages to its context and cites them.
+
+### Semantic layer
+
+`semantic_catalog.go` is a declarative catalogue: 10 metrics over existing tables (EPCIS events, serial updates,
+alerts, cases, agent actions, regulatory reports, shipments, investigations, partner documents, food lot quantity),
+each with a fixed aggregate, a period column and a map of dimension id to column expression, plus the KPI library
+(`kpi.<id>`, day dimension only), which `internal/app` wires through the `KPIProvider` interface because `act` may not
+import `ecosystem`. The planner (`semantic.go`) accepts a metric, an optional dimension (day, week, month or one the
+metric declares), up to three equality filters and a period of at most 1,100 days, and emits one parameterised
+`select` whose text is assembled only from catalogue entries; the period, filter values and limit are bound
+parameters, every statement carries `tenant_id = app_tenant()` on top of row-level security, and it runs in a
+savepoint set to read only with a 5 s statement timeout that is always rolled back. No request, and no model output,
+contributes SQL. The catalogue is validated at start-up (identifier and expression shapes) and a test plans every
+metric with every dimension.
+
+`GET /semantic/catalog` and `POST /semantic/query` (`{metric, dimension?, from?, to?, days?, filters?, limit?}`) answer
+"metric by dimension over a period" for every role including Viewer. In `POST /assistant/chat` the question is read by
+the deterministic reader (catalogue names and synonyms, "by severity", "last 7 days", "this month"); when it finds no
+metric and the question asks for a figure, the configured model may choose a metric from the catalogue, and the choice
+is validated by the planner like any request. The result goes into the model's context (or the model-free answer) and
+is cited as `metric/<id>`.
+
 ## Background work
 
 - Schedule `act.agents` (every 10 min): runs every enabled agent for every tenant.
@@ -91,17 +152,20 @@ Writes need a non-Viewer role; releasing and voiding packages need admin or comp
 
 `agent_setting`, `agent_action`, `work_case`, `form_def`, `form_submission`, `workflow_def`,
 `workflow_run` (migration `00009_act.sql`); `tool_autonomy`, `mapping_sample`, `mapping_case`,
-`inspection_package`, `watch_source` (migration `00019_agents.sql`).
+`inspection_package`, `watch_source` (migration `00019_agents.sql`); `agent_eval_score`, `agent_eval_policy`,
+`library_document`, `library_chunk` (migration `00027_eval_documents.sql`).
 
 ## Depends on
 
-`core/*`, `connectors` (report resubmission), `trace` (serial state), `pkg/epcis`, `pkg/gs1`. The AI-native
+`core/*`, `connectors` (report resubmission), `trace` (serial state), `pkg/epcis`, `pkg/gs1`, `pkg/doctext`. The AI-native
 agents reach the link, dscsa and food modules only through interfaces set in `internal/app` (`agents_wiring.go`).
 
 ## Spec gaps
 
 `TODO(spec)` items (also in `docs/OPEN_QUESTIONS.md`): the inspection package checklist and the FSMA 204 / tracing
-content and format per requester; EDI and XML samples for the mapping agent; the onboarding-helper thresholds.
+content and format per requester; EDI and XML samples for the mapping agent; the onboarding-helper thresholds; OCR and
+search language configuration for the document library; score expiry and dataset binding for agent evaluation; the
+semantic catalogue's definitions and permissions.
 
 ## Tests
 

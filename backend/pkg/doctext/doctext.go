@@ -195,7 +195,7 @@ func extractCSV(data []byte, lim Limits) (string, error) {
 			break
 		}
 		if err != nil {
-			return "", fmt.Errorf("%w: %v", ErrMalformed, err)
+			return "", fmt.Errorf("%w: %w", ErrMalformed, err)
 		}
 		b.WriteString(strings.Join(rec, " | "))
 		b.WriteByte('\n')
@@ -236,7 +236,7 @@ func extractXML(data []byte, lim Limits) (string, error) {
 			if b.Len() > 0 {
 				break // keep what was read from a truncated or slightly malformed file
 			}
-			return "", fmt.Errorf("%w: %v", ErrMalformed, err)
+			return "", fmt.Errorf("%w: %w", ErrMalformed, err)
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
@@ -326,7 +326,7 @@ func extractPDF(data []byte, lim Limits) (text string, pages int, err error) {
 		}()
 		r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 		if err != nil {
-			ch <- out{err: fmt.Errorf("%w: %v", ErrMalformed, err)}
+			ch <- out{err: fmt.Errorf("%w: %w", ErrMalformed, err)}
 			return
 		}
 		n := r.NumPage()

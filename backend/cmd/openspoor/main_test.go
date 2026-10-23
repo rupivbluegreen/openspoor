@@ -132,3 +132,12 @@ func TestNewMasterKeyFromEnvironment(t *testing.T) {
 		t.Fatalf("%v %q", err, c.NewMasterKey)
 	}
 }
+
+func TestMultiFlag(t *testing.T) {
+	var m multiFlag
+	_ = m.Set("a")
+	_ = m.Set("b")
+	if len(m) != 2 || m.String() != "[a b]" {
+		t.Fatalf("multiFlag: %v", m)
+	}
+}

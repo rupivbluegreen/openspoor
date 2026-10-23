@@ -23,12 +23,30 @@ import reads any registry message, and an optional `type` names the type where s
 message and document name code (ORDRSP: order acknowledgement and change acknowledgement).
 
 Mapping studio: saved mappings per partner and document type turn CSV, JSON (records and
-nested lines by dotted path) or fixed-width files into canonical B2B documents (`pkg/edi`) or
-EPCIS events. Transforms: `trim`, `upper`, `lower`, `date` (YYYY/MM/DD/HH/mm/ss patterns),
+nested lines by dotted path), XML, X12, EDIFACT or fixed-width files into canonical B2B documents
+(`pkg/edi`) or EPCIS events. X12 and EDIFACT files are read with the `pkg/edi` segment reader
+(`ParseSegments`) and XML with `encoding/xml`; every element becomes a source field with a path:
+`SEG.NN` (element NN of the first occurrence of a segment, `BEG.03`), `SEG.NN.MM` (component MM of a
+composite, `DTM.01.02`; the whole element is `SEG.NN`), `SEG[k].NN` (k-th occurrence, k >= 2) and
+`SEG(Q).NN` (first occurrence of the segment whose first element is the qualifier Q, `DTM(137).01.02`,
+`N1(BY).02`; offered for DTM, REF, N1, N9, NAD, RFF, QTY, MOA, PIA, FTX, GIN, NTE, LOC, AMT, PER, CTA,
+COM, TAX only). Each transaction set or message is one record; its lines start at the segment named by
+`options.linesPath` (a segment ID such as `PO1` or `LIN`) or, if empty, at the first of PO1, IT1, POC,
+LIN ... (X12) or LIN (EDIFACT) the message contains, and end at a summary segment (CTT, UNS, CNT ...);
+envelope segments (ISA, GS, UNB) are available in every record. For XML the root element is not part
+of a path: children are addressed by local name (namespaces ignored), attributes as `@name`, the text
+of an element that has attributes or children as `#text`, repeated siblings by index (`Line.0.Qty`);
+`recordsPath` and `linesPath` work as for JSON and a single child counts as one line. Limits: XML
+nesting 64 levels and 1,000,000 elements, 500,000 segments per file, UTF-8 or ISO-8859-1 only;
+DOCTYPE entities are not expanded. A file that cannot be read at all (not an interchange, a
+truncated ISA, malformed XML, an X12 file under an EDIFACT mapping) is a 400 and nothing is stored. Transforms: `trim`, `upper`, `lower`, `date` (YYYY/MM/DD/HH/mm/ss patterns),
 `lookup` (table with optional default), `constant`, `concat`. Rows are grouped into documents by
 the mapped `number`. A preview returns the canonical result with per-row errors; inbound import
-(`format` csv, json, flat or mapped) is all-or-nothing. "Suggest" proposes fields from header
-names (a heuristic; a person reviews and saves). The target field list of a mapping comes from
+(`format` csv, json, xml, flat or mapped, or x12 / edifact together with a `mappingId`) is
+all-or-nothing. X12 and EDIFACT without a `mappingId` are parsed natively into the registry type. "Suggest" proposes fields from header
+names (a heuristic; a person reviews and saves); for X12 and EDIFACT paths it uses the usual segment
+positions (`BEG.03`, `BGM.02`, `PO1.07`, `LIN.03.01`, `N1(BY).04`, `NAD(BY).02.01` ...) and adds a
+`YYYYMMDD` date transform to date fields. The target field list of a mapping comes from
 the registry type: header fields, `status`, `note`, `dates.<key>`, `parties.<key>.name|gln`,
 `amounts.<key>`, and line fields (`lines.gtin`... for item lines, `lines.ref|refType|amount|status`
 for reference lines, `lines.dates.<key>`).
@@ -42,7 +60,13 @@ audited as `message.retry` and resolves the shipment's `dscsa.send_failed` alert
 A retry holds the shipment in `sending`; a claim older than five minutes counts as crashed and
 can be taken over. Attempts, last error and the dead-letter state
 come from the job queue: a delivery job that exhausted its retries (or was rejected) shows as
-`dead`, raises a `link.message_dead` alert, and can be put back with "retry now". Outbound B2B
+`dead`, raises a `link.message_dead` alert, and can be put back with "retry now". A document sent to a partner
+that has no linked tenant and no federation endpoint is dropped as an X12 or EDIFACT file on the
+partner's SFTP server when an enabled SFTP connector instance is bound to the partner (`partnerId` and
+`documentDir` in its configuration; `documentFormat` x12, edifact or auto); otherwise it is marked sent for
+EDI pickup. The drop is logged in `sftp_file` (direction outbound), audited (`sftp.outbound.processed`
+or `.failed`, plus `b2b.send`) and a failure is a 502 with an alert; the document stays a draft.
+Outbound B2B
 documents are acknowledged by local delivery, by the peer accepting a federation message, or by
 `POST /b2b/documents/{id}/ack` (functional acknowledgement from an EDI gateway). Partner SLAs
 set an acknowledgement window; breaches raise `link.sla_breach` alerts.
@@ -62,10 +86,10 @@ verified (did:web resolution, proof, validity, revocation) and the result is sto
 |---|---|---|
 | GET | `/api/v1/b2b/types` | The transaction type registry (filters: `category`, `q`) |
 | GET, POST | `/api/v1/b2b/documents` | List / create B2B documents of any registry type (filter: `type`, `direction`) |
-| POST | `/api/v1/b2b/documents/import` | Parse an inbound X12 or EDIFACT message of a registry type (or a mapped file) |
+| POST | `/api/v1/b2b/documents/import` | Parse an inbound X12 or EDIFACT message of a registry type (or map a CSV, JSON, XML, X12, EDIFACT or fixed-width file with a saved mapping) |
 | GET | `/api/v1/b2b/documents/{id}` | Get a document |
 | GET | `/api/v1/b2b/documents/{id}/edi` | Render as X12, EDIFACT or IDoc |
-| POST | `/api/v1/b2b/documents/{id}/send` | Deliver to a partner on this node, over federation, or mark sent for EDI pickup |
+| POST | `/api/v1/b2b/documents/{id}/send` | Deliver to a partner on this node, over federation, as a file on the partner's SFTP server, or mark sent for EDI pickup |
 | GET, POST | `/api/v1/suppliers/certificates` | List / add supplier certificates, audits, specs |
 | GET, POST | `/api/v1/documents` | List / upload shared documents |
 | GET | `/api/v1/documents/{id}` | Download a document |
@@ -107,7 +131,8 @@ Authenticated routes need the admin, ops, compliance or integration role (Viewer
 `b2b_document`, `supplier_record`, `shared_document`, `federation_node`, `federation_peer`,
 `federation_message` (migration `00008_link.sql`; migration `00022_kpi.sql` replaces the fixed type lists
 of `b2b_document.type` and `b2b_mapping.doc_type` with a shape check, the registry validates the value); `b2b_mapping`, `partner_sla`, `atp_credential`,
-`atp_verification`, `b2b_document.acked_at`, `federation_message.job_id` (migration `00015_link_network.sql`).
+`atp_verification`, `b2b_document.acked_at`, `federation_message.job_id` (migration `00015_link_network.sql`); migration
+`00026_mapping_formats.sql` widens the `b2b_mapping.format` check to xml, x12 and edifact.
 Reads `license`/`organization`/`site` (platform) for issuance and `shipment` (dscsa) for the message log
 inside the tenant's transaction.
 

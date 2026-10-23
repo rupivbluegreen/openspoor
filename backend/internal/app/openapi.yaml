@@ -1971,27 +1971,6 @@ paths:
             tags:
                 - documents
     /api/v1/documents/{id}:
-        delete:
-            operationId: deleteDocumentsId
-            parameters:
-                - in: path
-                  name: id
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                2XX:
-                    content:
-                        application/json:
-                            schema:
-                                type: object
-                    description: Success
-                4XX:
-                    $ref: '#/components/responses/Problem'
-                default:
-                    $ref: '#/components/responses/Problem'
-            tags:
-                - documents
         get:
             operationId: getDocumentsId
             parameters:
@@ -2022,22 +2001,6 @@ paths:
                   required: true
                   schema:
                     type: string
-            responses:
-                2XX:
-                    content:
-                        application/json:
-                            schema:
-                                type: object
-                    description: Success
-                4XX:
-                    $ref: '#/components/responses/Problem'
-                default:
-                    $ref: '#/components/responses/Problem'
-            tags:
-                - documents
-    /api/v1/documents/search:
-        get:
-            operationId: getDocumentsSearch
             responses:
                 2XX:
                     content:
@@ -3422,6 +3385,96 @@ paths:
             security: []
             tags:
                 - learn
+    /api/v1/library:
+        get:
+            operationId: getLibrary
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - library
+        post:
+            operationId: postLibrary
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - library
+    /api/v1/library/{id}:
+        delete:
+            operationId: deleteLibraryId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - library
+        get:
+            operationId: getLibraryId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - library
+    /api/v1/library/search:
+        get:
+            operationId: getLibrarySearch
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - library
     /api/v1/licenses:
         get:
             operationId: getLicenses

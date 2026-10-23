@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openspoor/openspoor/internal/core/egress"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -44,12 +46,17 @@ type Module struct {
 	// path (wired by the app; link does not import dscsa). It returns the shipment's new status
 	// ("sent" or "send_failed") and the transport response.
 	RetryShipment func(ctx context.Context, id uuid.UUID) (string, map[string]any, error)
-	node          *nodeIdentity
+	// DropDocument writes an outbound B2B document as an EDI file over the partner's SFTP
+	// connection (wired by the app; link does not import connectors). It returns the delivery
+	// details and true, or false when the partner has no SFTP document folder (the document is
+	// then marked sent for EDI pickup).
+	DropDocument func(ctx context.Context, partnerID uuid.UUID, d edi.Document) (map[string]any, bool, error)
+	node         *nodeIdentity
 }
 
 // New creates the module.
 func New(d kernel.Deps, ep *epcis.Module) *Module {
-	return &Module{Deps: d, EPCIS: ep, Client: &http.Client{Timeout: 15 * time.Second}}
+	return &Module{Deps: d, EPCIS: ep, Client: egress.Client(15 * time.Second)}
 }
 
 // Name implements kernel.Module.
@@ -343,8 +350,9 @@ func (m *Module) renderDoc(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// sendDoc delivers a document: to a partner tenant on this node, over federation, or marks
-// it sent for EDI pickup (VAN/AS2 gateways fetch the rendered EDI).
+// sendDoc delivers a document: to a partner tenant on this node, over federation, as an EDI file
+// on the partner's SFTP server (when the partner has an SFTP document folder), or marks it sent
+// for EDI pickup (VAN/AS2 gateways fetch the rendered EDI).
 func (m *Module) sendDoc(w http.ResponseWriter, r *http.Request) error {
 	id, err := ids.Param(r, "id")
 	if err != nil {
@@ -391,6 +399,15 @@ func (m *Module) sendDoc(w http.ResponseWriter, r *http.Request) error {
 		}
 	default:
 		delivery["channel"] = "edi-pickup"
+		if m.DropDocument != nil {
+			var info map[string]any
+			var dropped bool
+			if info, dropped, err = m.DropDocument(ctx, p.ID, d.Payload); dropped && err == nil {
+				for k, v := range info {
+					delivery[k] = v
+				}
+			}
+		}
 	}
 	if err != nil {
 		return err
