@@ -552,7 +552,11 @@ func (m *Module) opUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 	// Region pinning: relabelling would claim a residency the data does not have. Moving a
 	// tenant is an export and import into an installation in the other region.
-	if in.Region != nil && *in.Region != m.Cfg.Region && !(m.Cfg.Region == "" && *in.Region == "eu") {
+	region := m.Cfg.Region
+	if region == "" {
+		region = "eu"
+	}
+	if in.Region != nil && *in.Region != region {
 		return httpx.BadRequest("a tenant cannot change region on this installation; export it and import it into an installation in " + *in.Region)
 	}
 	if in.Reason == "" {
