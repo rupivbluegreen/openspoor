@@ -166,8 +166,9 @@ func TestCustomDomainPlanUpgradeAndSupportAccess(t *testing.T) {
 	e.Must(http.StatusNotFound, e.Call(op, "PATCH", "/api/v1/operator/tenants/"+uuid.NewString(), map[string]any{"plan": "starter", "reason": "r"}), nil)
 	e.Must(http.StatusForbidden, e.Call(su.Token, "PATCH", path, map[string]any{"plan": "enterprise", "reason": "self-upgrade"}), nil)
 	var upd struct{ Plan, Region, Status string }
-	e.Must(http.StatusOK, e.Call(op, "PATCH", path, map[string]any{"plan": "starter", "region": "eu-north", "reason": "upgrade order 42"}), &upd)
-	if upd.Plan != "starter" || upd.Region != "eu-north" || upd.Status != "active" {
+	e.Must(http.StatusBadRequest, e.Call(op, "PATCH", path, map[string]any{"region": "eu-north", "reason": "move"}), nil) // pinned to this installation's region
+	e.Must(http.StatusOK, e.Call(op, "PATCH", path, map[string]any{"plan": "starter", "reason": "upgrade order 42"}), &upd)
+	if upd.Plan != "starter" || upd.Region != "eu" || upd.Status != "active" {
 		t.Fatalf("op update: %+v", upd)
 	}
 	var ff map[string]bool

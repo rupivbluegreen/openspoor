@@ -188,7 +188,7 @@ func (a *App) routes() http.Handler {
 			for _, m := range a.Modules {
 				names = append(names, m.Name())
 			}
-			httpx.JSON(w, http.StatusOK, map[string]any{"name": "Open Spoor", "version": Version, "mode": a.Deps.Cfg.Mode, "modules": names,
+			httpx.JSON(w, http.StatusOK, map[string]any{"name": "Open Spoor", "version": Version, "mode": a.Deps.Cfg.Mode, "region": a.Deps.Cfg.Region, "modules": names,
 				"devAuth": a.Deps.Cfg.DevAuth, "oidc": a.Deps.Cfg.OIDCIssuer != ""})
 		})
 		for _, spec := range []string{"openapi.yaml", "asyncapi.yaml"} {

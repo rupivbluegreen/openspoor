@@ -86,8 +86,17 @@ func (m *Module) CreateTenant(ctx context.Context, in NewTenant) (Tenant, User, 
 	if in.Plan == "" {
 		in.Plan = "community"
 	}
+	// Data residency: an installation keeps one region's data; a tenant for another region
+	// belongs on an installation (and database) in that region.
+	region := m.Cfg.Region
+	if region == "" {
+		region = "eu"
+	}
 	if in.Region == "" {
-		in.Region = "eu"
+		in.Region = region
+	}
+	if in.Region != region {
+		return Tenant{}, User{}, httpx.BadRequest("this installation keeps data in region " + region + "; create the tenant on an installation in region " + in.Region)
 	}
 	if len(in.Verticals) == 0 {
 		in.Verticals = []string{"pharma"}

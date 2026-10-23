@@ -407,8 +407,11 @@ func TestCreateTenantValidation(t *testing.T) {
 	if _, _, err := e.App.Platform.CreateTenant(ctx, platform.NewTenant{Slug: " ACME ", Name: "Dup", AdminEmail: "a@b.c", AdminPassword: testkit.Password}); status(err) != 409 {
 		t.Fatalf("duplicate slug: %v", err)
 	}
-	tn, u, err := e.App.Platform.CreateTenant(ctx, platform.NewTenant{Slug: " Food-Co ", Name: "Food Co", AdminEmail: "Chef@Food.test", AdminPassword: testkit.Password, Plan: "pro", Region: "us", Verticals: []string{"food"}})
-	if err != nil || tn.Slug != "food-co" || tn.Plan != "pro" || tn.Region != "us" || tn.Verticals[0] != "food" || u.Email != "chef@food.test" || u.Roles[0] != "Admin" {
+	if _, _, err := e.App.Platform.CreateTenant(ctx, platform.NewTenant{Slug: "us-co", Name: "US Co", AdminEmail: "a@b.c", AdminPassword: testkit.Password, Region: "us"}); status(err) != 400 {
+		t.Fatalf("tenant for another region on an eu installation: %v", err)
+	}
+	tn, u, err := e.App.Platform.CreateTenant(ctx, platform.NewTenant{Slug: " Food-Co ", Name: "Food Co", AdminEmail: "Chef@Food.test", AdminPassword: testkit.Password, Plan: "pro", Verticals: []string{"food"}})
+	if err != nil || tn.Slug != "food-co" || tn.Plan != "pro" || tn.Region != "eu" || tn.Verticals[0] != "food" || u.Email != "chef@food.test" || u.Roles[0] != "Admin" {
 		t.Fatalf("create: %+v %+v %v", tn, u, err)
 	}
 	got, err := e.App.Platform.TenantBySlug(ctx, "FOOD-CO")

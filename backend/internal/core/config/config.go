@@ -38,6 +38,7 @@ type Config struct {
 	ArchiveAfterDays  int // captures older than this are archived to S3
 	SMTPURL           string
 	LocalLLMURL       string // OpenAI-compatible chat endpoint of a local model server (air-gapped hubs)
+	Region            string // the data-residency region this installation serves; tenants are pinned to it
 	LocalLLMModel     string
 	MailFrom          string
 	BaseDomain        string
@@ -74,6 +75,7 @@ func Load() (Config, error) {
 		ArchiveAfterDays:  envInt("OPENSPOOR_ARCHIVE_AFTER_DAYS", 90),
 		SMTPURL:           env("OPENSPOOR_SMTP_URL", ""),
 		LocalLLMURL:       env("OPENSPOOR_LOCAL_LLM_URL", ""),
+		Region:            env("OPENSPOOR_REGION", "eu"),
 		LocalLLMModel:     env("OPENSPOOR_LOCAL_LLM_MODEL", ""),
 		MailFrom:          env("OPENSPOOR_MAIL_FROM", ""),
 		BaseDomain:        env("OPENSPOOR_BASE_DOMAIN", "localhost"),

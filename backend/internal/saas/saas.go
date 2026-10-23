@@ -550,6 +550,11 @@ func (m *Module) opUpdate(w http.ResponseWriter, r *http.Request) error {
 	if in.Status != nil && *in.Status != "active" && *in.Status != "suspended" {
 		return httpx.BadRequest("status must be active or suspended")
 	}
+	// Region pinning: relabelling would claim a residency the data does not have. Moving a
+	// tenant is an export and import into an installation in the other region.
+	if in.Region != nil && *in.Region != m.Cfg.Region && !(m.Cfg.Region == "" && *in.Region == "eu") {
+		return httpx.BadRequest("a tenant cannot change region on this installation; export it and import it into an installation in " + *in.Region)
+	}
 	if in.Reason == "" {
 		return httpx.BadRequest("reason is required for operator changes")
 	}

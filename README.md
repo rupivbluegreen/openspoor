@@ -75,6 +75,7 @@ The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, h
 | `OPENSPOOR_MIGRATE_DATABASE_URL` | database URL | Role used by `migrate` |
 | `OPENSPOOR_MIGRATE_ON_START` | `false` | Apply migrations before `api`, `worker` or `all` start |
 | `OPENSPOOR_MODE` | `single` | `saas`, `single` or `hub` |
+| `OPENSPOOR_REGION` | `eu` | Data-residency region this installation serves; tenants are created in it and cannot be relabelled to another |
 | `OPENSPOOR_JWT_SECRET` | — | Session signing key (at least 16 bytes) |
 | `OPENSPOOR_MASTER_KEY` | — | Wraps per-tenant data keys and the federation key |
 | `OPENSPOOR_OIDC_ISSUER`, `OPENSPOOR_OIDC_AUDIENCE` | — | External SSO over OIDC; SAML identity providers connect through Keycloak ([runbook](docs/runbooks/sso.md)) |
