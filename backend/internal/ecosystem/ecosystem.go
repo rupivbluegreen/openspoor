@@ -55,7 +55,7 @@ func (m *Module) Public(r chi.Router) {
 	r.Get("/learn", httpx.Handler(m.listLearn))
 	r.Get("/learn/{slug}", httpx.Handler(m.getLearn))
 	r.Get("/benchmarks/system", httpx.Handler(m.systemBenchmarks))
-	r.Get("/marketplace", httpx.Handler(m.listApps))
+	r.Get("/marketplace", httpx.Handler(m.listMarketplace))
 }
 
 // Routes implements kernel.Module.
@@ -157,6 +157,18 @@ func (m *Module) ensureBuiltins(ctx context.Context) error {
 	})
 }
 
+// listMarketplace is the public catalogue. It stays readable without credentials; when the
+// request carries a valid token or API key it also reports which listings that tenant has
+// installed. Invalid credentials are treated as anonymous (the catalogue is public anyway).
+func (m *Module) listMarketplace(w http.ResponseWriter, r *http.Request) error {
+	if _, ok := auth.From(r.Context()); !ok && m.Auth != nil {
+		if p, err := m.Auth.Authenticate(r); err == nil {
+			r = r.WithContext(auth.With(r.Context(), p))
+		}
+	}
+	return m.listApps(w, r)
+}
+
 func (m *Module) listApps(w http.ResponseWriter, r *http.Request) error {
 	if err := m.ensureBuiltins(r.Context()); err != nil {
 		return err
@@ -211,21 +223,23 @@ func (m *Module) publishApp(w http.ResponseWriter, r *http.Request) error {
 	if err := mf.Validate(); err != nil {
 		return err
 	}
+	out := listing{Manifest: mf}
 	err := m.DB.OperatorTx(r.Context(), func(tx pgx.Tx) error {
 		var verified bool
 		err := tx.QueryRow(r.Context(), `select verified from app_listing where id=$1`, mf.ID).Scan(&verified)
 		if err == nil && verified {
 			return httpx.Conflict("a verified package with this id exists")
 		}
-		_, err = tx.Exec(r.Context(), `insert into app_listing (id, name, kind, publisher, version, description, manifest) values ($1,$2,$3,$4,$5,$6,$7)
-			on conflict (id) do update set name=excluded.name, version=excluded.version, description=excluded.description, manifest=excluded.manifest`,
-			mf.ID, mf.Name, mf.Kind, mf.Publisher, mf.Version, mf.Description, mf)
+		err = tx.QueryRow(r.Context(), `insert into app_listing (id, name, kind, publisher, version, description, manifest) values ($1,$2,$3,$4,$5,$6,$7)
+			on conflict (id) do update set name=excluded.name, version=excluded.version, description=excluded.description, manifest=excluded.manifest
+			returning verified, created_at`,
+			mf.ID, mf.Name, mf.Kind, mf.Publisher, mf.Version, mf.Description, mf).Scan(&out.Verified, &out.CreatedAt)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, http.StatusCreated, listing{Manifest: mf})
+	httpx.JSON(w, http.StatusCreated, out)
 	return nil
 }
 

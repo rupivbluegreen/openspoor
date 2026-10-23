@@ -21,6 +21,18 @@ export notes say (CSV `#` comment lines, JSON `notes`). Authority requests assem
 for a set of lots, store it as generated (with its SHA-256), and record every download (who,
 when, format) on the request and in the audit trail.
 
+The traceability plan (`plan.go`) is the document 21 CFR 1.1315 asks a covered person to keep. Only
+the five elements read from the public rule text are asserted: (a)(1) record-keeping procedures,
+(a)(2) procedures to identify listed foods handled, (a)(3) how traceability lot codes are assigned,
+(a)(4) point of contact, (a)(5) farm map for farms. Each section is free text; the structured
+helpers (products with a Food Traceability List category, lot-code pattern/source/example seen in
+`food_lot`, contact fields, selection of registered plots with a schematic SVG overview) are
+labelled as helpers in every export. Saving never edits a row: it inserts the next version
+(numbered per tenant or per site) with who, when and a required reason, and moves the current
+flag. Products carry no food category column; the category is stored on the plan entry, so the
+master data is untouched. The review reminder is a per-tenant setting, off by default, with no
+legal source (the interval is a software convention).
+
 Certificates (halal, origin, organic, …) are the supplier compliance hub's records
 (`supplier_record`, reached through the `CertificateStore` interface that `internal/app` wires,
 since food may only depend on `epcis`). Food links them to a lot (TLC), a product or a site
@@ -47,6 +59,11 @@ they are off by default).
 | GET, POST | `/eudr/dds` | List / create due diligence statements from registered plots |
 | GET | `/eudr/dds/{id}` | Get a statement |
 | POST | `/eudr/dds/{id}/submit` | Mark submitted with a local reference (stub) |
+| GET | `/traceability-plan` | Current traceability plan (`siteId` optional) with editor helpers, review status and completeness hints |
+| GET | `/traceability-plan/versions` | All saved versions, newest first (who, when, why, current flag) |
+| PUT | `/traceability-plan` | Save a new version (`content`, required `reason`, optional `siteId`); admin / ops / compliance only |
+| GET | `/traceability-plan/export` | `format=json\|html\|md`, optional `version`, `siteId`; each download is audited |
+| GET, PUT | `/traceability-plan/settings` | Per-tenant review reminder (off by default; PUT: admin / ops / compliance) |
 | GET | `/one-up-one-down` | One-up/one-down report (`tlc` repeatable or comma-separated, `productId`, `gtin`, `from`, `to`; `format=csv\|json` downloads and is audited) |
 | GET, POST | `/one-up-one-down/authority-requests` | List / assemble a report for a competent authority |
 | GET | `/one-up-one-down/authority-requests/{id}` | Request with its stored report |
@@ -68,7 +85,8 @@ Viewer may read (including downloads); writes need one of the roles above.
 
 `food_lot`, `food_cte`, `food_lineage`, `farm_plot`, `recall`, `recall_notification`,
 `eudr_dds` (migration `00007_food.sql`); `food_certificate_link`, `food_authority_request` and
-the `supplier_record.scope` column (migration `00016_food_oneup_certificates.sql`).
+the `supplier_record.scope` column (migration `00016_food_oneup_certificates.sql`);
+`food_traceability_plan` and `food_traceability_plan_setting` (migration `00020_traceability_plan.sql`).
 
 ## Depends on
 
@@ -79,6 +97,9 @@ the `supplier_record.scope` column (migration `00016_food_oneup_certificates.sql
 
 - FSMA 204 export: "align header names and order with FDA's published sortable spreadsheet
   template."
+- Traceability plan: `TODO(spec)` confirm the element wording against the current eCFR text, the
+  Food Traceability List categories offered as suggestions, and whether plan versions must be kept
+  for a set period (all are kept) or reviewed on a schedule (none is asserted).
 - EUDR: "map the payload to the EU Information System (TRACES) DDS schema when submitting";
   submission is stubbed.
 - One-up/one-down: the Commission's guidance on Articles 11, 12, 14, 17, 18, 19 and 20 of

@@ -2343,6 +2343,100 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - food
+    /api/v1/food/traceability-plan:
+        get:
+            operationId: getFoodTraceabilityPlan
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+        put:
+            operationId: putFoodTraceabilityPlan
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/traceability-plan/export:
+        get:
+            operationId: getFoodTraceabilityPlanExport
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/traceability-plan/settings:
+        get:
+            operationId: getFoodTraceabilityPlanSettings
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+        put:
+            operationId: putFoodTraceabilityPlanSettings
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/traceability-plan/versions:
+        get:
+            operationId: getFoodTraceabilityPlanVersions
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
     /api/v1/food/transformations:
         post:
             operationId: postFoodTransformations

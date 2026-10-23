@@ -12,9 +12,9 @@ benchmark dashboards (measured system performance and anonymized peer comparison
 |---|---|---|
 | GET | `/learn`, `/learn/{slug}` | Learning hub articles (public) |
 | GET | `/benchmarks/system` | Recorded system benchmark runs (public) |
-| GET | `/marketplace` | Marketplace listings (public) |
+| GET | `/marketplace` | Marketplace listings (public; with a valid token or API key `installed` reflects that tenant's installs) |
 | GET | `/apps` | Marketplace listings |
-| POST | `/apps` | Publish an app listing (admin) |
+| POST | `/apps` | Publish an app listing (admin); returns the stored `verified` and `createdAt` |
 | POST, DELETE | `/apps/{id}/install` | Install (grants a scoped API key and, if declared, an EPCIS webhook subscription) / uninstall (admin) |
 | GET | `/apps/installed` | Installed apps |
 | POST | `/apps/sandbox` | Create a developer sandbox tenant with seed data |

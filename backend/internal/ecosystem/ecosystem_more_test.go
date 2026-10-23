@@ -320,3 +320,52 @@ func TestBenchmarkPeersAboveKAnonymityThreshold(t *testing.T) {
 		t.Fatalf("KPIs without peer data must stay hidden: %+v", bm.KPIs[1:])
 	}
 }
+
+func TestMarketplaceOptionalAuthAndCreatedAt(t *testing.T) {
+	e := testkit.New(t)
+	var created struct {
+		ID        string
+		CreatedAt time.Time
+		Verified  bool
+	}
+	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/apps", map[string]any{"id": "acme-ts", "name": "TS", "kind": "app", "publisher": "Acme", "version": "1"}), &created)
+	if created.CreatedAt.Year() < 2000 || time.Since(created.CreatedAt) > time.Hour || created.Verified {
+		t.Fatalf("created listing: %+v", created)
+	}
+	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/apps", map[string]any{"id": "acme-ts", "name": "TS", "kind": "app", "publisher": "Acme", "version": "2", "roles": []string{"Viewer"}}), &created)
+	if created.CreatedAt.Year() < 2000 {
+		t.Fatalf("republished listing: %+v", created)
+	}
+	var key struct{ APIKey string }
+	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/apps/acme-ts/install", nil), &key)
+
+	installed := func(r testkit.Response) bool {
+		t.Helper()
+		var page struct{ Items []appListing }
+		e.Must(http.StatusOK, r, &page)
+		for _, a := range page.Items {
+			if a.ID == "acme-ts" {
+				return a.Installed
+			}
+		}
+		t.Fatal("listing missing")
+		return false
+	}
+	if installed(e.Call("", "GET", "/api/v1/marketplace", nil)) {
+		t.Fatal("anonymous request must not see installs")
+	}
+	if !installed(e.Do("GET", "/api/v1/marketplace", nil)) {
+		t.Fatal("bearer token should report installs")
+	}
+	if !installed(e.Call(key.APIKey, "GET", "/api/v1/marketplace", nil)) {
+		t.Fatal("API key should report installs")
+	}
+	// Bad credentials do not break the public catalogue; another tenant sees no installs.
+	if installed(e.Call("garbage", "GET", "/api/v1/marketplace", nil)) {
+		t.Fatal("invalid token is anonymous")
+	}
+	_, other := e.NewTenant("other-mkt", "a@other-mkt.test")
+	if installed(e.Call(other, "GET", "/api/v1/marketplace", nil)) {
+		t.Fatal("installs are per tenant")
+	}
+}

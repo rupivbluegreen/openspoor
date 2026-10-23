@@ -30,6 +30,7 @@ self-hosted installs) reports nothing. See `billing.go` for the drivers.
 | GET, POST | `/tenant/export` | Export all tenant data as JSON (admin) |
 | DELETE | `/tenant` | Delete the tenant (admin re-authenticates and confirms) |
 | GET | `/operator/tenants` | List tenants (operator) |
+| GET | `/operator/hub/analytics` | Market analytics across reporting organisations (`days`, default 30); hub mode only (404 elsewhere), operator only. Shown in the operator console as "Market analytics" |
 | PATCH | `/operator/tenants/{id}` | Update plan, status, region or quotas, with a reason (operator) |
 | POST | `/operator/tenants/{id}/impersonate` | Short-lived support token, only with consent (operator) |
 
