@@ -36,6 +36,8 @@ require (
 
 require github.com/smallstep/pkcs7 v0.2.3
 
+require github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e // indirect
+
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect

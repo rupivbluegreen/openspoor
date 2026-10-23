@@ -35,6 +35,12 @@ type x12Template struct {
 	CTT        bool   // emit CTT with the line count
 	Status     map[string]string
 	LineStatus map[string]string
+	// DetailID and DetailRoles describe the quantity segment of the "lin" line profile: the
+	// segment ID and one role per element (line, qty, uom, price or const:X).
+	DetailID    string
+	DetailRoles []string
+	// AckSeg is the per-set response segment of the "ak2" profile (AK5 for 997, IK5 for 999).
+	AckSeg string
 }
 
 // x12Profile writes and reads the line segments of one line layout.
@@ -122,7 +128,99 @@ func itemID(from int, get func(int) string) string {
 	return ""
 }
 
+func (tm *x12Template) ackSeg() string {
+	if tm.AckSeg != "" {
+		return tm.AckSeg
+	}
+	return "AK5"
+}
+
+// detailEls renders the elements of a "lin" detail segment from its roles.
+func detailEls(roles []string, l Line) []string {
+	els := make([]string, len(roles))
+	for i, r := range roles {
+		switch kind, arg, _ := strings.Cut(r, ":"); kind {
+		case "const":
+			els[i] = arg
+		case "line":
+			els[i] = strconv.Itoa(l.Line)
+		case "qty":
+			els[i] = num(l.Quantity)
+		case "uom":
+			els[i] = l.UOM
+		case "price":
+			if l.UnitPrice != 0 {
+				els[i] = num(l.UnitPrice)
+			}
+		}
+	}
+	return els
+}
+
+func readDetail(roles []string, l *Line, get func(int) string) {
+	for i, r := range roles {
+		switch r {
+		case "line":
+			l.Line = inum(get(i + 1))
+		case "qty":
+			l.Quantity = fnum(get(i + 1))
+		case "uom":
+			l.UOM = get(i + 1)
+		case "price":
+			l.UnitPrice = fnum(get(i + 1))
+		}
+	}
+}
+
 var x12Profiles = map[string]x12Profile{
+	// "lin" is the item profile of the report and advice sets: LIN with the GTIN, the set's own
+	// quantity segment (DetailID), then description (PID), lot (REF*LT), expiry (DTM*036), a reason
+	// (NTE*ADD) and the line status as message text (MSG). The status travels as text because no
+	// code list for it is verified (see docs/OPEN_QUESTIONS.md).
+	"lin": {start: "LIN",
+		write: func(emit func(string, ...string), tm *x12Template, l Line) {
+			emit("LIN", strconv.Itoa(l.Line), "UK", l.GTIN)
+			if l.Description != "" {
+				emit("PID", "F", "", "", "", clean(l.Description))
+			}
+			emit(tm.DetailID, detailEls(tm.DetailRoles, l)...)
+			if l.Lot != "" {
+				emit("REF", "LT", clean(l.Lot))
+			}
+			if l.Expiry != "" {
+				emit("DTM", "036", ymdOf(l.Expiry))
+			}
+			if l.Reason != "" {
+				emit("NTE", "ADD", clean(l.Reason))
+			}
+			if l.Status != "" {
+				emit("MSG", clean(l.Status))
+			}
+		},
+		read: func(l *Line, id string, get func(int) string, tm *x12Template) {
+			switch id {
+			case "LIN":
+				*l = Line{Line: inum(get(1)), GTIN: itemID(2, get)}
+			case "PID":
+				l.Description = get(5)
+			case tm.DetailID:
+				readDetail(tm.DetailRoles, l, get)
+			case "REF":
+				if get(1) == "LT" {
+					l.Lot = get(2)
+				}
+			case "DTM":
+				if get(1) == "036" {
+					l.Expiry = dayOf(get(2))
+				}
+			case "NTE":
+				if get(1) == "ADD" {
+					l.Reason = get(2)
+				}
+			case "MSG":
+				l.Status = get(1)
+			}
+		}},
 	"po1ack": {start: "PO1",
 		write: func(emit func(string, ...string), tm *x12Template, l Line) {
 			emit("PO1", strconv.Itoa(l.Line), num(l.Quantity), l.UOM, num(l.UnitPrice), "", "UK", l.GTIN)
@@ -201,13 +299,13 @@ var x12Profiles = map[string]x12Profile{
 	"ak2": {start: "AK2",
 		write: func(emit func(string, ...string), tm *x12Template, l Line) {
 			emit("AK2", l.RefType, clean(l.Ref))
-			emit("AK5", tm.LineStatus[l.Status])
+			emit(tm.ackSeg(), tm.LineStatus[l.Status])
 		},
 		read: func(l *Line, id string, get func(int) string, tm *x12Template) {
 			switch id {
 			case "AK2":
 				*l = Line{RefType: get(1), Ref: get(2)}
-			case "AK5":
+			case tm.ackSeg():
 				l.Status = reverse(tm.LineStatus, get(1))
 			}
 		},
@@ -422,13 +520,15 @@ func parseX12Generic(t Type, segs []string, sep string) (Document, error) {
 			d.Currency = get(2)
 			continue
 		case "REF":
-			if k := refKeyOf(get(1)); k != "" && cur == nil {
-				if d.References == nil {
-					d.References = map[string]string{}
+			if cur == nil || tm.Lines != "lin" {
+				if k := refKeyOf(get(1)); k != "" && cur == nil {
+					if d.References == nil {
+						d.References = map[string]string{}
+					}
+					d.References[k] = get(2)
 				}
-				d.References[k] = get(2)
+				continue
 			}
-			continue
 		case "N1":
 			p := Party{Name: get(2), GLN: get(4)}
 			switch get(1) {
