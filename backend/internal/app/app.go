@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -205,6 +206,8 @@ func (a *App) routes() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(a.Deps.Auth.Middleware)
 			r.Get("/search", httpx.Handler(a.search))
+			mcpServer := a.mcpServer()
+			r.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, &mcp.StreamableHTTPOptions{Stateless: true}))
 			for _, m := range a.Modules {
 				m.Routes(r)
 			}
