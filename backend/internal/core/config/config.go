@@ -32,6 +32,10 @@ type Config struct {
 	KafkaBrokers      []string
 	S3Endpoint        string
 	S3Bucket          string
+	S3Region          string
+	S3AccessKey       string
+	S3SecretKey       string
+	ArchiveAfterDays  int // captures older than this are archived to S3
 	BaseDomain        string
 	PublicURL         string
 	BillingDriver     string // "none", "lago", "stripe"
@@ -60,6 +64,10 @@ func Load() (Config, error) {
 		KafkaBrokers:      envList("OPENSPOOR_KAFKA_BROKERS"),
 		S3Endpoint:        env("OPENSPOOR_S3_ENDPOINT", ""),
 		S3Bucket:          env("OPENSPOOR_S3_BUCKET", "openspoor-archive"),
+		S3Region:          env("OPENSPOOR_S3_REGION", "us-east-1"),
+		S3AccessKey:       env("OPENSPOOR_S3_ACCESS_KEY", ""),
+		S3SecretKey:       env("OPENSPOOR_S3_SECRET_KEY", ""),
+		ArchiveAfterDays:  envInt("OPENSPOOR_ARCHIVE_AFTER_DAYS", 90),
 		BaseDomain:        env("OPENSPOOR_BASE_DOMAIN", "localhost"),
 		PublicURL:         env("OPENSPOOR_PUBLIC_URL", "http://localhost:8080"),
 		BillingDriver:     env("OPENSPOOR_BILLING", "none"),

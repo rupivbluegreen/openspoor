@@ -84,6 +84,8 @@ The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, h
 | `OPENSPOOR_BILLING`, `OPENSPOOR_LAGO_URL`, `OPENSPOOR_LAGO_API_KEY` | `none` | Usage metering |
 | `OPENSPOOR_UNLEASH_URL`, `OPENSPOOR_UNLEASH_TOKEN` | — | Feature flags (OpenFeature) |
 | `ANTHROPIC_API_KEY`, `OPENSPOOR_ASSISTANT_MODEL` | — | Model access for the assistant; without both it answers from the gathered data only |
+| `OPENSPOOR_S3_ENDPOINT`, `OPENSPOOR_S3_BUCKET`, `OPENSPOOR_S3_ACCESS_KEY`, `OPENSPOOR_S3_SECRET_KEY` | — | Archive of old captures as gzipped EPCIS 2.0 files (SeaweedFS or any S3 service; the bucket must exist) |
+| `OPENSPOOR_ARCHIVE_AFTER_DAYS` | `90` | Age at which a capture is archived; events stay queryable in PostgreSQL |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OpenTelemetry traces over OTLP/HTTP (HTTP requests, SQL queries, background jobs); off when unset |
 | `OPENSPOOR_DEV_AUTH` | `false` | Development shortcuts; never in production |
 

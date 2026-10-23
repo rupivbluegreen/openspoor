@@ -26,6 +26,7 @@ import (
 	"github.com/openspoor/openspoor/internal/core/ids"
 	"github.com/openspoor/openspoor/internal/core/jobs"
 	"github.com/openspoor/openspoor/internal/core/kernel"
+	"github.com/openspoor/openspoor/internal/core/objstore"
 	"github.com/openspoor/openspoor/internal/masterdata"
 	"github.com/openspoor/openspoor/internal/serialization"
 	lib "github.com/openspoor/openspoor/pkg/epcis"
@@ -58,6 +59,8 @@ type Module struct {
 	onCapture []string
 	// Gate, when set, may refuse a capture before it is stored (SaaS quotas).
 	Gate func(ctx context.Context, tenant uuid.UUID, events int) error
+	// Archive receives compressed copies of old captures; nil when no S3 endpoint is configured.
+	Archive objstore.Store
 }
 
 // OnCapture registers a job kind enqueued (payload {"captureId"}) in every capture
@@ -66,7 +69,9 @@ func (m *Module) OnCapture(kind string) { m.onCapture = append(m.onCapture, kind
 
 // New creates the module.
 func New(d kernel.Deps, s *serialization.Module) *Module {
-	return &Module{Deps: d, Serials: s, Client: &http.Client{Timeout: 15 * time.Second}}
+	return &Module{Deps: d, Serials: s, Client: &http.Client{Timeout: 15 * time.Second},
+		Archive: objstore.New(objstore.Config{Endpoint: d.Cfg.S3Endpoint, Bucket: d.Cfg.S3Bucket, Region: d.Cfg.S3Region,
+			AccessKey: d.Cfg.S3AccessKey, SecretKey: d.Cfg.S3SecretKey})}
 }
 
 // Name implements kernel.Module.
