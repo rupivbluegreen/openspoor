@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { api, CodeView, formatDateTime, PageContainer, prettyJson, StatusTag, useESignature, type AgentAction } from '@openspoor/ui/pro';
 import { useAction } from '../../lib/hooks';
 import { diffJson, type DiffRow } from '../../lib/diff';
+import { ProposalPreview } from './ProposalPreview';
+import { ToolAutonomy } from './ToolAutonomy';
 
 const show = (v: unknown) => (v === undefined ? <Typography.Text type="secondary">∅</Typography.Text> : <Typography.Text code>{typeof v === 'string' ? v : JSON.stringify(v)}</Typography.Text>);
 
@@ -60,13 +62,14 @@ function ActionCard({ a, status }: { a: AgentAction; status: string }) {
       actions={
         s === 'pending'
           ? [
-              <Button key="ok" type="link" icon={<CheckOutlined />} loading={approve.isPending} onClick={() => approve.mutate(undefined)}>
+              <Button key="ok" type="link" icon={<CheckOutlined />} loading={approve.isPending} disabled={a.autonomy === 'suggest'} onClick={() => approve.mutate(undefined)}>
                 {t('action.approve')}
               </Button>,
               <Button
                 key="sign"
                 type="link"
                 icon={<SafetyCertificateOutlined />}
+                disabled={a.autonomy === 'suggest'}
                 onClick={async () => {
                   if (await requestSignature({ entity: 'agent_action', entityId: a.id, defaultMeaning: 'approval' })) approve.mutate(undefined);
                 }}
@@ -79,7 +82,7 @@ function ActionCard({ a, status }: { a: AgentAction; status: string }) {
                 </Button>
               </Popconfirm>,
             ]
-          : s === 'approved' || s === 'applied' || s === 'executed'
+          : (s === 'approved' || s === 'applied' || s === 'executed') && a.reversible !== false
             ? [
                 <Popconfirm key="rev" title={`${t('action.revert')}?`} description={t('common.audited')} onConfirm={() => revert.mutateAsync(undefined)}>
                   <Button type="link" icon={<RollbackOutlined />} loading={revert.isPending}>
@@ -108,7 +111,7 @@ function ActionCard({ a, status }: { a: AgentAction; status: string }) {
           )}
         </Col>
         <Col xs={24} lg={12}>
-          <DiffView action={a} />
+          <ProposalPreview action={a} fallback={<DiffView action={a} />} />
         </Col>
       </Row>
       {holder}
@@ -128,11 +131,12 @@ export default function AgentApprovals() {
         <Segmented
           value={status}
           onChange={(v) => setStatus(String(v))}
-          options={['pending', 'approved', 'rejected', 'reverted'].map((s) => ({ value: s, label: s }))}
+          options={['pending', 'executed', 'failed', 'rejected', 'reverted'].map((s) => ({ value: s, label: t(`agents.${s}`) }))}
         />
       }
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <ToolAutonomy />
         {q.isLoading && <Card loading />}
         {!q.isLoading && !q.data?.items.length && (
           <Card>

@@ -4,9 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, CodeView, prettyJson, ProFormSelect, ProFormTextArea, type B2BDocument } from '@openspoor/ui/pro';
 import { CrudPage } from '../../components/CrudPage';
-import { usePartnerOptions } from '../../lib/options';
+import { useDocTypeOptions, usePartnerOptions } from '../../lib/options';
 
-const TYPES = ['order', 'asn', 'invoice', 'inventory', 'return', 'chargeback'];
 type Format = 'x12' | 'edifact' | 'idoc';
 
 function EdiDrawer({ doc, onClose }: { doc: B2BDocument | null; onClose: () => void }) {
@@ -30,6 +29,7 @@ function EdiDrawer({ doc, onClose }: { doc: B2BDocument | null; onClose: () => v
 export default function B2BDocuments() {
   const { t } = useTranslation();
   const partners = usePartnerOptions();
+  const docTypes = useDocTypeOptions();
   const [view, setView] = useState<B2BDocument | null>(null);
   return (
     <>
@@ -39,7 +39,7 @@ export default function B2BDocuments() {
         table={{ search: { labelWidth: 'auto' } }}
         columns={[
           { title: t('field.id'), dataIndex: 'id', copyable: true, ellipsis: true, search: false },
-          { title: t('field.type'), dataIndex: 'type', valueType: 'select', valueEnum: Object.fromEntries(TYPES.map((x) => [x, { text: x }])) },
+          { title: t('field.type'), dataIndex: 'type', valueType: 'select', valueEnum: Object.fromEntries(docTypes.flat.map((x) => [x.value, { text: x.label }])) },
           { title: t('field.partner'), dataIndex: 'partnerId', search: false, render: (_d, r) => partners.find((p) => p.value === r.partnerId)?.label ?? r.partnerId ?? '–' },
           { title: t('field.status'), dataIndex: 'status', search: false },
           { title: t('field.createdAt'), dataIndex: 'createdAt', valueType: 'dateTime', search: false },
@@ -49,7 +49,7 @@ export default function B2BDocuments() {
           width: 720,
           fields: (
             <>
-              <ProFormSelect name="type" label={t('field.type')} options={TYPES} rules={[{ required: true }]} />
+              <ProFormSelect name="type" label={t('field.type')} options={docTypes.grouped} showSearch rules={[{ required: true }]} />
               <ProFormSelect name="partnerId" label={t('field.partner')} options={partners} rules={[{ required: true }]} />
               <ProFormTextArea
                 name="payload"

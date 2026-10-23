@@ -71,6 +71,9 @@ importers:
 
   apps/operator:
     dependencies:
+      '@ant-design/charts':
+        specifier: 2.6.7
+        version: 2.6.7(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@ant-design/icons':
         specifier: 6.3.4
         version: 6.3.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1)

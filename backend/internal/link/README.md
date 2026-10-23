@@ -1,8 +1,10 @@
 # link
 
-B2B exchange between trading partners. The module owns the B2B transaction set (orders,
-ASN, invoices, inventory reports, returns, chargebacks) with X12, EDIFACT and IDoc renderings
-via `pkg/edi`, the supplier compliance hub (certificates, audits, specifications, with expiry
+B2B exchange between trading partners. The module owns the B2B transaction set (60 types in the
+`pkg/edi` registry: forecasts, orders and their acknowledgements and changes, ASN, receiving
+advices, invoices, remittances, inventory and sales reports, returns, chargebacks, claims,
+acknowledgements, master data) with X12, EDIFACT and IDoc renderings where the type has a writer
+(`GET /b2b/types` says which), the supplier compliance hub (certificates, audits, specifications, with expiry
 alerts), document exchange between partner tenants, and node-to-node federation (ADR-008).
 
 Federation: each node has an Ed25519 identity published as a DID document. Peers are added
@@ -11,13 +13,25 @@ envelopes, and inbound envelopes are rejected on a bad signature or more than 5 
 clock skew. Inbound `epcis.capture` payloads are captured into the EPCIS repository.
 Outbound envelopes are re-signed with a fresh `createdAt` on every delivery attempt (same id).
 
+Transaction types: every document has a registry type (`pkg/edi`) that defines its required
+fields, allowed statuses, dates, parties and amounts, and validation rules. Creating, importing,
+mapping and receiving a document validate it against its type. The registry is listed at
+`GET /b2b/types` (key, name, category, flow, X12 and EDIFACT identifiers, required fields,
+rules, available renderings, mapping target fields). Rendering a document in a format its type has
+no writer for is a 400. X12 import reads the 850 and every type with an X12 template; EDIFACT
+import reads any registry message, and an optional `type` names the type where several share a
+message and document name code (ORDRSP: order acknowledgement and change acknowledgement).
+
 Mapping studio: saved mappings per partner and document type turn CSV, JSON (records and
 nested lines by dotted path) or fixed-width files into canonical B2B documents (`pkg/edi`) or
 EPCIS events. Transforms: `trim`, `upper`, `lower`, `date` (YYYY/MM/DD/HH/mm/ss patterns),
 `lookup` (table with optional default), `constant`, `concat`. Rows are grouped into documents by
 the mapped `number`. A preview returns the canonical result with per-row errors; inbound import
 (`format` csv, json, flat or mapped) is all-or-nothing. "Suggest" proposes fields from header
-names (a heuristic; a person reviews and saves).
+names (a heuristic; a person reviews and saves). The target field list of a mapping comes from
+the registry type: header fields, `status`, `note`, `dates.<key>`, `parties.<key>.name|gln`,
+`amounts.<key>`, and line fields (`lines.gtin`... for item lines, `lines.ref|refType|amount|status`
+for reference lines, `lines.dates.<key>`).
 
 Message tracking: `/messages` is one log over B2B documents, federation messages and TI/TS
 deliveries (read from the `dscsa` shipment table). Attempts, last error and the dead-letter state
@@ -40,8 +54,9 @@ verified (did:web resolution, proof, validity, revocation) and the result is sto
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET, POST | `/api/v1/b2b/documents` | List / create B2B documents |
-| POST | `/api/v1/b2b/documents/import` | Parse an inbound X12 850 or EDIFACT ORDERS message |
+| GET | `/api/v1/b2b/types` | The transaction type registry (filters: `category`, `q`) |
+| GET, POST | `/api/v1/b2b/documents` | List / create B2B documents of any registry type (filter: `type`, `direction`) |
+| POST | `/api/v1/b2b/documents/import` | Parse an inbound X12 or EDIFACT message of a registry type (or a mapped file) |
 | GET | `/api/v1/b2b/documents/{id}` | Get a document |
 | GET | `/api/v1/b2b/documents/{id}/edi` | Render as X12, EDIFACT or IDoc |
 | POST | `/api/v1/b2b/documents/{id}/send` | Deliver to a partner on this node, over federation, or mark sent for EDI pickup |
@@ -84,7 +99,8 @@ Authenticated routes need the admin, ops, compliance or integration role (Viewer
 ## Data
 
 `b2b_document`, `supplier_record`, `shared_document`, `federation_node`, `federation_peer`,
-`federation_message` (migration `00008_link.sql`); `b2b_mapping`, `partner_sla`, `atp_credential`,
+`federation_message` (migration `00008_link.sql`; migration `00022_kpi.sql` replaces the fixed type lists
+of `b2b_document.type` and `b2b_mapping.doc_type` with a shape check, the registry validates the value); `b2b_mapping`, `partner_sla`, `atp_credential`,
 `atp_verification`, `b2b_document.acked_at`, `federation_message.job_id` (migration `00015_link_network.sql`).
 Reads `license`/`organization`/`site` (platform) for issuance and `shipment` (dscsa) for the message log
 inside the tenant's transaction.

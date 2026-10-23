@@ -506,6 +506,70 @@ export interface AgentAction {
   status?: string;
   confidence?: number;
   createdAt?: string;
+  input?: unknown;
+  result?: Record<string, unknown>;
+  risk?: string;
+  reversible?: boolean;
+  /** The action type's mode for this tenant: suggest | approve | auto. */
+  autonomy?: string;
+}
+
+/** An action type (tool) agents may propose, with the tenant's autonomy setting. */
+export interface AgentTool {
+  name: string;
+  risk: string;
+  reversible: boolean;
+  approverRoles?: string[];
+  agents?: string[];
+  mode: 'suggest' | 'approve' | 'auto';
+  configured: boolean;
+  autoAllowed: boolean;
+}
+
+export interface ChecklistItem {
+  key: string;
+  title: string;
+  kind: 'auto' | 'manual';
+  status: 'ok' | 'warn' | 'todo';
+  detail?: string;
+  confirmedBy?: string;
+  confirmedAt?: string;
+}
+
+/** A draft or released inspection package (FSMA 204 spreadsheet or tracing answer). */
+export interface InspectionPackage {
+  id: string;
+  kind: 'fsma204' | 'tracing';
+  title: string;
+  status: 'draft' | 'released' | 'voided';
+  scope?: Record<string, unknown>;
+  contentType?: string;
+  size?: number;
+  sha256?: string;
+  summary?: Record<string, unknown>;
+  checklist: ChecklistItem[];
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+  signatureId?: string;
+  releasedBy?: string;
+  releasedAt?: string;
+}
+
+/** A regulator page or specification watched for changes. */
+export interface WatchSource {
+  id: string;
+  name: string;
+  url: string;
+  selector: string;
+  market: string;
+  enabled: boolean;
+  lastHash?: string;
+  lastPreview?: string;
+  lastCheckedAt?: string;
+  lastChangedAt?: string;
+  lastError?: string;
+  createdAt?: string;
 }
 
 export interface AgentDef {
@@ -693,6 +757,44 @@ export interface TenantUsage {
   reports?: number;
   activePartners?: number;
   quota?: Record<string, number>;
+}
+
+/** GET /operator/hub/analytics (hub mode only). */
+export interface HubAnalytics {
+  days: number;
+  organisations: { tenantId: string; name: string; captures: number; events: number; rejectedCaptures: number; lastReportAt: string | null; daysSilent: number | null }[];
+  serialStates: { key: string; count: number }[];
+  openAlerts: { key: string; count: number }[];
+  products: { gtin: string; name: string; owner: string; serials: number; failedScans: number; failedVerifications: number }[];
+}
+
+/** One section's text of a traceability plan; the structured helpers are optional. */
+export interface TraceabilityPlanContent {
+  recordProcedures: { text: string };
+  foodsHandled: { text: string; items: { productId?: string; gtin?: string; name: string; ftlCategory: string; note?: string }[] };
+  tlcAssignment: { text: string; pattern?: string; source?: string; example?: string };
+  pointOfContact: { text: string; name?: string; role?: string; email?: string; phone?: string };
+  farmMap: { applicable: boolean; text: string; plotIds: string[] };
+}
+
+export interface TraceabilityPlanVersion {
+  id: string;
+  siteId?: string;
+  version: number;
+  current: boolean;
+  content: TraceabilityPlanContent;
+  reason: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface TraceabilityPlanStatus {
+  plan: TraceabilityPlanVersion | null;
+  context: { ftlCategories: string[]; tlcSources: { source: string; lots: number; example: string }[]; plotCount: number };
+  review: { enabled: boolean; due: boolean; dueAt?: string };
+  completenessHints: string[];
+  notes: string[];
+  settings: { reviewReminder: boolean; reviewMonths: number };
 }
 
 export interface OperatorTenant extends Tenant {

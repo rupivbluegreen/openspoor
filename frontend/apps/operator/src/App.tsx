@@ -1,4 +1,4 @@
-import { lazy, Suspense, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useState, useSyncExternalStore } from 'react';
 import { Alert, Flex, Spin } from 'antd';
 import { LogoutOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,6 +6,15 @@ import { useTranslation } from 'react-i18next';
 import { api, LanguageSwitch, LoginCard, Logo, notifyError, ProLayout, ThemeToggle, tokenStore, type Principal } from '@openspoor/ui/pro';
 
 const Tenants = lazy(() => import('./Tenants'));
+const Analytics = lazy(() => import('./Analytics'));
+
+const PAGES = ['/tenants', '/analytics'] as const;
+type PagePath = (typeof PAGES)[number];
+
+function initialPage(): PagePath {
+  const h = window.location.hash.replace(/^#/, '');
+  return (PAGES as readonly string[]).includes(h) ? (h as PagePath) : '/tenants';
+}
 
 function useToken() {
   return useSyncExternalStore((cb) => tokenStore.subscribe(cb), () => tokenStore.get());
@@ -15,6 +24,7 @@ export function App() {
   const { t } = useTranslation();
   const token = useToken();
   const qc = useQueryClient();
+  const [page, setPage] = useState<PagePath>(initialPage);
   const me = useQuery({ queryKey: ['me', token], queryFn: () => api.get<Principal>('/me'), enabled: !!token });
 
   const signOut = () => {
@@ -50,9 +60,20 @@ export function App() {
       title={`${t('app.name')} · ${t('app.operator')}`}
       logo={<Logo />}
       layout="top"
-      location={{ pathname: '/tenants' }}
-      route={{ path: '/', children: [{ path: '/tenants', name: t('nav.tenants') }] }}
+      location={{ pathname: page }}
+      route={{ path: '/', children: [{ path: '/tenants', name: t('nav.tenants') }, { path: '/analytics', name: t('nav.marketAnalytics') }] }}
       menu={{ locale: false }}
+      menuItemRender={(item, dom) => (
+        <a
+          onClick={() => {
+            const next = item.path as PagePath;
+            window.location.hash = next;
+            setPage(next);
+          }}
+        >
+          {dom}
+        </a>
+      )}
       actionsRender={() => [<LanguageSwitch key="lang" />, <ThemeToggle key="theme" />]}
       avatarProps={{
         size: 'small',
@@ -67,7 +88,7 @@ export function App() {
         ),
       }}
     >
-      <Suspense fallback={<Spin />}>{me.isLoading ? <Spin /> : <Tenants />}</Suspense>
+      <Suspense fallback={<Spin />}>{me.isLoading ? <Spin /> : page === '/analytics' ? <Analytics /> : <Tenants />}</Suspense>
     </ProLayout>
   );
 }

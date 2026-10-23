@@ -12,6 +12,7 @@
     "test": "echo \"no tests in @openspoor/operator\""
   },
   "dependencies": {
+    "@ant-design/charts": "2.6.7",
     "@ant-design/icons": "6.3.4",
     "@ant-design/pro-components": "3.1.15-7",
     "@openspoor/ui": "workspace:*",

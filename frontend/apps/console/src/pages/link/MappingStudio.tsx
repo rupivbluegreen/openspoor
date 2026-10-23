@@ -5,8 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, CodeView, PageContainer, prettyJson } from '@openspoor/ui/pro';
 import { useAction } from '../../lib/hooks';
-import { usePartnerOptions } from '../../lib/options';
-import { DOC_TYPES, type MapResult, type Mapping, type MappingField, type MappingOptions, type Transform } from './linkTypes';
+import { useDocTypeOptions, usePartnerOptions } from '../../lib/options';
+import { type MapResult, type Mapping, type MappingField, type MappingOptions, type Transform } from './linkTypes';
 
 const SIMPLE_OPS = ['trim', 'upper', 'lower'] as const;
 
@@ -64,6 +64,7 @@ function parseColumns(text: string) {
 export default function MappingStudio() {
   const { t } = useTranslation();
   const partners = usePartnerOptions();
+  const docTypes = useDocTypeOptions(true);
   const [mappingId, setMappingId] = useState<string>();
   const [name, setName] = useState('');
   const [partnerId, setPartnerId] = useState<string>();
@@ -139,7 +140,7 @@ export default function MappingStudio() {
             />
             <Input placeholder={t('field.name')} value={name} onChange={(e) => setName(e.target.value)} style={{ width: 220 }} />
             <Select style={{ minWidth: 200 }} placeholder={t('field.partner')} allowClear value={partnerId} onChange={setPartnerId} options={partners} />
-            <Select style={{ width: 140 }} value={docType} onChange={setDocType} options={DOC_TYPES.map((d) => ({ value: d, label: d }))} />
+            <Select style={{ width: 240 }} value={docType} onChange={setDocType} options={docTypes.grouped} showSearch optionFilterProp="label" popupMatchSelectWidth={420} />
             <Select style={{ width: 110 }} value={format} onChange={setFormat} options={['csv', 'json', 'flat'].map((f) => ({ value: f, label: f.toUpperCase() }))} />
             <Button type="primary" icon={<SaveOutlined />} disabled={!name || spec.fields.length === 0} loading={save.isPending} onClick={() => save.mutate(undefined)}>
               {t('action.save')}

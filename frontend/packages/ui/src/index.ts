@@ -12,6 +12,8 @@ export * from './notify';
 export * from './files';
 export * from './csv';
 export * from './ics';
+export * from './plotOverview';
+export * from './kpi';
 export { AppProvider, useAppSettings, createQueryClient, type AppSettings } from './AppProvider';
 export { CodeView } from './components/CodeView';
 export { StatusTag, statusColor } from './components/StatusTag';

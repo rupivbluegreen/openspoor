@@ -181,4 +181,23 @@ export interface IssuedCredential {
   createdAt: string;
 }
 
-export const DOC_TYPES = ['order', 'asn', 'invoice', 'inventory', 'return', 'chargeback', 'epcis'];
+
+/** One entry of the B2B transaction type registry (GET /b2b/types). */
+export interface TransactionType {
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+  flow: 'buyer_to_seller' | 'seller_to_buyer' | 'either';
+  standards: { x12?: string; edifact?: string; edifactBgm?: string; idocBasic?: string; idocMessage?: string };
+  formats: { x12Write: boolean; x12Read: boolean; edifactWrite: boolean; edifactRead: boolean; idocWrite: boolean };
+  required: string[];
+  fields: string[];
+  todo?: string;
+}
+
+export interface TransactionTypeList {
+  items: TransactionType[];
+  total: number;
+  categories: { key: string; count: number }[];
+}

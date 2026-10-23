@@ -67,6 +67,7 @@ export const NAV: NavGroup[] = [
     items: [
       { path: '/act/control-tower', label: 'controlTower', icon: <RadarChartOutlined />, page: p(() => import('./pages/act/ControlTower')) },
       { path: '/act/approvals', label: 'agentApprovals', icon: <RobotOutlined />, page: p(() => import('./pages/act/AgentApprovals')) },
+      { path: '/act/inspection', label: 'inspectionPackages', icon: <FileProtectOutlined />, page: p(() => import('./pages/act/InspectionPackages')) },
       { path: '/act/cases', label: 'cases', icon: <SolutionOutlined />, page: p(() => import('./pages/act/Cases')) },
       { path: '/act/assistant', label: 'assistant', icon: <CommentOutlined />, page: p(() => import('./pages/act/Assistant')) },
       { path: '/act/designer', label: 'formsWorkflows', icon: <FormOutlined />, page: p(() => import('./pages/act/Designer')) },
@@ -100,6 +101,7 @@ export const NAV: NavGroup[] = [
       { path: '/food/transformations', label: 'transformations', icon: <SwapOutlined />, page: p(() => import('./pages/food/Transformations')) },
       { path: '/food/plots', label: 'plots', icon: <EnvironmentOutlined />, page: p(() => import('./pages/food/Plots')) },
       { path: '/food/fsma', label: 'fsmaExport', icon: <CloudDownloadOutlined />, page: p(() => import('./pages/food/Fsma')) },
+      { path: '/food/traceability-plan', label: 'traceabilityPlan', icon: <FileProtectOutlined />, page: p(() => import('./pages/food/TraceabilityPlan')) },
       { path: '/food/one-up-one-down', label: 'oneUpOneDown', icon: <ApartmentOutlined />, page: p(() => import('./pages/food/OneUpOneDown')) },
       { path: '/food/recalls', label: 'recalls', icon: <RollbackOutlined />, page: p(() => import('./pages/food/Recalls')) },
       { path: '/food/eudr', label: 'eudr', icon: <GlobalOutlined />, page: p(() => import('./pages/food/Eudr')) },
@@ -117,6 +119,7 @@ export const NAV: NavGroup[] = [
         children: [{ path: '/ecosystem/learn/:slug', page: p(() => import('./pages/ecosystem/LearnArticle')) }],
       },
       { path: '/ecosystem/benchmarks', label: 'benchmarks', icon: <BarChartOutlined />, page: p(() => import('./pages/ecosystem/Benchmarks')) },
+      { path: '/ecosystem/kpis', label: 'kpiLibrary', icon: <LineChartOutlined />, page: p(() => import('./pages/ecosystem/KpiLibrary')) },
       { path: '/ecosystem/udi', label: 'udiDevices', icon: <MedicineBoxOutlined />, page: p(() => import('./pages/ecosystem/UdiDevices')) },
     ],
   },
@@ -137,6 +140,7 @@ export const NAV: NavGroup[] = [
       { path: '/settings/branding', label: 'branding', icon: <BgColorsOutlined />, page: p(() => import('./pages/settings/Branding')) },
       { path: '/settings/usage', label: 'usage', icon: <LineChartOutlined />, page: p(() => import('./pages/settings/Usage')) },
       { path: '/settings/export', label: 'dataExport', icon: <ContainerOutlined />, page: p(() => import('./pages/settings/DataExport')) },
+      { path: '/settings/watched-sources', label: 'watchedSources', icon: <FileSearchOutlined />, page: p(() => import('./pages/settings/WatchedSources')) },
     ],
   },
 ];
