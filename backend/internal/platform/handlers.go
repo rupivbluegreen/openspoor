@@ -141,7 +141,9 @@ func (m *Module) Routes(r chi.Router) {
 	r.Post("/esignatures", httpx.Handler(m.sign))
 	r.Get("/esignatures", httpx.Handler(m.listSignatures))
 	r.Get("/alerts", httpx.Handler(m.listAlerts))
-	r.Post("/alerts/{id}/resolve", httpx.Handler(m.resolveAlert))
+	// Any role except Viewer (read-only) may resolve alerts.
+	r.With(auth.Require(auth.RoleAdmin, auth.RoleSerialization, auth.RoleCompliance, auth.RoleOps, auth.RoleIntegration)).
+		Post("/alerts/{id}/resolve", httpx.Handler(m.resolveAlert))
 }
 
 type tokenResponse struct {

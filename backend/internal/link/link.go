@@ -280,7 +280,9 @@ func (m *Module) sendDoc(w http.ResponseWriter, r *http.Request) error {
 		})
 	case p.Endpoints.Federation != "":
 		var peer uuid.UUID
-		if peer, err = uuid.Parse(p.Endpoints.Federation); err == nil {
+		if peer, err = uuid.Parse(p.Endpoints.Federation); err != nil {
+			err = httpx.Conflict("partner federation endpoint is not a federation peer id")
+		} else {
 			delivery["channel"] = "federation"
 			delivery["messageId"], err = m.Send(ctx, peer, "b2b.document", d.Payload)
 		}

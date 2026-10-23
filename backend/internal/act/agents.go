@@ -62,8 +62,10 @@ func (m *Module) Routes(r chi.Router) {
 	r.Post("/agents/actions/{id}/revert", httpx.Handler(m.revert))
 	r.Get("/control-tower", httpx.Handler(m.controlTower))
 	r.Get("/cases", httpx.Handler(m.listCases))
-	r.Post("/cases", httpx.Handler(m.createCase))
-	r.Patch("/cases/{id}", httpx.Handler(m.updateCase))
+	// Viewer is read-only: any other role may open and update cases.
+	writer := auth.Require(auth.RoleAdmin, auth.RoleSerialization, auth.RoleCompliance, auth.RoleOps, auth.RoleIntegration)
+	r.With(writer).Post("/cases", httpx.Handler(m.createCase))
+	r.With(writer).Patch("/cases/{id}", httpx.Handler(m.updateCase))
 	m.workflowRoutes(r)
 	r.Post("/assistant/chat", httpx.Handler(m.chat))
 }
@@ -427,6 +429,14 @@ func (m *Module) reject(w http.ResponseWriter, r *http.Request) error {
 	}
 	p := auth.MustFrom(r.Context())
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
+		// Rejecting is a decision like approving: it needs one of the tool's approver roles.
+		var tool string
+		if err := tx.QueryRow(r.Context(), `select tool from agent_action where id=$1 and status='proposed'`, id).Scan(&tool); err != nil {
+			return httpx.Conflict("action is not awaiting approval")
+		}
+		if t := m.tools[tool]; t != nil && !p.Has(t.Scope()...) {
+			return httpx.Forbidden("rejecting this action needs one of: " + fmt.Sprint(t.Scope()))
+		}
 		a, err := db.One[Action](r.Context(), tx, `update agent_action set status='rejected', decided_by=$2, decided_at=now() where id=$1 and status='proposed' returning `+actionCols, id, p.Actor())
 		if err != nil {
 			return httpx.Conflict("action is not awaiting approval")
