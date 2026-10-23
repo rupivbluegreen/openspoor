@@ -37,6 +37,7 @@ export default function EpcisInbox() {
       <QueryTable<Row>
         rowKey={(r) => String(r.id ?? r.captureId)}
         queryKey={['/epcis/capture']}
+        tableId="epcis-inbox"
         fetcher={() => api.list<Row>('/epcis/capture')}
         columns={[
           { title: t('field.id'), dataIndex: 'id', render: (_d, r) => <Link to={`/trace/epcis/${r.id ?? r.captureId}`}>{String(r.id ?? r.captureId)}</Link> },

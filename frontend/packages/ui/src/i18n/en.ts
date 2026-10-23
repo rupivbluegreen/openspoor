@@ -66,6 +66,14 @@ const en = {
     input: 'EPCIS document', valid: 'Valid document', invalid: 'Invalid document', events: 'Events', format: 'Format',
     errors: 'Errors', graph: 'Graph', timeline: 'Timeline', convertTo: 'Convert to',
   },
+  search: {
+    placeholder: 'Search serials, products, shipments…', shortcut: 'Press / to search', empty: 'No matches',
+    kind: { serial: 'Serials', product: 'Products', shipment: 'Shipments', partner: 'Partners', lot: 'Lots', case: 'Cases' },
+  },
+  table: {
+    views: 'Views', saveView: 'Save current view…', viewName: 'View name', noViews: 'No saved views',
+    deleteView: 'Delete view', viewSaved: 'View saved', exportCsv: 'Export CSV', nothingToExport: 'No rows to export',
+  },
   operator: {
     tenants: 'Tenants', editTenant: 'Edit tenant', impersonateReason: 'Reason for support access',
     impersonated: 'Support session started', quotas: 'Quotas',

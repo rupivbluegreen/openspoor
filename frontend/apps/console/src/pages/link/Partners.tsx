@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Button, Card, Input, List, Space, Tabs, Tag, Typography } from 'antd';
 import { CheckOutlined, MailOutlined, PlusOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { api, CodeView, glnValidator, ModalForm, PageContainer, ProFormText, QueryTable, StatusTag, type Partner } from '@openspoor/ui/pro';
 import { useAction, useSubmit } from '../../lib/hooks';
@@ -19,10 +20,13 @@ function Connections() {
   const { t } = useTranslation();
   const approve = useAction((id: string) => api.post(`/partners/${id}/approve`), { invalidate: [['/partners']] });
   const create = useSubmit((v: Record<string, unknown>) => api.post('/partners', v), { invalidate: [['/partners']] });
+  const focusId = useSearchParams()[0].get('id');
   return (
     <QueryTable<Row>
       rowKey="id"
       queryKey={['/partners']}
+      tableId="partners"
+      focus={focusId ? { id: focusId } : undefined}
       fetcher={() => api.list<Row>('/partners')}
       columns={[
         { title: t('field.name'), dataIndex: 'name' },

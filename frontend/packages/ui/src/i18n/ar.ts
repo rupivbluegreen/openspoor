@@ -68,6 +68,14 @@ const ar: Messages = {
     input: 'مستند EPCIS', valid: 'مستند صالح', invalid: 'مستند غير صالح', events: 'الأحداث', format: 'التنسيق',
     errors: 'الأخطاء', graph: 'المخطط', timeline: 'الخط الزمني', convertTo: 'تحويل إلى',
   },
+  search: {
+    placeholder: 'ابحث في الأرقام التسلسلية والمنتجات والشحنات…', shortcut: 'اضغط / للبحث', empty: 'لا توجد نتائج',
+    kind: { serial: 'الأرقام التسلسلية', product: 'المنتجات', shipment: 'الشحنات', partner: 'الشركاء', lot: 'الدفعات', case: 'الحالات' },
+  },
+  table: {
+    views: 'طرق العرض', saveView: 'حفظ طريقة العرض الحالية…', viewName: 'اسم طريقة العرض', noViews: 'لا توجد طرق عرض محفوظة',
+    deleteView: 'حذف طريقة العرض', viewSaved: 'تم حفظ طريقة العرض', exportCsv: 'تصدير CSV', nothingToExport: 'لا توجد صفوف للتصدير',
+  },
   operator: {
     tenants: 'المستأجرون', editTenant: 'تعديل المستأجر', impersonateReason: 'سبب الوصول للدعم',
     impersonated: 'بدأت جلسة الدعم', quotas: 'الحصص',

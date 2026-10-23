@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from 'antd';
 import { EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { api, ModalForm, type Query, PageContainer, QueryTable, type ProColumns, type QueryTableProps } from '@openspoor/ui/pro';
 import { useSubmit } from '../lib/hooks';
@@ -31,6 +32,8 @@ export interface CrudPageProps<T extends Row> {
   toolbar?: ReactNode[];
   extraParams?: Row;
   table?: Partial<QueryTableProps<T>>;
+  /** Saved views / CSV export id; defaults to the list path (`/food/lots` → `food-lots`). */
+  tableId?: string;
   header?: ReactNode;
   children?: ReactNode;
   wrap?: boolean;
@@ -41,6 +44,11 @@ export function CrudPage<T extends Row>(props: CrudPageProps<T>) {
   const { t } = useTranslation();
   const key = props.queryKey ?? [props.path];
   const rowKey = props.rowKey ?? 'id';
+  const tableId = props.tableId ?? props.path.replace(/^\/+/, '').replace(/[^a-zA-Z0-9]+/g, '-');
+  // `?id=` (global search links) highlights that record and, when editable, opens it.
+  const [search] = useSearchParams();
+  const focusId = search.get('id');
+  const [editing, setEditing] = useState<T | null>(null);
 
   const create = useSubmit((v: Row) => api.post(props.create?.path ?? props.path, props.create?.transform ? props.create.transform(v) : v), {
     invalidate: [key],
@@ -64,21 +72,9 @@ export function CrudPage<T extends Row>(props: CrudPageProps<T>) {
       width: 160,
       render: (_d, record) => [
         props.edit ? (
-          <ModalForm<Row>
-            key="edit"
-            title={props.edit.title ?? t('action.edit')}
-            width={props.edit.width ?? 560}
-            trigger={
-              <a>
-                <EditOutlined /> {t('action.edit')}
-              </a>
-            }
-            modalProps={{ destroyOnHidden: true }}
-            initialValues={typeof props.edit.initialValues === 'function' ? props.edit.initialValues(record) : (props.edit.initialValues ?? record)}
-            onFinish={(values) => update({ record, values })}
-          >
-            {typeof props.edit.fields === 'function' ? props.edit.fields(record) : props.edit.fields}
-          </ModalForm>
+          <a key="edit" onClick={() => setEditing(record)}>
+            <EditOutlined /> {t('action.edit')}
+          </a>
         ) : null,
         ...(props.rowActions?.(record) ?? []),
       ],
@@ -113,17 +109,47 @@ export function CrudPage<T extends Row>(props: CrudPageProps<T>) {
       fetcher={({ current: _c, pageSize: _s, ...q }) => api.list<T>(props.path, q as Query)}
       extraParams={props.extraParams}
       columns={columns}
+      tableId={tableId}
+      focus={focusId ? { id: focusId, onFound: props.edit ? setEditing : undefined } : undefined}
       toolBarRender={() => toolbar}
       scroll={{ x: 'max-content' }}
       {...props.table}
     />
   );
 
-  if (props.wrap === false) return table;
+  const edit = props.edit;
+  const editForm =
+    edit && editing ? (
+      <ModalForm<Row>
+        key={String(editing[rowKey])}
+        open
+        onOpenChange={(o) => !o && setEditing(null)}
+        title={edit.title ?? t('action.edit')}
+        width={edit.width ?? 560}
+        modalProps={{ destroyOnHidden: true }}
+        initialValues={typeof edit.initialValues === 'function' ? edit.initialValues(editing) : (edit.initialValues ?? editing)}
+        onFinish={async (values) => {
+          const ok = await update({ record: editing, values });
+          if (ok) setEditing(null);
+          return ok;
+        }}
+      >
+        {typeof edit.fields === 'function' ? edit.fields(editing) : edit.fields}
+      </ModalForm>
+    ) : null;
+
+  if (props.wrap === false)
+    return (
+      <>
+        {table}
+        {editForm}
+      </>
+    );
   return (
     <PageContainer title={props.title} subTitle={props.subTitle} content={props.header}>
       {props.children}
       {table}
+      {editForm}
     </PageContainer>
   );
 }

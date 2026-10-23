@@ -35,6 +35,7 @@ export {
 export type {
   ProColumns,
   ProTableProps,
+  ColumnsState,
   ActionType,
   ProFormInstance,
   ProLayoutProps,

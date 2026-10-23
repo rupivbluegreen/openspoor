@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Button, Col, Modal, Row as GridRow, Segmented, Space, Statistic, Tag } from 'antd';
 import { CloudUploadOutlined, PlusOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
+import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
   api, CodeView, gtinValidator, ModalForm, notifyError, PageContainer, prettyJson, ProForm, ProFormDatePicker, ProFormDigit, ProFormList,
@@ -34,6 +36,13 @@ export default function Shipments() {
   const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
   const [output, setOutput] = useState<Output>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // `?id=` (global search links): switch to the shipment's direction, then highlight its row.
+  const focusId = useSearchParams()[0].get('id');
+  const focused = useQuery({ queryKey: ['/shipments', focusId], queryFn: () => api.get<Shipment>(`/shipments/${focusId}`), enabled: !!focusId });
+  const focusDirection = focused.data?.direction;
+  useEffect(() => {
+    if (focusDirection === 'inbound' || focusDirection === 'outbound') setDirection(focusDirection);
+  }, [focusDirection]);
 
   const run = async (key: string, fn: () => Promise<unknown>, show: (r: unknown) => Output) => {
     setBusy(key);
@@ -69,6 +78,8 @@ export default function Shipments() {
       <QueryTable<Row>
         rowKey="id"
         queryKey={['/shipments']}
+        tableId="shipments"
+        focus={focusId ? { id: focusId } : undefined}
         // The contract does not define a direction filter, so filter client-side.
         extraParams={{ direction }}
         fetcher={async () => {
@@ -78,9 +89,10 @@ export default function Shipments() {
         }}
         columns={[
           { title: 'PO', dataIndex: 'poNumber', copyable: true },
-          { title: t('field.partner'), dataIndex: 'partnerId', render: (_d, r) => partners.find((p) => p.value === r.partnerId)?.label ?? r.partnerId ?? '–' },
+          { title: t('field.partner'), dataIndex: 'partnerId', render: (_d, r) => partners.find((p) => p.value === r.partnerId)?.label ?? r.partnerId ?? '–',
+            exportValue: (r: Row) => partners.find((p) => p.value === r.partnerId)?.label ?? r.partnerId ?? '' },
           { title: 'Ship date', dataIndex: 'shipDate', valueType: 'date' },
-          { title: 'Items', dataIndex: 'items', render: (_d, r) => r.items?.length ?? 0 },
+          { title: 'Items', dataIndex: 'items', render: (_d, r) => r.items?.length ?? 0, exportValue: (r: Row) => r.items?.length ?? 0 },
           { title: t('field.status'), dataIndex: 'status', render: (_d, r) => <StatusTag status={r.status} /> },
           {
             title: t('common.actions'),

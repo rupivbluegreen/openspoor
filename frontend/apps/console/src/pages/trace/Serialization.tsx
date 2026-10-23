@@ -63,6 +63,7 @@ function Pools() {
     <QueryTable<Row>
       rowKey="id"
       queryKey={['/serial-pools']}
+      tableId="serial-pools"
       fetcher={() => api.list<Row>('/serial-pools')}
       columns={[
         { title: t('field.product'), dataIndex: 'productId', render: (_d, r) => products.find((p) => p.value === r.productId)?.label ?? r.gtin ?? r.productId },

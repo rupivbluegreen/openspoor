@@ -68,6 +68,14 @@ const nl: Messages = {
     input: 'EPCIS-document', valid: 'Geldig document', invalid: 'Ongeldig document', events: 'Gebeurtenissen', format: 'Formaat',
     errors: 'Fouten', graph: 'Grafiek', timeline: 'Tijdlijn', convertTo: 'Converteren naar',
   },
+  search: {
+    placeholder: 'Zoek serienummers, producten, zendingen…', shortcut: 'Druk op / om te zoeken', empty: 'Geen resultaten',
+    kind: { serial: 'Serienummers', product: 'Producten', shipment: 'Zendingen', partner: 'Partners', lot: 'Partijen', case: 'Zaken' },
+  },
+  table: {
+    views: 'Weergaven', saveView: 'Huidige weergave opslaan…', viewName: 'Naam van weergave', noViews: 'Geen opgeslagen weergaven',
+    deleteView: 'Weergave verwijderen', viewSaved: 'Weergave opgeslagen', exportCsv: 'CSV exporteren', nothingToExport: 'Geen rijen om te exporteren',
+  },
   operator: {
     tenants: 'Tenants', editTenant: 'Tenant bewerken', impersonateReason: 'Reden voor ondersteuningstoegang',
     impersonated: 'Ondersteuningssessie gestart', quotas: 'Quota',

@@ -711,3 +711,18 @@ export interface SensorIngestResult {
   stored: number;
   excursions: SensorExcursion[];
 }
+
+export type SearchHitKind = 'serial' | 'product' | 'shipment' | 'partner' | 'lot' | 'case';
+
+/** One global-search result (GET /search?q=); `path` is the console route to open. */
+export interface SearchHit {
+  kind: SearchHitKind | string;
+  id: string;
+  title: string;
+  subtitle?: string;
+  path: string;
+}
+
+export interface SearchResponse {
+  items: SearchHit[];
+}

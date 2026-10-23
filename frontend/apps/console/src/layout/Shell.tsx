@@ -4,9 +4,10 @@ import { LogoutOutlined, SwapOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { api, notifyError, LanguageSwitch, Logo, ProLayout, ThemeToggle, type MenuDataItem, type Tenant, type TokenResponse } from '@openspoor/ui/pro';
+import { api, notifyError, LanguageSwitch, Logo, ProLayout, TableViewsScope, ThemeToggle, type MenuDataItem, type Tenant, type TokenResponse } from '@openspoor/ui/pro';
 import { useSession } from '../lib/session';
 import { NAV } from '../nav';
+import { GlobalSearch } from './GlobalSearch';
 
 function TenantSwitcher() {
   const { t } = useTranslation();
@@ -73,6 +74,7 @@ export function Shell({ children }: { children: ReactNode }) {
       siderWidth={232}
       menuItemRender={(item, dom) => (item.path ? <Link to={item.path}>{dom}</Link> : dom)}
       actionsRender={(props) => [
+        <GlobalSearch key="search" compact={props.isMobile} />,
         !props.isMobile && tenant?.plan ? <Tag key="plan" color="green">{tenant.plan}</Tag> : null,
         <TenantSwitcher key="tenant" />,
         <LanguageSwitch key="lang" />,
@@ -105,7 +107,7 @@ export function Shell({ children }: { children: ReactNode }) {
         ),
       }}
     >
-      {children}
+      <TableViewsScope scope={principal ? `${principal.tenantId}.${principal.userId}` : undefined}>{children}</TableViewsScope>
     </ProLayout>
   );
 }

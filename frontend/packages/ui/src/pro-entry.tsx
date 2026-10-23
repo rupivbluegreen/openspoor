@@ -10,7 +10,8 @@ import { ProConfigProvider } from './pro';
 
 export * from './index';
 export * from './pro';
-export { QueryTable, type QueryTableProps, type FetchParams } from './components/QueryTable';
+export { QueryTable, tableToCsvRows, type QueryTableProps, type FetchParams } from './components/QueryTable';
+export { TableViewsScope, ViewsDropdown, ExportCsvButton, useSavedViews, type SavedView } from './components/TableTools';
 export { ESignatureModal, useESignature, SIGNATURE_MEANINGS } from './components/ESignature';
 export { JsonSchemaFields } from './components/JsonSchemaFields';
 export { LoginCard } from './components/LoginCard';
