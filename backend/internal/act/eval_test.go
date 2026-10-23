@@ -151,7 +151,7 @@ func TestEvalScoresAndTheAutonomyLadder(t *testing.T) {
 	}
 	e.Must(http.StatusOK, e.Do("GET", "/api/v1/agents/actions?status=pending", nil), nil)
 	problem(t, e.Call(qa, "PUT", "/api/v1/agents/tools/case.open", map[string]any{"mode": "auto"}), 409, "score 0.50 is below the required 0.97")
-	if auditCount(t, e, "agent.tool.autonomy.refused") != 1 {
+	if auditCount(t, e, "agent.tool.autonomy.refused") != 2 {
 		t.Fatal("the refusal must be audited")
 	}
 
