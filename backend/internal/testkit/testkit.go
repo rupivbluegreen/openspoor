@@ -63,7 +63,12 @@ func New(t testing.TB, opts ...func(*config.Config)) *Env {
 	if err := migrations.Up(ctx, dbURL); err != nil {
 		t.Fatal("migrate: ", err)
 	}
-	cfg := config.Config{Mode: config.ModeSingle, DatabaseURL: dbURL, JWTSecret: []byte("test-secret-0123456789"), JWTTTL: time.Hour,
+	// OPENSPOOR_TEST_MODE runs the whole suite in saas, single (default) or hub mode; CI runs all three.
+	mode := config.Mode(os.Getenv("OPENSPOOR_TEST_MODE"))
+	if mode == "" {
+		mode = config.ModeSingle
+	}
+	cfg := config.Config{Mode: mode, DatabaseURL: dbURL, JWTSecret: []byte("test-secret-0123456789"), JWTTTL: time.Hour,
 		DevAuth: true, PublicURL: "http://localhost", BaseDomain: "localhost", BillingDriver: "none", WorkerConcurrency: 2, MasterKey: []byte("test-master-key")}
 	for _, o := range opts {
 		o(&cfg)
