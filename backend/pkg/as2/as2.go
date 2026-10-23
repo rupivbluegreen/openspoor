@@ -7,11 +7,11 @@
 // Partner certificates are pinned: a signature verifies only when the signer certificate is
 // byte-identical to the certificate exchanged with the partner (no chain building).
 //
-// Algorithms are fixed to one profile: SHA-256 signatures with RSA keys (PKCS#1 v1.5) and
-// AES-256-CBC content encryption with RSA key transport.
-// TODO(spec): the algorithm sets that DSCSA trading partners require (SHA-1 and 3DES for legacy
-// partners, AES-GCM, RSA-OAEP, ECC keys, AS2 1.1 compression) are not defined in any document we
-// hold; see docs/OPEN_QUESTIONS.md.
+// Algorithms follow a default profile, SHA-256 signatures with RSA keys (PKCS#1 v1.5) and
+// AES-256-CBC content encryption with RSA key transport, with per-partner choices: SHA-384 or
+// SHA-512 digests, AES-128-CBC, SHA-1 for a partner flagged legacy, optional compression.
+// TODO(spec): the algorithm sets that DSCSA trading partners require (3DES, AES-GCM, RSA-OAEP,
+// ECC keys) are not defined in any document we hold; see docs/OPEN_QUESTIONS.md.
 package as2
 
 import (
@@ -30,8 +30,8 @@ import (
 
 // Profile constants.
 const (
-	// MICAlgorithm is the only message integrity check algorithm (the micalg parameter value).
-	MICAlgorithm = "sha-256"
+	// MICAlgorithm is the default message integrity check algorithm (the micalg parameter value).
+	MICAlgorithm = DigestSHA256
 	// Version is the AS2-Version header value sent.
 	Version = "1.0"
 	// MaxBody bounds the message and receipt sizes read from a peer.
@@ -59,23 +59,41 @@ func init() {
 }
 
 // Station is this node's AS2 identity.
+//
+// Cert and Key sign and are tried first for decryption. During a certificate rotation Other and
+// OtherKey hold the second certificate and key, which are also tried for decryption.
 type Station struct {
-	ID   string
-	Cert *x509.Certificate
-	Key  crypto.PrivateKey
+	ID       string
+	Cert     *x509.Certificate
+	Key      crypto.PrivateKey
+	Other    *x509.Certificate
+	OtherKey crypto.PrivateKey
 }
 
 // Peer is a trading partner: its AS2 identifier and the certificate exchanged with it, used to
 // verify its signatures and to encrypt to it.
+//
+// Cert is used to encrypt to the peer. During a certificate rotation Other holds the second
+// certificate, which is also accepted as the signer of messages and receipts.
 type Peer struct {
-	ID   string
-	Cert *x509.Certificate
+	ID    string
+	Cert  *x509.Certificate
+	Other *x509.Certificate
 }
 
 // Policy states what a receiver demands of messages from one peer.
 type Policy struct {
 	RequireSigned    bool
 	RequireEncrypted bool
+	// MinDigest is the weakest signature / integrity digest accepted (default SHA-256); SHA-1 counts
+	// only with Legacy.
+	MinDigest string
+	// MinEncryption is EncAES128 to accept AES-128 as well as AES-256; the default accepts AES-256 only.
+	MinEncryption string
+	// Legacy marks a partner flagged legacy: it permits MinDigest SHA-1.
+	Legacy bool
+	// AllowCompressed accepts compressed (CMS CompressedData) messages.
+	AllowCompressed bool
 }
 
 // Wire is an HTTP message to send: headers and body. MIC is the base64 message integrity check
@@ -97,11 +115,6 @@ func NewMessageID(stationID string) string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return fmt.Sprintf("%x@%s", b, stationID)
-}
-
-func micOf(content []byte) string {
-	sum := sha256.Sum256(content)
-	return base64.StdEncoding.EncodeToString(sum[:])
 }
 
 // Fingerprint is the SHA-256 fingerprint of a certificate, hex encoded.
@@ -127,8 +140,8 @@ func wrap64(b []byte) string {
 	return sb.String()
 }
 
-// signDetached returns a detached CMS SignedData over content.
-func signDetached(content []byte, st Station) ([]byte, error) {
+// signDetached returns a detached CMS SignedData over content, digested with d.
+func signDetached(content []byte, st Station, d string) ([]byte, error) {
 	if st.Cert == nil || st.Key == nil {
 		return nil, errors.New("as2: station has no signing key")
 	}
@@ -136,7 +149,7 @@ func signDetached(content []byte, st Station) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	sd.SetDigestAlgorithm(pkcs7.OIDDigestAlgorithmSHA256)
+	sd.SetDigestAlgorithm(digestTable[d].oid)
 	if err := sd.AddSigner(st.Cert, st.Key, pkcs7.SignerInfoConfig{}); err != nil {
 		return nil, err
 	}
@@ -144,10 +157,10 @@ func signDetached(content []byte, st Station) ([]byte, error) {
 	return sd.Finish()
 }
 
-// signedMultipart wraps entity (headers and body) in a multipart/signed body. It returns the
-// Content-Type value and the body.
-func signedMultipart(entity []byte, st Station) (string, []byte, error) {
-	sig, err := signDetached(entity, st)
+// signedMultipart wraps entity (headers and body) in a multipart/signed body signed with digest
+// d. It returns the Content-Type value and the body.
+func signedMultipart(entity []byte, st Station, d string) (string, []byte, error) {
+	sig, err := signDetached(entity, st, d)
 	if err != nil {
 		return "", nil, err
 	}
@@ -158,6 +171,6 @@ func signedMultipart(entity []byte, st Station) (string, []byte, error) {
 	body = append(body, "\r\n--"+b+"\r\nContent-Type: application/pkcs7-signature; name=\"smime.p7s\"\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"smime.p7s\"\r\n\r\n"...)
 	body = append(body, wrap64(sig)...)
 	body = append(body, "\r\n--"+b+"--\r\n"...)
-	ct := fmt.Sprintf(`multipart/signed; protocol="application/pkcs7-signature"; micalg=%s; boundary="%s"`, MICAlgorithm, b)
+	ct := fmt.Sprintf(`multipart/signed; protocol="application/pkcs7-signature"; micalg=%s; boundary="%s"`, DigestToken(d), b)
 	return ct, body, nil
 }

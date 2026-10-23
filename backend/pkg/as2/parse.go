@@ -2,6 +2,7 @@ package as2
 
 import (
 	"bytes"
+	"crypto/x509"
 	"errors"
 	"net/http"
 	"strings"
@@ -30,6 +31,26 @@ type Header struct {
 	MDN string
 	// ReceiptURL is the sender's Receipt-Delivery-Option (async receipts).
 	ReceiptURL string
+	// MICAlg is the digest the sender asked for in the receipt (signed-receipt-micalg); empty
+	// when it did not say.
+	MICAlg string
+}
+
+// requestedMICAlg reads the first supported digest after signed-receipt-micalg in a
+// Disposition-Notification-Options header.
+func requestedMICAlg(opts string) string {
+	_, rest, ok := strings.Cut(strings.ToLower(opts), "signed-receipt-micalg")
+	if !ok {
+		return ""
+	}
+	rest = strings.TrimPrefix(strings.TrimSpace(rest), "=")
+	for _, tok := range strings.FieldsFunc(rest, func(r rune) bool { return r == ',' || r == ';' || r == ' ' }) {
+		if tok == "required" || tok == "optional" {
+			continue
+		}
+		return NormalizeDigest(tok) // the first algorithm named is the preferred one
+	}
+	return ""
 }
 
 func stripAngles(s string) string {
@@ -51,6 +72,7 @@ func ParseHeader(h http.Header) (*Header, error) {
 	}
 	if h.Get("Disposition-Notification-To") != "" {
 		hd.MDN = MDNSync
+		hd.MICAlg = requestedMICAlg(h.Get("Disposition-Notification-Options"))
 		if u := strings.TrimSpace(h.Get("Receipt-Delivery-Option")); u != "" {
 			if strings.ContainsAny(u, " <>\r\n") {
 				return nil, errors.New("as2: invalid Receipt-Delivery-Option")
@@ -69,8 +91,11 @@ type Received struct {
 	Filename    string
 	Signed      bool
 	Encrypted   bool
-	// MIC is the base64 message integrity check to return in the receipt.
-	MIC string
+	// MIC is the base64 message integrity check to return in the receipt, computed with MICAlg.
+	MIC    string
+	MICAlg string
+	// Compressed is true when the payload arrived as CMS compressed data.
+	Compressed bool
 }
 
 // Open decrypts and verifies a received message from peer according to pol. Every rejection is
@@ -85,8 +110,8 @@ func Open(h http.Header, body []byte, st Station, peer Peer, pol Policy, now tim
 	mt, _ := mediaType(ct)
 	// Raw is the MIME entity (headers and body) the rest of the processing works on.
 	var raw []byte
-	switch mt {
-	case "application/pkcs7-mime", "application/x-pkcs7-mime":
+	switch {
+	case (mt == "application/pkcs7-mime" || mt == "application/x-pkcs7-mime") && !isCompressed(ct):
 		der, err := decodeCTE(h.Get("Content-Transfer-Encoding"), body)
 		if err != nil {
 			return nil, fail(ErrDecryption, err.Error())
@@ -98,7 +123,16 @@ func Open(h http.Header, body []byte, st Station, peer Peer, pol Policy, now tim
 		if st.Cert == nil || st.Key == nil {
 			return nil, fail(ErrDecryption, "station has no decryption key")
 		}
-		if raw, err = p7.Decrypt(st.Cert, st.Key); err != nil {
+		if alg := contentEncryptionOf(der); !encryptionAllowed(alg, pol.MinEncryption) {
+			if alg == "" {
+				alg = "unknown"
+			}
+			return nil, fail(ErrInsufficient, "content encryption "+alg+" is not accepted for this partner")
+		}
+		if raw, err = p7.Decrypt(st.Cert, st.Key); err != nil && st.Other != nil && st.OtherKey != nil {
+			raw, err = p7.Decrypt(st.Other, st.OtherKey)
+		}
+		if err != nil {
 			return nil, fail(ErrDecryption, "cannot decrypt message")
 		}
 		r.Encrypted = true
@@ -117,15 +151,18 @@ func Open(h http.Header, body []byte, st Station, peer Peer, pol Policy, now tim
 	}
 	emt, eparams := mediaType(eh.Get("Content-Type"))
 	payloadEntity := raw
+	floor := floorDigest(pol.MinDigest, pol.Legacy)
+	micAlg := DigestSHA256
 	if emt == "multipart/signed" {
 		parts, err := splitMultipart(ebody, eparams["boundary"])
 		if err != nil || len(parts) != 2 {
 			return nil, fail(ErrUnexpected, "malformed multipart/signed message")
 		}
-		if m := strings.ToLower(eparams["micalg"]); m != MICAlgorithm {
-			return nil, fail(ErrInsufficient, "unsupported micalg "+m)
+		micAlg = NormalizeDigest(eparams["micalg"])
+		if micAlg == "" || digestRank(micAlg) < digestRank(floor) {
+			return nil, fail(ErrInsufficient, "unsupported micalg "+strings.ToLower(eparams["micalg"]))
 		}
-		if err := verifyDetached(parts[0], parts[1], peer, now); err != nil {
+		if err := verifyDetached(parts[0], parts[1], peer, now, floor); err != nil {
 			return nil, err
 		}
 		r.Signed = true
@@ -137,6 +174,26 @@ func Open(h http.Header, body []byte, st Station, peer Peer, pol Policy, now tim
 	if err != nil {
 		return nil, fail(ErrUnexpected, err.Error())
 	}
+	if isCompressed(ph.Get("Content-Type")) {
+		if !pol.AllowCompressed {
+			return nil, fail(ErrUnexpected, "compressed messages are not enabled for this partner")
+		}
+		if !r.Signed && !r.Encrypted {
+			return nil, fail(ErrInsufficient, "a compressed message must be signed or encrypted")
+		}
+		cder, err := decodeCTE(ph.Get("Content-Transfer-Encoding"), pbody)
+		if err != nil {
+			return nil, fail(ErrUnexpected, err.Error())
+		}
+		inner, err := decompressEntity(cder)
+		if err != nil {
+			return nil, fail(ErrUnexpected, err.Error())
+		}
+		r.Compressed = true
+		if ph, pbody, err = splitEntity(inner); err != nil {
+			return nil, fail(ErrUnexpected, err.Error())
+		}
+	}
 	if r.Payload, err = decodeCTE(ph.Get("Content-Transfer-Encoding"), pbody); err != nil {
 		return nil, fail(ErrUnexpected, err.Error())
 	}
@@ -144,13 +201,22 @@ func Open(h http.Header, body []byte, st Station, peer Peer, pol Policy, now tim
 	if _, p, err := mimeParams(ph.Get("Content-Disposition")); err == nil {
 		r.Filename = p["filename"]
 	}
+	// An unsigned message has no micalg: use the digest the sender asked the receipt to carry,
+	// when it meets the policy, else SHA-256.
+	if !r.Signed {
+		micAlg = DigestSHA256
+		if a := hd.MICAlg; a != "" && digestRank(a) >= digestRank(floor) {
+			micAlg = a
+		}
+	}
+	r.MICAlg = micAlg
 	switch {
 	case r.Signed:
-		r.MIC = micOf(payloadEntity)
+		r.MIC = micOf(payloadEntity, micAlg)
 	case r.Encrypted:
-		r.MIC = micOf(raw)
+		r.MIC = micOf(raw, micAlg)
 	default:
-		r.MIC = micOf(entityBytes(r.ContentType, r.Filename, r.Payload))
+		r.MIC = micOf(entityBytes(r.ContentType, r.Filename, r.Payload), micAlg)
 	}
 	if r.ContentType == "" {
 		return nil, fail(ErrUnexpected, "payload has no Content-Type")
@@ -165,8 +231,9 @@ func headerLine(h http.Header, k string) []byte {
 	return nil
 }
 
-// verifyDetached checks a detached signature over signed with the peer's pinned certificate.
-func verifyDetached(signed, sigPart []byte, peer Peer, now time.Time) *Failure {
+// verifyDetached checks a detached signature over signed with the peer's pinned certificate (or
+// its second certificate during a rotation). The signature digest must be at least floor.
+func verifyDetached(signed, sigPart []byte, peer Peer, now time.Time, floor string) *Failure {
 	if peer.Cert == nil {
 		return fail(ErrAuthentication, "no certificate on file for the sender")
 	}
@@ -189,8 +256,9 @@ func verifyDetached(signed, sigPart []byte, peer Peer, now time.Time) *Failure {
 	if len(p7.Signers) != 1 {
 		return fail(ErrAuthentication, "exactly one signer is required")
 	}
-	if !p7.Signers[0].DigestAlgorithm.Algorithm.Equal(pkcs7.OIDDigestAlgorithmSHA256) {
-		return fail(ErrInsufficient, "signature digest is not SHA-256")
+	d := digestOfOID(p7.Signers[0].DigestAlgorithm.Algorithm)
+	if d == "" || digestRank(d) < digestRank(floor) {
+		return fail(ErrInsufficient, "signature digest is not accepted for this partner")
 	}
 	if err := p7.Verify(); err != nil {
 		var mm *pkcs7.MessageDigestMismatchError
@@ -199,13 +267,23 @@ func verifyDetached(signed, sigPart []byte, peer Peer, now time.Time) *Failure {
 		}
 		return fail(ErrAuthentication, "signature does not verify")
 	}
-	// Pin: the signer must be the certificate exchanged with this partner.
+	// Pin: the signer must be the certificate exchanged with this partner, or, during a rotation,
+	// the next one.
 	// TODO(spec): chain building, CA trust anchors and revocation checks (CRL, OCSP) are not
 	// performed; trust comes from the certificate exchange during onboarding only.
-	if s := p7.GetOnlySigner(); s == nil || !bytes.Equal(s.Raw, peer.Cert.Raw) {
+	s := p7.GetOnlySigner()
+	var match *x509.Certificate
+	switch {
+	case s == nil:
+	case bytes.Equal(s.Raw, peer.Cert.Raw):
+		match = peer.Cert
+	case peer.Other != nil && bytes.Equal(s.Raw, peer.Other.Raw):
+		match = peer.Other
+	}
+	if match == nil {
 		return fail(ErrAuthentication, "signer is not the partner's certificate")
 	}
-	if now.Before(peer.Cert.NotBefore) || now.After(peer.Cert.NotAfter) {
+	if now.Before(match.NotBefore) || now.After(match.NotAfter) {
 		return fail(ErrAuthentication, "partner certificate is not valid now")
 	}
 	return nil

@@ -63,6 +63,7 @@ func (m *Module) Routes(r chi.Router) {
 		r.Delete("/consumer-info/{gtin}/{lang}", httpx.Handler(m.deleteInfo))
 		r.Get("/verify/stats", httpx.Handler(m.stats))
 		r.Get("/verify/reports", httpx.Handler(m.listReports))
+		m.resolverManageRoutes(r)
 	})
 }
 
@@ -77,6 +78,7 @@ func (m *Module) Public(r chi.Router) {
 		r.Post("/playground/validate", httpx.Handler(m.validate))
 		r.Post("/playground/convert", httpx.Handler(m.convert))
 		r.Post("/playground/visualize", httpx.Handler(m.visualize))
+		m.publicResolver(r)
 	})
 }
 

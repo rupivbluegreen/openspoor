@@ -1,16 +1,27 @@
 import { useState } from 'react';
-import { Alert, Button, Modal, Table, Typography } from 'antd';
-import { CloudUploadOutlined } from '@ant-design/icons';
+import { Alert, Button, Modal, Space, Table, Tag, Typography } from 'antd';
+import { CloudUploadOutlined, DownloadOutlined } from '@ant-design/icons';
+import { useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import {
-  api, ModalForm, PageContainer, ProFormDigit, ProFormText, ProFormTextArea, QueryTable, StatusTag,
+  api, downloadBlob, ModalForm, notifyError, notifySuccess, PageContainer, ProFormDigit, ProFormSelect, ProFormText, ProFormTextArea, QueryTable, StatusTag,
   type ProColumns, type SensorExcursion, type SensorIngestResult, type SensorReading,
 } from '@openspoor/ui/pro';
 import { useSubmit } from '../../lib/hooks';
 import { useSession } from '../../lib/session';
 
-type Row = SensorExcursion & Record<string, unknown>;
+type Row = SensorExcursion & { disposition: string; sensorStatus: string } & Record<string, unknown>;
+
+interface DispositionForm {
+  disposition: 'quarantine' | 'release' | 'destroy';
+  reason: string;
+  tlcs?: string;
+  password?: string;
+}
+
+const FINAL = ['release', 'destroy'];
+const DISPOSITION_COLOR: Record<string, string> = { open: 'red', quarantine: 'orange', release: 'green', destroy: 'default' };
 
 interface IngestForm {
   deviceId: string;
@@ -52,6 +63,7 @@ const range = (r: SensorExcursion) => `${r.minC}–${r.maxC} °C`;
 export default function ColdChain() {
   const { t } = useTranslation();
   const { hasRole } = useSession();
+  const qc = useQueryClient();
   const [result, setResult] = useState<SensorIngestResult | null>(null);
   const ingest = useSubmit(
     (v: IngestForm) =>
@@ -63,7 +75,7 @@ export default function ColdChain() {
         maxC: v.maxC ?? undefined,
         readings: parseReadings(v.readings),
       }),
-    { invalidate: [['/sensors/excursions'], ['/alerts']], onSuccess: (r) => setResult(r) },
+    { invalidate: [['/sensors/excursions'], ['/food/cold-chain/excursions'], ['/alerts']], onSuccess: (r) => setResult(r) },
   );
 
   const columns: ProColumns<Row>[] = [
@@ -78,17 +90,87 @@ export default function ColdChain() {
     { title: 'Duration', dataIndex: 'minutes', render: (_d, r) => `${r.minutes} min` },
     { title: 'Started', dataIndex: 'startedAt', valueType: 'dateTime' },
     { title: 'Ended', dataIndex: 'endedAt', valueType: 'dateTime' },
-    { title: t('field.status'), dataIndex: 'status', render: (_d, r) => <StatusTag status={r.status} /> },
+    { title: t('field.status'), dataIndex: 'sensorStatus', render: (_d, r) => <StatusTag status={r.sensorStatus} /> },
+    { title: 'Disposition', dataIndex: 'disposition', render: (_d, r) => <Tag color={DISPOSITION_COLOR[r.disposition]}>{r.disposition}</Tag> },
   ];
+
+  const downloadReport = async (r: Row) => {
+    try {
+      const csv = await api.get<string>(`/food/cold-chain/excursions/${r.id}/report`, { format: 'csv' }, { responseType: 'text', headers: { Accept: 'text/csv' } });
+      downloadBlob(csv, `excursion-${r.id.slice(0, 8)}.csv`, 'text/csv;charset=utf-8');
+    } catch (e) {
+      notifyError(e);
+    }
+  };
+
+  /** Release and destroy are e-signed: re-authenticate with the password, then pass the signature id. */
+  const decide = (r: Row) => async (v: DispositionForm) => {
+    let signatureId: string | undefined;
+    if (FINAL.includes(v.disposition)) {
+      const sig = await api.post<{ id: string }>('/esignatures', {
+        password: v.password, meaning: 'approval', reason: v.reason, entity: 'food_excursion', entityId: r.id,
+      });
+      signatureId = sig.id;
+    }
+    await api.post(`/food/cold-chain/excursions/${r.id}/disposition`, {
+      disposition: v.disposition, reason: v.reason, signatureId,
+      tlcs: (v.tlcs ?? '').split(/[\s,;]+/).filter(Boolean),
+    });
+    return true;
+  };
 
   return (
     <PageContainer title={t('nav.coldChain')} subTitle="Temperature excursions detected from sensor readings (latest 500)">
       <QueryTable<Row>
         rowKey="id"
-        queryKey={['/sensors/excursions']}
-        fetcher={() => api.list<Row>('/sensors/excursions')}
+        queryKey={['/food/cold-chain/excursions']}
+        fetcher={() => api.list<Row>('/food/cold-chain/excursions')}
         scroll={{ x: 'max-content' }}
-        columns={[...columns, { title: 'Shipment', dataIndex: 'shipmentId', ellipsis: true, render: (_d, r) => r.shipmentId ?? '–' }]}
+        columns={[
+          ...columns,
+          { title: 'Shipment', dataIndex: 'shipmentId', ellipsis: true, render: (_d, r) => r.shipmentId ?? '–' },
+          {
+            title: t('common.actions'),
+            valueType: 'option',
+            render: (_d, r) => (
+              <Space>
+                <Button size="small" icon={<DownloadOutlined />} onClick={() => void downloadReport(r)}>
+                  Report
+                </Button>
+                {hasRole('Admin', 'Ops', 'Compliance') && !FINAL.includes(r.disposition) ? (
+                  <ModalForm<DispositionForm>
+                    title="Excursion disposition"
+                    width={560}
+                    trigger={<Button size="small">Decide</Button>}
+                    modalProps={{ destroyOnHidden: true }}
+                    initialValues={{ disposition: r.disposition === 'quarantine' ? 'release' : 'quarantine' }}
+                    onFinish={async (v) => {
+                      try {
+                        await decide(r)(v);
+                        notifySuccess(t('common.success'));
+                        await qc.invalidateQueries({ queryKey: ['/food/cold-chain/excursions'] });
+                        return true;
+                      } catch (e) {
+                        notifyError(e);
+                        return false;
+                      }
+                    }}
+                  >
+                    <ProFormSelect name="disposition" label="Decision" options={['quarantine', 'release', 'destroy']} rules={[{ required: true }]} />
+                    <ProFormTextArea name="reason" label="Reason" rules={[{ required: true }]} fieldProps={{ rows: 3, maxLength: 2000 }} />
+                    <ProFormText name="tlcs" label="Lots (TLC, comma separated)" tooltip="Lots held, released or destroyed by this decision; after a quarantine they default to the quarantined lots" />
+                    <ProFormText.Password
+                      name="password"
+                      label="Password (e-signature for release and destroy)"
+                      dependencies={['disposition']}
+                      rules={[({ getFieldValue }) => ({ required: FINAL.includes(getFieldValue('disposition') as string), message: 'Required to sign' })]}
+                    />
+                  </ModalForm>
+                ) : null}
+              </Space>
+            ),
+          },
+        ]}
         toolBarRender={() => [
           hasRole('Ops', 'Integration') ? (
             <ModalForm<IngestForm>

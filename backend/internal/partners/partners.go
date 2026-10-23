@@ -119,6 +119,9 @@ func (m *Module) Routes(r chi.Router) {
 		r.Get("/{id}/as2", httpx.Handler(m.getAS2))
 		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Put("/{id}/as2", httpx.Handler(m.putAS2))
 		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Delete("/{id}/as2", httpx.Handler(m.deleteAS2))
+		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Put("/{id}/as2/options", httpx.Handler(m.putAS2Options))
+		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Put("/{id}/as2/next", httpx.Handler(m.putAS2Next))
+		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Delete("/{id}/as2/next", httpx.Handler(m.deleteAS2Next))
 		r.Get("/{id}/onboarding", httpx.Handler(m.getOnboarding))
 		r.Post("/{id}/onboarding", httpx.Handler(m.startOnboarding))
 		r.Patch("/{id}/onboarding/items/{itemId}", httpx.Handler(m.updateItem))
@@ -128,7 +131,7 @@ func (m *Module) Routes(r chi.Router) {
 
 // Schedules implements kernel.Scheduled: partner health probes every 5 minutes.
 func (m *Module) Schedules() []kernel.Schedule {
-	return []kernel.Schedule{{Name: "partners.health", Every: 5 * time.Minute, Run: m.probeAll}}
+	return []kernel.Schedule{{Name: "partners.health", Every: 5 * time.Minute, Run: m.probeAll}, m.certSchedule()}
 }
 
 type partnerInput struct {

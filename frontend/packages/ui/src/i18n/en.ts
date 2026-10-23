@@ -15,7 +15,7 @@ const en = {
     licenses: 'Licenses', users: 'Users & roles', apiKeys: 'API keys', branding: 'Branding', usage: 'Usage & plan',
     dataExport: 'Data export', tenants: 'Tenants', verify: 'Scan & verify', playground: 'EPCIS Playground',
     marketplace: 'Marketplace', developerApps: 'Developer apps', learn: 'Learning hub', benchmarks: 'Benchmarks', kpiLibrary: 'KPI library',
-    udiDevices: 'UDI devices', coldChain: 'Cold chain',
+    udiDevices: 'UDI devices', coldChain: 'Cold chain', eudrReadiness: 'EUDR readiness',
     consumerInfo: 'Consumer information',
     mappingStudio: 'Mapping studio', messages: 'Messages', networkProfile: 'Network profile',
     oneUpOneDown: 'One-up/one-down',

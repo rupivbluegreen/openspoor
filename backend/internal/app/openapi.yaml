@@ -724,6 +724,22 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - apps
+    /api/v1/as2/certificates:
+        get:
+            operationId: getAs2Certificates
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - as2
     /api/v1/as2/receive:
         post:
             operationId: postAs2Receive
@@ -758,6 +774,37 @@ paths:
                 - as2
         put:
             operationId: putAs2Station
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - as2
+    /api/v1/as2/station/next:
+        delete:
+            operationId: deleteAs2StationNext
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - as2
+        put:
+            operationId: putAs2StationNext
             responses:
                 2XX:
                     content:
@@ -2469,6 +2516,104 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - food
+    /api/v1/food/cold-chain/excursions:
+        get:
+            operationId: getFoodColdChainExcursions
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/cold-chain/excursions/{id}:
+        get:
+            operationId: getFoodColdChainExcursionsId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/cold-chain/excursions/{id}/disposition:
+        post:
+            operationId: postFoodColdChainExcursionsIdDisposition
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/cold-chain/excursions/{id}/report:
+        get:
+            operationId: getFoodColdChainExcursionsIdReport
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/cold-chain/mkt:
+        get:
+            operationId: getFoodColdChainMkt
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
     /api/v1/food/cte:
         get:
             operationId: getFoodCte
@@ -2487,6 +2632,65 @@ paths:
                 - food
         post:
             operationId: postFoodCte
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/eudr/dates:
+        get:
+            operationId: getFoodEudrDates
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/eudr/dates/{key}:
+        delete:
+            operationId: deleteFoodEudrDatesKey
+            parameters:
+                - in: path
+                  name: key
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+        put:
+            operationId: putFoodEudrDatesKey
+            parameters:
+                - in: path
+                  name: key
+                  required: true
+                  schema:
+                    type: string
             responses:
                 2XX:
                     content:
@@ -2553,6 +2757,28 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - food
+    /api/v1/food/eudr/dds/{id}/checklist:
+        get:
+            operationId: getFoodEudrDdsIdChecklist
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
     /api/v1/food/eudr/dds/{id}/submit:
         post:
             operationId: postFoodEudrDdsIdSubmit
@@ -2562,6 +2788,75 @@ paths:
                   required: true
                   schema:
                     type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/eudr/plots/{id}/validation:
+        get:
+            operationId: getFoodEudrPlotsIdValidation
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/eudr/plots/validation:
+        get:
+            operationId: getFoodEudrPlotsValidation
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+    /api/v1/food/eudr/settings:
+        get:
+            operationId: getFoodEudrSettings
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - food
+        put:
+            operationId: putFoodEudrSettings
             responses:
                 2XX:
                     content:
@@ -4129,6 +4424,71 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - partners
+    /api/v1/partners/{id}/as2/next:
+        delete:
+            operationId: deletePartnersIdAs2Next
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+        put:
+            operationId: putPartnersIdAs2Next
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+    /api/v1/partners/{id}/as2/options:
+        put:
+            operationId: putPartnersIdAs2Options
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
     /api/v1/partners/{id}/health:
         post:
             operationId: postPartnersIdHealth
@@ -4766,6 +5126,118 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - reports
+    /api/v1/resolve/{id}:
+        get:
+            operationId: getResolveId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - resolve
+    /api/v1/resolver/link-types:
+        get:
+            operationId: getResolverLinkTypes
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - resolver
+    /api/v1/resolver/links:
+        get:
+            operationId: getResolverLinks
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - resolver
+        post:
+            operationId: postResolverLinks
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - resolver
+    /api/v1/resolver/links/{id}:
+        delete:
+            operationId: deleteResolverLinksId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - resolver
+        put:
+            operationId: putResolverLinksId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - resolver
     /api/v1/retention:
         get:
             operationId: getRetention
@@ -5667,6 +6139,381 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - tenant
+    /api/v1/trace/balance:
+        get:
+            operationId: getTraceBalance
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/balance/gaps:
+        get:
+            operationId: getTraceBalanceGaps
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/balance/reports:
+        get:
+            operationId: getTraceBalanceReports
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/balance/run:
+        post:
+            operationId: postTraceBalanceRun
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/balance/settings:
+        get:
+            operationId: getTraceBalanceSettings
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+        put:
+            operationId: putTraceBalanceSettings
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/integrity/checkpoints:
+        get:
+            operationId: getTraceIntegrityCheckpoints
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+        post:
+            operationId: postTraceIntegrityCheckpoints
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/integrity/checkpoints/{seq}:
+        get:
+            operationId: getTraceIntegrityCheckpointsSeq
+            parameters:
+                - in: path
+                  name: seq
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/integrity/node:
+        get:
+            operationId: getTraceIntegrityNode
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/integrity/verify:
+        get:
+            operationId: getTraceIntegrityVerify
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/recalls:
+        get:
+            operationId: getTraceRecalls
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+        post:
+            operationId: postTraceRecalls
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/recalls/{id}:
+        get:
+            operationId: getTraceRecallsId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/recalls/{id}/close:
+        post:
+            operationId: postTraceRecallsIdClose
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/recalls/{id}/holders/{holder}/acknowledge:
+        post:
+            operationId: postTraceRecallsIdHoldersHolderAcknowledge
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: holder
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/recalls/{id}/holders/{holder}/sent:
+        post:
+            operationId: postTraceRecallsIdHoldersHolderSent
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: holder
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/recalls/{id}/notify:
+        post:
+            operationId: postTraceRecallsIdNotify
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/recalls/{id}/refresh:
+        post:
+            operationId: postTraceRecallsIdRefresh
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
+    /api/v1/trace/recalls/{id}/report:
+        get:
+            operationId: getTraceRecallsIdReport
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - trace
     /api/v1/trace/serials/{id}:
         get:
             operationId: getTraceSerialsId

@@ -76,7 +76,7 @@ func TestModuleMetadata(t *testing.T) {
 		t.Fatalf("module: %+v", m)
 	}
 	s := m.Schedules()
-	if len(s) != 1 || s[0].Name != "partners.health" || s[0].Every != 5*time.Minute || s[0].Run == nil {
+	if len(s) != 2 || s[0].Name != "partners.health" || s[0].Every != 5*time.Minute || s[0].Run == nil || s[1].Name != partners.JobAS2Certs || s[1].Run == nil {
 		t.Fatalf("schedules: %+v", s)
 	}
 }

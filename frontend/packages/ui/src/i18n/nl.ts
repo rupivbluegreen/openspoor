@@ -17,7 +17,7 @@ const nl: Messages = {
     licenses: 'Vergunningen', users: 'Gebruikers & rollen', apiKeys: 'API-sleutels', branding: 'Huisstijl', usage: 'Gebruik & abonnement',
     dataExport: 'Gegevensexport', tenants: 'Tenants', verify: 'Scannen & verifiëren', playground: 'EPCIS-speeltuin',
     marketplace: 'Marktplaats', developerApps: 'Ontwikkelaarsapps', learn: 'Kennisbank', benchmarks: 'Benchmarks', kpiLibrary: 'KPI-bibliotheek',
-    udiDevices: 'UDI-hulpmiddelen', coldChain: 'Koudeketen',
+    udiDevices: 'UDI-hulpmiddelen', coldChain: 'Koudeketen', eudrReadiness: 'EUDR-gereedheid',
     consumerInfo: 'Consumenteninformatie',
     mappingStudio: 'Mappingstudio', messages: 'Berichten', networkProfile: 'Netwerkprofiel',
     oneUpOneDown: 'Eén stap terug/vooruit',

@@ -52,12 +52,49 @@ const (
 
 // AS2Station is the node's AS2 identity as shown to administrators (never the private key).
 type AS2Station struct {
-	AS2ID       string    `json:"as2Id" db:"as2_id"`
-	CertPEM     string    `json:"certPem" db:"cert_pem"`
-	Fingerprint string    `json:"fingerprint" db:"fingerprint"`
-	NotAfter    time.Time `json:"notAfter" db:"not_after"`
-	ReceiveURL  string    `json:"receiveUrl" db:"-"`
-	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
+	AS2ID       string     `json:"as2Id" db:"as2_id"`
+	CertPEM     string     `json:"certPem" db:"cert_pem"`
+	Fingerprint string     `json:"fingerprint" db:"fingerprint"`
+	Subject     string     `json:"subject" db:"subject"`
+	NotBefore   *time.Time `json:"notBefore,omitempty" db:"not_before"`
+	NotAfter    time.Time  `json:"notAfter" db:"not_after"`
+	ReceiveURL  string     `json:"receiveUrl" db:"-"`
+	UpdatedAt   time.Time  `json:"updatedAt" db:"updated_at"`
+	// The next certificate of a rotation as stored (the key is never returned); Next is the view.
+	NextCertPEM     *string      `json:"-" db:"next_cert_pem"`
+	NextFingerprint *string      `json:"-" db:"next_fingerprint"`
+	NextSubject     *string      `json:"-" db:"next_subject"`
+	NextNotBefore   *time.Time   `json:"-" db:"next_not_before"`
+	NextNotAfter    *time.Time   `json:"-" db:"next_not_after"`
+	SwitchAt        *time.Time   `json:"-" db:"switch_at"`
+	Next            *StationNext `json:"next,omitempty" db:"-"`
+	// Active is the certificate that signs now: current, or next once the switch date passed.
+	Active string `json:"active" db:"-"`
+}
+
+// StationNext is the node's next certificate, held alongside the current one during a rotation.
+// Both decrypt; signing switches to the next one at SwitchAt.
+type StationNext struct {
+	CertPEM     string    `json:"certPem"`
+	Fingerprint string    `json:"fingerprint"`
+	Subject     string    `json:"subject"`
+	NotBefore   time.Time `json:"notBefore"`
+	NotAfter    time.Time `json:"notAfter"`
+	SwitchAt    time.Time `json:"switchAt"`
+}
+
+const stationCols = `as2_id, cert_pem, fingerprint, subject, not_before, not_after, updated_at, next_cert_pem, next_fingerprint, next_subject, next_not_before, next_not_after, switch_at`
+
+// assemble fills Next and Active from the stored columns.
+func (s *AS2Station) assemble(now time.Time) {
+	s.Active = "current"
+	if s.NextCertPEM == nil || s.NextFingerprint == nil || s.NextSubject == nil || s.NextNotBefore == nil || s.NextNotAfter == nil || s.SwitchAt == nil {
+		return
+	}
+	s.Next = &StationNext{CertPEM: *s.NextCertPEM, Fingerprint: *s.NextFingerprint, Subject: *s.NextSubject, NotBefore: *s.NextNotBefore, NotAfter: *s.NextNotAfter, SwitchAt: *s.SwitchAt}
+	if !s.SwitchAt.After(now) {
+		s.Active = "next"
+	}
 }
 
 func stationAAD(tenant uuid.UUID) []byte { return []byte("as2:station:" + tenant.String()) }
@@ -66,35 +103,64 @@ func (m *Module) receiveURL() string {
 	return strings.TrimRight(m.Cfg.PublicURL, "/") + "/api/v1/as2/receive"
 }
 
-// loadStation returns the tenant's AS2 identity with its private key, or db.ErrNotFound.
+// loadStation returns the tenant's AS2 identity with its private key, or db.ErrNotFound. During a
+// rotation it holds both certificates: the one that signs now (the next one once its switch date
+// passed) and the other, which still decrypts.
 func (m *Module) loadStation(ctx context.Context, tx pgx.Tx, tenant uuid.UUID) (as2.Station, error) {
 	var id, certPEM string
-	var sealed []byte
-	if err := tx.QueryRow(ctx, `select as2_id, cert_pem, key_sealed from as2_station where tenant_id=$1`, tenant).Scan(&id, &certPEM, &sealed); err != nil {
+	var sealed, nextSealed []byte
+	var nextPEM *string
+	var switchAt *time.Time
+	if err := tx.QueryRow(ctx, `select as2_id, cert_pem, key_sealed, next_cert_pem, next_key_sealed, switch_at from as2_station where tenant_id=$1`, tenant).Scan(&id, &certPEM, &sealed, &nextPEM, &nextSealed, &switchAt); err != nil {
 		return as2.Station{}, db.MapErr(err)
 	}
-	keyPEM, err := m.Keys.Open(ctx, tenant, sealed, stationAAD(tenant))
+	cur, err := m.openIdentity(ctx, tenant, certPEM, sealed)
 	if err != nil {
 		return as2.Station{}, err
+	}
+	st := as2.Station{ID: id, Cert: cur.cert, Key: cur.key}
+	if nextPEM != nil && nextSealed != nil && switchAt != nil {
+		next, err := m.openIdentity(ctx, tenant, *nextPEM, nextSealed)
+		if err != nil {
+			return as2.Station{}, err
+		}
+		st.Other, st.OtherKey = next.cert, next.key
+		if !switchAt.After(time.Now()) {
+			st = as2.Station{ID: id, Cert: next.cert, Key: next.key, Other: cur.cert, OtherKey: cur.key}
+		}
+	}
+	return st, nil
+}
+
+type identity struct {
+	cert *x509.Certificate
+	key  *rsa.PrivateKey
+}
+
+func (m *Module) openIdentity(ctx context.Context, tenant uuid.UUID, certPEM string, sealed []byte) (identity, error) {
+	keyPEM, err := m.Keys.Open(ctx, tenant, sealed, stationAAD(tenant))
+	if err != nil {
+		return identity{}, err
 	}
 	cert, err := as2.ParseCertPEM(certPEM, time.Time{})
 	if err != nil {
-		return as2.Station{}, err
+		return identity{}, err
 	}
 	key, err := as2.ParseKeyPEM(string(keyPEM))
 	if err != nil {
-		return as2.Station{}, err
+		return identity{}, err
 	}
-	return as2.Station{ID: id, Cert: cert, Key: key}, nil
+	return identity{cert, key}, nil
 }
 
 func (m *Module) getStation(w http.ResponseWriter, r *http.Request) error {
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		s, err := db.One[AS2Station](r.Context(), tx, `select as2_id, cert_pem, fingerprint, not_after, updated_at from as2_station where tenant_id = app_tenant()`)
+		s, err := db.One[AS2Station](r.Context(), tx, `select `+stationCols+` from as2_station where tenant_id = app_tenant()`)
 		if err != nil {
 			return err
 		}
 		s.ReceiveURL = m.receiveURL()
+		s.assemble(time.Now())
 		httpx.JSON(w, http.StatusOK, s)
 		return nil
 	})
@@ -116,14 +182,13 @@ func (m *Module) putStation(w http.ResponseWriter, r *http.Request) error {
 	now := time.Now()
 	var key *rsa.PrivateKey
 	var certPEM string
-	var fp string
-	var notAfter time.Time
+	var info as2.CertInfo
 	if in.Generate {
 		c, k, err := as2.GenerateStation(in.AS2ID, as2CertValidity, now)
 		if err != nil {
 			return err
 		}
-		key, certPEM, fp, notAfter = k, as2.CertPEM(c), as2.Fingerprint(c), c.NotAfter
+		key, certPEM, info = k, as2.CertPEM(c), as2.Describe(c)
 	} else {
 		c, err := as2.ParseCertPEM(in.CertPEM, now)
 		if err != nil {
@@ -135,7 +200,7 @@ func (m *Module) putStation(w http.ResponseWriter, r *http.Request) error {
 		if pub, ok := c.PublicKey.(*rsa.PublicKey); !ok || !pub.Equal(&key.PublicKey) {
 			return httpx.BadRequest("the private key does not match the certificate")
 		}
-		certPEM, fp, notAfter = as2.CertPEM(c), as2.Fingerprint(c), c.NotAfter
+		certPEM, info = as2.CertPEM(c), as2.Describe(c)
 	}
 	keyPEM, err := as2.EncodeKeyPEM(key)
 	if err != nil {
@@ -147,9 +212,15 @@ func (m *Module) putStation(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		s, err := db.One[AS2Station](r.Context(), tx, `insert into as2_station (tenant_id, as2_id, cert_pem, key_sealed, fingerprint, not_after) values (app_tenant(), $1,$2,$3,$4,$5)
-			on conflict (tenant_id) do update set as2_id=excluded.as2_id, cert_pem=excluded.cert_pem, key_sealed=excluded.key_sealed, fingerprint=excluded.fingerprint, not_after=excluded.not_after, updated_at=now()
-			returning as2_id, cert_pem, fingerprint, not_after, updated_at`, in.AS2ID, certPEM, sealed, fp, notAfter)
+		var oldFP string
+		err = tx.QueryRow(r.Context(), `select fingerprint from as2_station where tenant_id=$1`, tenant).Scan(&oldFP)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		s, err := db.One[AS2Station](r.Context(), tx, `insert into as2_station (tenant_id, as2_id, cert_pem, key_sealed, fingerprint, subject, not_before, not_after) values (app_tenant(), $1,$2,$3,$4,$5,$6,$7)
+			on conflict (tenant_id) do update set as2_id=excluded.as2_id, cert_pem=excluded.cert_pem, key_sealed=excluded.key_sealed, fingerprint=excluded.fingerprint,
+				subject=excluded.subject, not_before=excluded.not_before, not_after=excluded.not_after, updated_at=now()
+			returning `+stationCols, in.AS2ID, certPEM, sealed, info.Fingerprint, info.Subject, info.NotBefore, info.NotAfter)
 		if err != nil {
 			if errors.Is(err, db.ErrConflict) {
 				return httpx.Conflict("that AS2 identifier is used by another station on this node")
@@ -157,8 +228,14 @@ func (m *Module) putStation(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		s.ReceiveURL = m.receiveURL()
+		s.assemble(time.Now())
+		if oldFP != "" && oldFP != s.Fingerprint {
+			if err := partners.ResolveCertAlerts(r.Context(), tx, oldFP); err != nil {
+				return err
+			}
+		}
 		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "as2.station.set", Entity: "as2_station", EntityID: tenant.String(),
-			After: map[string]any{"as2Id": s.AS2ID, "fingerprint": s.Fingerprint, "notAfter": s.NotAfter, "generated": in.Generate}}); err != nil {
+			After: map[string]any{"as2Id": s.AS2ID, "fingerprint": s.Fingerprint, "subject": s.Subject, "notBefore": info.NotBefore, "notAfter": s.NotAfter, "generated": in.Generate}}); err != nil {
 			return err
 		}
 		httpx.JSON(w, http.StatusOK, s)
@@ -183,7 +260,7 @@ func (t AS2Transport) Send(ctx context.Context, from uuid.UUID, p partners.Partn
 	}
 	var st as2.Station
 	var prof partners.AS2Profile
-	var peerCert *x509.Certificate
+	var certs partners.AS2Certs
 	err := m.DB.Tx(ctx, from, func(tx pgx.Tx) error {
 		var err error
 		if st, err = m.loadStation(ctx, tx, from); err != nil {
@@ -192,30 +269,30 @@ func (t AS2Transport) Send(ctx context.Context, from uuid.UUID, p partners.Partn
 			}
 			return err
 		}
-		var c *x509.Certificate
-		if prof, c, err = partners.LoadAS2(ctx, tx, m.Keys, from, p.ID); err != nil {
+		if prof, certs, err = partners.LoadAS2Certs(ctx, tx, m.Keys, from, p.ID, time.Now()); err != nil {
 			if errors.Is(err, db.ErrNotFound) {
 				return httpx.Conflict("AS2 is not configured: the partner connection has no AS2 profile")
 			}
 			return err
 		}
-		peerCert = c
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	if now.After(peerCert.NotAfter) || now.After(st.Cert.NotAfter) {
+	peer := certs.Peer(p.Endpoints.AS2ID)
+	if now.After(peer.Cert.NotAfter) || now.After(st.Cert.NotAfter) {
 		return nil, httpx.Conflict("AS2 certificate has expired")
 	}
 	msgID := as2.NewMessageID(st.ID)
 	out := as2.Outgoing{MessageID: msgID, Subject: "TI/TS " + s.PONumber, Filename: "tits-" + s.ID.String() + ".json", ContentType: as2ContentType, Payload: doc,
-		Sign: prof.Sign, Encrypt: prof.Encrypt, MDN: prof.MDN, Now: now}
+		Sign: prof.Sign, Encrypt: prof.Encrypt, MDN: prof.MDN, Now: now,
+		Digest: prof.SignatureAlgorithm, Encryption: prof.Encryption, Compress: prof.Compress, Legacy: prof.Legacy}
 	if prof.MDN == as2.MDNAsync {
 		out.AsyncURL = m.receiveURL()
 	}
-	wire, err := as2.Build(st, as2.Peer{ID: p.Endpoints.AS2ID, Cert: peerCert}, out)
+	wire, err := as2.Build(st, peer, out)
 	if err != nil {
 		return nil, err
 	}
@@ -223,15 +300,15 @@ func (t AS2Transport) Send(ctx context.Context, from uuid.UUID, p partners.Partn
 	rowID := ids.New()
 	// The row exists before the message leaves: an async receipt can arrive before Post returns.
 	if err := m.DB.Tx(ctx, from, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `insert into as2_message (id, tenant_id, partner_id, direction, message_id, as2_from, as2_to, subject, status, signed, encrypted, mdn_mode, mic, payload_sha256, shipment_id)
-			values ($1, app_tenant(), $2, 'outbound', $3, $4, $5, $6, 'mdn_pending', $7, $8, $9, $10, $11, $12)`,
-			rowID, p.ID, msgID, st.ID, p.Endpoints.AS2ID, wire.Header["Subject"], prof.Sign, prof.Encrypt, prof.MDN, wire.MIC, hex.EncodeToString(sum[:]), s.ID)
+		_, err := tx.Exec(ctx, `insert into as2_message (id, tenant_id, partner_id, direction, message_id, as2_from, as2_to, subject, status, signed, encrypted, mdn_mode, mic, mic_alg, payload_sha256, shipment_id)
+			values ($1, app_tenant(), $2, 'outbound', $3, $4, $5, $6, 'mdn_pending', $7, $8, $9, $10, $11, $12, $13)`,
+			rowID, p.ID, msgID, st.ID, p.Endpoints.AS2ID, wire.Header["Subject"], prof.Sign, prof.Encrypt, prof.MDN, wire.MIC, prof.SignatureAlgorithm, hex.EncodeToString(sum[:]), s.ID)
 		return err
 	}); err != nil {
 		return nil, err
 	}
 
-	resp := map[string]any{"transport": "as2", "messageId": msgID, "signed": prof.Sign, "encrypted": prof.Encrypt, "mdnMode": prof.MDN}
+	resp := map[string]any{"transport": "as2", "messageId": msgID, "signed": prof.Sign, "encrypted": prof.Encrypt, "mdnMode": prof.MDN, "signatureAlgorithm": prof.SignatureAlgorithm}
 	status, sendErr := "mdn_pending", error(nil)
 	disposition := ""
 	code, h, body, postErr := as2.Post(ctx, m.Client, p.Endpoints.AS2URL, wire)
@@ -245,10 +322,10 @@ func (t AS2Transport) Send(ctx context.Context, from uuid.UUID, p partners.Partn
 		resp["status"], resp["mdn"] = code, "pending"
 	default:
 		resp["status"] = code
-		mdn, err := as2.ParseMDN(h, body, as2.Peer{ID: p.Endpoints.AS2ID, Cert: peerCert}, true, time.Now())
+		mdn, err := as2.ParseMDNMin(h, body, peer, true, time.Now(), receiptFloor(prof), prof.Legacy)
 		if err == nil {
 			disposition = mdn.Disposition
-			err = checkMDN(mdn, msgID, wire.MIC, p.Endpoints.AS2ID)
+			err = checkMDN(mdn, msgID, wire.MIC, prof.SignatureAlgorithm, p.Endpoints.AS2ID)
 		}
 		if err != nil {
 			status, sendErr = "failed", err
@@ -267,7 +344,7 @@ func (t AS2Transport) Send(ctx context.Context, from uuid.UUID, p partners.Partn
 			return err
 		}
 		_, err := audit.Write(ctx, tx, audit.Record{Action: "as2.send", Entity: "as2_message", EntityID: rowID.String(),
-			After: map[string]any{"messageId": msgID, "to": p.Endpoints.AS2ID, "shipmentId": s.ID, "status": status, "signed": prof.Sign, "encrypted": prof.Encrypt, "mdn": prof.MDN, "error": errText}})
+			After: map[string]any{"messageId": msgID, "to": p.Endpoints.AS2ID, "shipmentId": s.ID, "status": status, "signed": prof.Sign, "encrypted": prof.Encrypt, "mdn": prof.MDN, "digest": prof.SignatureAlgorithm, "cipher": prof.Encryption, "compressed": prof.Compress, "legacy": prof.Legacy, "error": errText}})
 		return err
 	}); err != nil {
 		return resp, err
@@ -275,8 +352,29 @@ func (t AS2Transport) Send(ctx context.Context, from uuid.UUID, p partners.Partn
 	return resp, sendErr
 }
 
-// checkMDN validates a receipt against the message it answers.
-func checkMDN(mdn *as2.MDN, messageID, mic, peerID string) error {
+// receiptFloor is the weakest signature digest accepted on a partner's receipts: SHA-256, or
+// SHA-1 for a partner flagged legacy.
+func receiptFloor(prof partners.AS2Profile) string {
+	if prof.Legacy {
+		return as2.DigestSHA1
+	}
+	return as2.DigestSHA256
+}
+
+// inboundPolicy is what a connection demands of messages it sends us: signatures at least as strong
+// as the partner's configured digest (any digest for a partner flagged legacy), AES-256 or the
+// configured cipher, compression only when enabled.
+func inboundPolicy(prof partners.AS2Profile) as2.Policy {
+	min := prof.SignatureAlgorithm
+	if prof.Legacy {
+		min = as2.DigestSHA1
+	}
+	return as2.Policy{RequireSigned: prof.Sign, RequireEncrypted: prof.Encrypt, MinDigest: min, MinEncryption: prof.Encryption, Legacy: prof.Legacy, AllowCompressed: prof.Compress}
+}
+
+// checkMDN validates a receipt against the message it answers; micAlg is the digest the message's
+// integrity check was computed with.
+func checkMDN(mdn *as2.MDN, messageID, mic, micAlg, peerID string) error {
 	switch {
 	case mdn.OriginalMessageID != messageID:
 		return errors.New("receipt answers a different message")
@@ -288,8 +386,8 @@ func checkMDN(mdn *as2.MDN, messageID, mic, peerID string) error {
 			reason = mdn.Disposition
 		}
 		return errors.New("partner did not accept the message: " + reason)
-	case mdn.MIC == "" || mdn.MICAlg != as2.MICAlgorithm:
-		return errors.New("receipt carries no SHA-256 message integrity check")
+	case mdn.MIC == "" || mdn.MICAlg != micAlg:
+		return errors.New("receipt carries no " + strings.ToUpper(micAlg) + " message integrity check")
 	case mdn.MIC != mic:
 		return errors.New("receipt message integrity check does not match what was sent")
 	}
@@ -339,7 +437,7 @@ func (m *Module) as2Receive(w http.ResponseWriter, r *http.Request) {
 		st      as2.Station
 		partner partners.Partner
 		prof    partners.AS2Profile
-		cert    *x509.Certificate
+		certs   partners.AS2Certs
 	)
 	err = m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
 		var err error
@@ -349,7 +447,7 @@ func (m *Module) as2Receive(w http.ResponseWriter, r *http.Request) {
 		if partner, err = partners.ByAS2ID(ctx, tx, hd.From); err != nil {
 			return err
 		}
-		prof, cert, err = partners.LoadAS2(ctx, tx, m.Keys, tenant, partner.ID)
+		prof, certs, err = partners.LoadAS2Certs(ctx, tx, m.Keys, tenant, partner.ID, time.Now())
 		return err
 	})
 	if err != nil {
@@ -361,18 +459,18 @@ func (m *Module) as2Receive(w http.ResponseWriter, r *http.Request) {
 		as2Text(w, http.StatusInternalServerError, "temporarily unavailable")
 		return
 	}
-	peer := as2.Peer{ID: partner.Endpoints.AS2ID, Cert: cert}
+	peer := certs.Peer(partner.Endpoints.AS2ID)
 	if as2.IsMDN(r.Header, body) {
-		m.as2ReceiveMDN(ctx, w, r, tenant, partner, peer, hd, body)
+		m.as2ReceiveMDN(ctx, w, r, tenant, partner, prof, peer, hd, body)
 		return
 	}
 	m.as2ReceiveMessage(ctx, w, r, tenant, st, partner, prof, peer, hd, body)
 }
 
 // as2ReceiveMDN settles an outbound message from an asynchronous receipt.
-func (m *Module) as2ReceiveMDN(ctx context.Context, w http.ResponseWriter, r *http.Request, tenant uuid.UUID, partner partners.Partner, peer as2.Peer, hd *as2.Header, body []byte) {
+func (m *Module) as2ReceiveMDN(ctx context.Context, w http.ResponseWriter, r *http.Request, tenant uuid.UUID, partner partners.Partner, prof partners.AS2Profile, peer as2.Peer, hd *as2.Header, body []byte) {
 	actor := "as2:" + partner.Endpoints.AS2ID
-	mdn, perr := as2.ParseMDN(r.Header, body, peer, true, time.Now())
+	mdn, perr := as2.ParseMDNMin(r.Header, body, peer, true, time.Now(), receiptFloor(prof), prof.Legacy)
 	if perr != nil {
 		_ = m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
 			_, err := audit.WriteAs(ctx, tx, tenant, actor, audit.Record{Action: "as2.mdn.rejected", Entity: "partner", EntityID: partner.ID.String(), After: map[string]any{"messageId": hd.MessageID, "error": perr.Error()}})
@@ -384,10 +482,10 @@ func (m *Module) as2ReceiveMDN(ctx context.Context, w http.ResponseWriter, r *ht
 	status := http.StatusOK
 	err := m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
 		var rowID uuid.UUID
-		var mic, cur string
+		var mic, micAlg, cur string
 		var shipID *uuid.UUID
-		err := tx.QueryRow(ctx, `select id, mic, status, shipment_id from as2_message where tenant_id=$1 and direction='outbound' and message_id=$2 and partner_id=$3`,
-			tenant, mdn.OriginalMessageID, partner.ID).Scan(&rowID, &mic, &cur, &shipID)
+		err := tx.QueryRow(ctx, `select id, mic, mic_alg, status, shipment_id from as2_message where tenant_id=$1 and direction='outbound' and message_id=$2 and partner_id=$3`,
+			tenant, mdn.OriginalMessageID, partner.ID).Scan(&rowID, &mic, &micAlg, &cur, &shipID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			status = http.StatusNotFound
 			return nil
@@ -398,7 +496,7 @@ func (m *Module) as2ReceiveMDN(ctx context.Context, w http.ResponseWriter, r *ht
 		if cur != "mdn_pending" { // a repeated receipt is acknowledged without changing anything
 			return nil
 		}
-		checkErr := checkMDN(mdn, mdn.OriginalMessageID, mic, partner.Endpoints.AS2ID)
+		checkErr := checkMDN(mdn, mdn.OriginalMessageID, mic, micAlg, partner.Endpoints.AS2ID)
 		to, errText := "delivered", ""
 		if checkErr != nil {
 			to, errText = "failed", checkErr.Error()
@@ -453,7 +551,7 @@ func (m *Module) as2ReceiveMessage(ctx context.Context, w http.ResponseWriter, r
 			return
 		}
 	}
-	rcv, openErr := as2.Open(r.Header, body, st, peer, as2.Policy{RequireSigned: prof.Sign, RequireEncrypted: prof.Encrypt}, time.Now())
+	rcv, openErr := as2.Open(r.Header, body, st, peer, inboundPolicy(prof), time.Now())
 	rowID := ids.New()
 	sum := sha256.Sum256(body)
 	if openErr != nil {
@@ -462,7 +560,7 @@ func (m *Module) as2ReceiveMessage(ctx context.Context, w http.ResponseWriter, r
 		if errors.As(openErr, &f) {
 			code = f.Code
 		}
-		m.as2Answer(ctx, w, tenant, st, partner, hd, rowID, answer{errCode: code, errText: openErr.Error(), rawSum: sum[:], actor: actor, mdnURL: hd.ReceiptURL})
+		m.as2Answer(ctx, w, tenant, st, partner, hd, rowID, answer{errCode: code, errText: openErr.Error(), rawSum: sum[:], actor: actor, mdnURL: hd.ReceiptURL, prof: prof})
 		return
 	}
 
@@ -530,7 +628,7 @@ func (m *Module) as2ReceiveMessage(ctx context.Context, w http.ResponseWriter, r
 	}
 
 	ship, perr := m.as2Process(ctx, partner.ID, rcv)
-	a := answer{rcv: rcv, actor: actor, rawSum: sum[:], mdnURL: hd.ReceiptURL}
+	a := answer{rcv: rcv, actor: actor, rawSum: sum[:], mdnURL: hd.ReceiptURL, prof: prof}
 	if perr != nil {
 		a.errCode, a.errText = as2.ErrUnexpected, perr.Error()
 	} else {
@@ -548,19 +646,21 @@ type answer struct {
 	rawSum   []byte
 	actor    string
 	mdnURL   string
+	prof     partners.AS2Profile
 }
 
 // as2Answer builds the signed receipt, stores the outcome (message-log row, audit entry, receipt)
 // and replies: the receipt inline for sync, an empty 200 and a queued delivery for async.
 func (m *Module) as2Answer(ctx context.Context, w http.ResponseWriter, tenant uuid.UUID, st as2.Station, partner partners.Partner, hd *as2.Header, rowID uuid.UUID, a answer) {
-	mic := ""
+	mic, micAlg := "", ""
 	if a.rcv != nil {
-		mic = a.rcv.MIC
+		mic, micAlg = a.rcv.MIC, a.rcv.MICAlg
 	}
 	var mdn *as2.Wire
 	if hd.MDN != as2.MDNNone {
 		var err error
-		mdn, err = as2.BuildMDN(st, as2.MDNInput{MessageID: as2.NewMessageID(st.ID), OriginalMessageID: hd.MessageID, To: hd.From, MIC: mic, ErrorCode: a.errCode, Text: publicText(a.errCode), Sign: true})
+		mdn, err = as2.BuildMDN(st, as2.MDNInput{MessageID: as2.NewMessageID(st.ID), OriginalMessageID: hd.MessageID, To: hd.From, MIC: mic, MICAlg: micAlg, ErrorCode: a.errCode, Text: publicText(a.errCode), Sign: true,
+			Digest: a.prof.MDNSignatureAlgorithm, Legacy: a.prof.Legacy})
 		if err != nil {
 			as2Text(w, http.StatusInternalServerError, "cannot build receipt")
 			return
@@ -607,7 +707,7 @@ func (m *Module) as2Answer(ctx context.Context, w http.ResponseWriter, tenant uu
 			}
 		}
 		action := "as2.receive"
-		after := map[string]any{"messageId": hd.MessageID, "from": hd.From, "signed": signed, "encrypted": enc, "mic": mic, "mdn": hd.MDN, "shipmentId": shipID}
+		after := map[string]any{"messageId": hd.MessageID, "from": hd.From, "signed": signed, "encrypted": enc, "mic": mic, "micAlg": micAlg, "mdn": hd.MDN, "shipmentId": shipID}
 		if a.errCode != "" {
 			action = "as2.receive.rejected"
 			after["code"], after["error"] = a.errCode, a.errText

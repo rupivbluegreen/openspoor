@@ -81,6 +81,9 @@ func (m *Module) Routes(r chi.Router) {
 		r.Use(auth.Require(auth.RoleAdmin, auth.RoleOps, auth.RoleCompliance, auth.RoleIntegration))
 		r.Get("/station", httpx.Handler(m.getStation))
 		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Put("/station", httpx.Handler(m.putStation))
+		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Put("/station/next", httpx.Handler(m.putStationNext))
+		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Delete("/station/next", httpx.Handler(m.deleteStationNext))
+		r.Get("/certificates", httpx.Handler(m.getCertOverview))
 	})
 	r.Route("/investigations", m.investigationRoutes)
 	r.Get("/retention", httpx.Handler(m.listRetention))
@@ -96,10 +99,10 @@ func (m *Module) Public(r chi.Router) {
 
 // Schedules implements kernel.Scheduled.
 func (m *Module) Schedules() []kernel.Schedule {
-	return []kernel.Schedule{
+	return append([]kernel.Schedule{
 		{Name: "dscsa.retention", Every: 24 * time.Hour, Run: m.enforceRetention},
 		{Name: "dscsa.investigations_overdue", Every: time.Hour, Run: m.raiseOverdue},
-	}
+	}, m.certSchedules()...)
 }
 
 // Shipment is an outbound or inbound shipment.

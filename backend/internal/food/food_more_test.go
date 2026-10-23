@@ -279,7 +279,7 @@ func TestPlotsAndEUDR(t *testing.T) {
 		t.Fatalf("dds: %+v %s", d, geo)
 	}
 	var auto food.DDS
-	do(http.StatusCreated, "POST", "/api/v1/food/eudr/dds", base(map[string]any{"commodity": "CATTLE", "hsCode": "0102", "plotIds": []string{ranch.ID.String()}, "operatorRole": "trader"}), &auto)
+	do(http.StatusCreated, "POST", "/api/v1/food/eudr/dds", base(map[string]any{"commodity": "CATTLE", "hsCode": "0102", "plotIds": []string{ranch.ID.String()}, "operatorRole": "operator"}), &auto)
 	if !strings.HasPrefix(auto.Reference, "DDS-") || auto.UOM != "KGM" || auto.Payload["totalAreaHa"] != float64(500) {
 		t.Fatalf("auto ref: %+v", auto)
 	}

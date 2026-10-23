@@ -23,6 +23,11 @@ type MDNInput struct {
 	Text      string
 	Sign      bool
 	Now       time.Time
+	// MICAlg is the digest the MIC was computed with (default SHA-256). Digest signs the receipt
+	// (default SHA-256); SHA-1 needs Legacy.
+	MICAlg string
+	Digest string
+	Legacy bool
 }
 
 const reportingUA = "OpenSpoor AS2"
@@ -35,6 +40,14 @@ func BuildMDN(st Station, in MDNInput) (*Wire, error) {
 	}
 	if in.Now.IsZero() {
 		in.Now = time.Now()
+	}
+	digest, err := sendDigest(in.Digest, in.Legacy)
+	if err != nil {
+		return nil, err
+	}
+	micAlg, err := digestOr(in.MICAlg, DigestSHA256)
+	if err != nil {
+		return nil, err
 	}
 	disp := "automatic-action/MDN-sent-automatically; processed"
 	text := in.Text
@@ -54,7 +67,7 @@ func BuildMDN(st Station, in MDNInput) (*Wire, error) {
 	fields.WriteString("Final-Recipient: rfc822; " + st.ID + "\r\n")
 	fields.WriteString("Original-Message-ID: <" + in.OriginalMessageID + ">\r\n")
 	if in.ErrorCode == "" && in.MIC != "" {
-		fields.WriteString("Received-Content-MIC: " + in.MIC + ", " + MICAlgorithm + "\r\n")
+		fields.WriteString("Received-Content-MIC: " + in.MIC + ", " + DigestToken(micAlg) + "\r\n")
 	}
 	fields.WriteString("Disposition: " + disp + "\r\n")
 	b := boundary()
@@ -66,8 +79,7 @@ func BuildMDN(st Station, in MDNInput) (*Wire, error) {
 	ct, body := reportCT, rep
 	if in.Sign {
 		entity := append([]byte("Content-Type: "+reportCT+"\r\n\r\n"), rep...)
-		var err error
-		if ct, body, err = signedMultipart(entity, st); err != nil {
+		if ct, body, err = signedMultipart(entity, st, digest); err != nil {
 			return nil, err
 		}
 	}
@@ -114,8 +126,14 @@ func IsMDN(h http.Header, body []byte) bool {
 }
 
 // ParseMDN parses and verifies a receipt from peer. An unsigned receipt is rejected when
-// requireSigned (a signed receipt was requested).
+// requireSigned (a signed receipt was requested). Receipts signed with SHA-1 are rejected.
 func ParseMDN(h http.Header, body []byte, peer Peer, requireSigned bool, now time.Time) (*MDN, error) {
+	return ParseMDNMin(h, body, peer, requireSigned, now, DigestSHA256, false)
+}
+
+// ParseMDNMin is ParseMDN with the weakest accepted receipt signature digest chosen by the
+// caller; DigestSHA1 counts only with legacy, a partner flagged legacy.
+func ParseMDNMin(h http.Header, body []byte, peer Peer, requireSigned bool, now time.Time, minDigest string, legacy bool) (*MDN, error) {
 	from := strings.TrimSpace(h.Get("AS2-From"))
 	to := strings.TrimSpace(h.Get("AS2-To"))
 	ct := h.Get("Content-Type")
@@ -128,7 +146,7 @@ func ParseMDN(h http.Header, body []byte, peer Peer, requireSigned bool, now tim
 		if err != nil || len(parts) != 2 {
 			return nil, errors.New("as2: malformed signed receipt")
 		}
-		if f := verifyDetached(parts[0], parts[1], peer, now); f != nil {
+		if f := verifyDetached(parts[0], parts[1], peer, now, floorDigest(minDigest, legacy)); f != nil {
 			return nil, f
 		}
 		m.Signed = true
@@ -168,7 +186,7 @@ func ParseMDN(h http.Header, body []byte, peer Peer, requireSigned bool, now tim
 	m.OriginalMessageID = stripAngles(fields.Get("Original-Message-ID"))
 	if mic := fields.Get("Received-Content-MIC"); mic != "" {
 		a, b, _ := strings.Cut(mic, ",")
-		m.MIC, m.MICAlg = strings.TrimSpace(a), strings.ToLower(strings.TrimSpace(b))
+		m.MIC, m.MICAlg = strings.TrimSpace(a), NormalizeDigest(b)
 	}
 	m.Disposition = fields.Get("Disposition")
 	_, tail, _ := strings.Cut(m.Disposition, ";")

@@ -69,6 +69,8 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/eudr/dds", httpx.Handler(m.createDDS))
 		r.Get("/eudr/dds/{id}", httpx.Handler(m.getDDS))
 		r.Post("/eudr/dds/{id}/submit", httpx.Handler(m.submitDDS))
+		m.eudrRoutes(r)
+		m.coldChainRoutes(r)
 		r.Get("/lots/{tlc}/certificates", httpx.Handler(m.lotCertificates))
 		r.Get("/certificates", httpx.Handler(m.listCertificates))
 		r.Post("/certificates", httpx.Handler(m.createCertificate))

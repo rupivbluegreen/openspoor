@@ -27,10 +27,14 @@ import (
 const TopicProjected = "epcis.captured"
 
 // Module is the trace bounded context.
-type Module struct{ kernel.Deps }
+type Module struct {
+	kernel.Deps
+	// SettleLag keeps events that may still be committing out of a checkpoint batch.
+	SettleLag time.Duration
+}
 
 // New creates the module.
-func New(d kernel.Deps) *Module { return &Module{Deps: d} }
+func New(d kernel.Deps) *Module { return &Module{Deps: d, SettleLag: defaultSettleLag} }
 
 // Name implements kernel.Module.
 func (m *Module) Name() string { return "trace" }
@@ -43,6 +47,9 @@ func (m *Module) Routes(r chi.Router) {
 		r.Get("/tree/*", httpx.Handler(m.tree))
 		r.Get("/stats", httpx.Handler(m.stats))
 		r.Get("/state", httpx.Handler(m.listState))
+		m.balanceRoutes(r)
+		m.recallRoutes(r)
+		m.integrityRoutes(r)
 	})
 }
 

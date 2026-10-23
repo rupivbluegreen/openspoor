@@ -2,8 +2,6 @@ package food
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -297,87 +295,15 @@ type DDS struct {
 	Status              string         `json:"status" db:"status"`
 	Payload             map[string]any `json:"payload" db:"payload"`
 	SubmissionRef       string         `json:"submissionRef" db:"submission_ref"`
-	CreatedAt           time.Time      `json:"createdAt" db:"created_at"`
+	// Kind is "statement" (made by the operator) or "upstream_reference" (a downstream trader's
+	// record of the upstream statement, see eudr.go).
+	Kind              string    `json:"kind" db:"kind"`
+	UpstreamReference string    `json:"upstreamReference" db:"upstream_reference"`
+	UpstreamOperator  string    `json:"upstreamOperator" db:"upstream_operator"`
+	CreatedAt         time.Time `json:"createdAt" db:"created_at"`
 }
 
-const ddsCols = `id, reference, operator_role, commodity, hs_code, description, quantity, uom, country_of_production, plot_ids, status, payload, submission_ref, created_at`
-
-// createDDS builds a statement from registered plots (geolocation per Art. 9(1)(d)).
-// TODO(spec): map the payload to the EU Information System (TRACES) DDS schema when submitting.
-func (m *Module) createDDS(w http.ResponseWriter, r *http.Request) error {
-	var in struct {
-		Reference           string      `json:"reference"`
-		OperatorRole        string      `json:"operatorRole"`
-		Commodity           string      `json:"commodity"`
-		HSCode              string      `json:"hsCode"`
-		Description         string      `json:"description"`
-		Quantity            float64     `json:"quantity"`
-		UOM                 string      `json:"uom"`
-		CountryOfProduction string      `json:"countryOfProduction"`
-		PlotIDs             []uuid.UUID `json:"plotIds"`
-	}
-	if err := httpx.Decode(r, &in); err != nil {
-		return err
-	}
-	in.Commodity = strings.ToLower(in.Commodity)
-	if !eudrCommodities[in.Commodity] {
-		return httpx.BadRequest("commodity must be one of cattle, cocoa, coffee, oil_palm, rubber, soya, wood (Regulation 2023/1115 Annex I)")
-	}
-	if len(in.PlotIDs) == 0 {
-		return httpx.BadRequest("geolocation of at least one plot is required (Art. 9(1)(d))")
-	}
-	if in.HSCode == "" || in.Description == "" || in.Quantity <= 0 || len(in.CountryOfProduction) != 2 {
-		return httpx.BadRequest("hsCode, description, quantity and ISO countryOfProduction are required")
-	}
-	if in.OperatorRole == "" {
-		in.OperatorRole = "operator"
-	}
-	if in.UOM == "" {
-		in.UOM = "KGM"
-	}
-	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		plots, err := db.List[Plot](r.Context(), tx, `select `+plotCols+` from farm_plot where id = any($1)`, in.PlotIDs)
-		if err != nil {
-			return err
-		}
-		if len(plots) != len(in.PlotIDs) {
-			return httpx.BadRequest("unknown plot id")
-		}
-		var features []map[string]any
-		var area float64
-		for _, p := range plots {
-			if p.Commodity != in.Commodity {
-				return httpx.BadRequest(fmt.Sprintf("plot %s produces %s, not %s", p.Name, p.Commodity, in.Commodity))
-			}
-			var g any
-			_ = json.Unmarshal(p.GeoJSON, &g)
-			if f, ok := g.(map[string]any); ok && f["type"] == "Feature" {
-				g = f["geometry"]
-			}
-			features = append(features, map[string]any{"type": "Feature", "geometry": g, "properties": map[string]any{"name": p.Name, "producer": p.ProducerName, "areaHa": p.AreaHa, "country": p.Country}})
-			area += p.AreaHa
-		}
-		if in.Reference == "" {
-			h := sha256.Sum256([]byte(fmt.Sprint(in.PlotIDs, in.HSCode, time.Now().UnixNano())))
-			in.Reference = "DDS-" + strings.ToUpper(hex.EncodeToString(h[:5]))
-		}
-		payload := map[string]any{"operatorRole": in.OperatorRole, "commodity": in.Commodity, "hsCode": in.HSCode, "description": in.Description,
-			"quantity": map[string]any{"value": in.Quantity, "uom": in.UOM}, "countryOfProduction": strings.ToUpper(in.CountryOfProduction),
-			"geolocation": map[string]any{"type": "FeatureCollection", "features": features}, "totalAreaHa": area,
-			"declaration": "Due diligence exercised; negligible risk that the products are non-compliant (Art. 4(2))"}
-		d, err := db.One[DDS](r.Context(), tx, `insert into eudr_dds (id, tenant_id, reference, operator_role, commodity, hs_code, description, quantity, uom, country_of_production, plot_ids, status, payload)
-			values ($1, app_tenant(), $2,$3,$4,$5,$6,$7,$8,upper($9),$10,'ready',$11) returning `+ddsCols,
-			ids.New(), in.Reference, in.OperatorRole, in.Commodity, in.HSCode, in.Description, in.Quantity, in.UOM, in.CountryOfProduction, in.PlotIDs, payload)
-		if err != nil {
-			return err
-		}
-		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "eudr.dds.create", Entity: "eudr_dds", EntityID: d.ID.String(), After: d}); err != nil {
-			return err
-		}
-		httpx.JSON(w, http.StatusCreated, d)
-		return nil
-	})
-}
+const ddsCols = `id, reference, operator_role, commodity, hs_code, description, quantity, uom, country_of_production, plot_ids, status, payload, submission_ref, kind, upstream_reference, upstream_operator, created_at`
 
 func (m *Module) listDDS(w http.ResponseWriter, r *http.Request) error {
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {

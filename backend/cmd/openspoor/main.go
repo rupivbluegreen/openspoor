@@ -33,6 +33,7 @@ Commands:
   eval-agents run the agent golden datasets and print the score table (--tenant SLUG records the scores, --agent NAME limits it)
   seed       load the demo data set (3 fictional companies, --packs N serialized packs)
   openapi    print the OpenAPI 3.1 document generated from the router
+  verify-checkpoint check exported tamper-evidence checkpoints offline (--pubkey KEY, --json)
   version    print the version
 `
 
@@ -40,6 +41,9 @@ func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
+	}
+	if os.Args[1] == "verify-checkpoint" { // offline: needs no configuration or database
+		os.Exit(runVerifyCheckpoint(os.Args[2:], os.Stdout, os.Stderr))
 	}
 	cfg, err := config.Load()
 	if err != nil {

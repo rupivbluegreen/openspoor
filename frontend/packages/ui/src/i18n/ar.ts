@@ -17,7 +17,7 @@ const ar: Messages = {
     licenses: 'التراخيص', users: 'المستخدمون والأدوار', apiKeys: 'مفاتيح API', branding: 'الهوية البصرية', usage: 'الاستخدام والخطة',
     dataExport: 'تصدير البيانات', tenants: 'المستأجرون', verify: 'المسح والتحقق', playground: 'ساحة تجربة EPCIS',
     marketplace: 'السوق', developerApps: 'تطبيقات المطورين', learn: 'مركز التعلم', benchmarks: 'المقارنات المعيارية', kpiLibrary: 'مكتبة مؤشرات الأداء',
-    udiDevices: 'أجهزة UDI', coldChain: 'سلسلة التبريد',
+    udiDevices: 'أجهزة UDI', coldChain: 'سلسلة التبريد', eudrReadiness: 'جاهزية EUDR',
     consumerInfo: 'معلومات المستهلك',
     mappingStudio: 'استوديو ربط الحقول', messages: 'الرسائل', networkProfile: 'الملف الشبكي',
     oneUpOneDown: 'خطوة للخلف/للأمام',

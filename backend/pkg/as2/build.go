@@ -1,13 +1,10 @@
 package as2
 
 import (
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/smallstep/pkcs7"
 )
 
 // Outgoing describes a message to send.
@@ -25,6 +22,16 @@ type Outgoing struct {
 	MDN      string
 	AsyncURL string
 	Now      time.Time
+	// Digest is the signature and integrity-check digest (default SHA-256). SHA-1 needs Legacy.
+	Digest string
+	// Encryption is the content cipher (default EncAES256, or EncAES128).
+	Encryption string
+	// Compress compresses the payload entity before signing and encryption (RFC 5402 style). It
+	// needs Sign or Encrypt, since the integrity check of a bare compressed entity is not defined.
+	// TODO(spec): see compress.go.
+	Compress bool
+	// Legacy permits SHA-1 for this partner.
+	Legacy bool
 }
 
 func rfc1123(t time.Time) string { return t.UTC().Format(time.RFC1123) }
@@ -46,6 +53,20 @@ func Build(st Station, peer Peer, o Outgoing) (*Wire, error) {
 	if o.MDN == MDNAsync && (o.AsyncURL == "" || strings.ContainsAny(o.AsyncURL, "\r\n <>")) {
 		return nil, errors.New("as2: async receipt needs a delivery URL")
 	}
+	digest, err := sendDigest(o.Digest, o.Legacy)
+	if err != nil {
+		return nil, err
+	}
+	enc := o.Encryption
+	if enc == "" {
+		enc = EncAES256
+	}
+	if !ValidEncryption(enc) {
+		return nil, errors.New("as2: unsupported content encryption " + enc)
+	}
+	if o.Compress && !o.Sign && !o.Encrypt {
+		return nil, errors.New("as2: compression needs signing or encryption")
+	}
 	if o.Encrypt && peer.Cert == nil {
 		return nil, errors.New("as2: no partner certificate to encrypt to")
 	}
@@ -53,12 +74,18 @@ func Build(st Station, peer Peer, o Outgoing) (*Wire, error) {
 		o.Now = time.Now()
 	}
 	entity := entityBytes(o.ContentType, o.Filename, o.Payload)
-	w := &Wire{Header: map[string]string{}, MIC: micOf(entity)}
+	if o.Compress {
+		var err error
+		if entity, err = compressEntity(entity); err != nil {
+			return nil, fmt.Errorf("as2: compress: %w", err)
+		}
+	}
+	w := &Wire{Header: map[string]string{}, MIC: micOf(entity, digest)}
 	var ct string
 	var body []byte
 	content := entity // what travels (before encryption), including its headers
 	if o.Sign {
-		sct, sbody, err := signedMultipart(entity, st)
+		sct, sbody, err := signedMultipart(entity, st, digest)
 		if err != nil {
 			return nil, err
 		}
@@ -68,11 +95,11 @@ func Build(st Station, peer Peer, o Outgoing) (*Wire, error) {
 		ct, body = o.ContentType, o.Payload
 	}
 	if o.Encrypt {
-		enc, err := pkcs7.Encrypt(content, []*x509.Certificate{peer.Cert})
+		env, err := encryptFor(content, peer.Cert, enc)
 		if err != nil {
 			return nil, fmt.Errorf("as2: encrypt: %w", err)
 		}
-		ct, body = `application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"`, enc
+		ct, body = `application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"`, env
 	}
 	h := w.Header
 	h["AS2-Version"] = Version
@@ -91,7 +118,7 @@ func Build(st Station, peer Peer, o Outgoing) (*Wire, error) {
 	}
 	if o.MDN != MDNNone {
 		h["Disposition-Notification-To"] = st.ID
-		h["Disposition-Notification-Options"] = "signed-receipt-protocol=required, pkcs7-signature; signed-receipt-micalg=required, " + MICAlgorithm
+		h["Disposition-Notification-Options"] = "signed-receipt-protocol=required, pkcs7-signature; signed-receipt-micalg=required, " + DigestToken(digest)
 		if o.MDN == MDNAsync {
 			h["Receipt-Delivery-Option"] = o.AsyncURL
 		}

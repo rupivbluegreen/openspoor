@@ -107,6 +107,7 @@ export const NAV: NavGroup[] = [
       { path: '/food/one-up-one-down', label: 'oneUpOneDown', icon: <ApartmentOutlined />, page: p(() => import('./pages/food/OneUpOneDown')) },
       { path: '/food/recalls', label: 'recalls', icon: <RollbackOutlined />, page: p(() => import('./pages/food/Recalls')) },
       { path: '/food/eudr', label: 'eudr', icon: <GlobalOutlined />, page: p(() => import('./pages/food/Eudr')) },
+      { path: '/food/eudr-readiness', label: 'eudrReadiness', icon: <GlobalOutlined />, page: p(() => import('./pages/food/EudrReadiness')) },
       { path: '/food/cold-chain', label: 'coldChain', icon: <FieldTimeOutlined />, page: p(() => import('./pages/food/ColdChain')) },
     ],
   },

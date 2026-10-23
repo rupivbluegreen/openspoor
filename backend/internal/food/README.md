@@ -58,6 +58,17 @@ they are off by default).
 | POST | `/recalls/{id}/close` | Close a recall |
 | GET, POST | `/eudr/dds` | List / create due diligence statements from registered plots |
 | GET | `/eudr/dds/{id}` | Get a statement |
+| GET | `/eudr/dds/{id}/checklist` | Completeness checklist (`ok` / `missing` / `warning` / `not_applicable` items; `complete` when nothing is missing) |
+| GET, PUT | `/eudr/settings` | The tenant's DDS role: `operator` (creates statements) or `downstream_trader` (records the upstream reference); PUT audited |
+| GET | `/eudr/dates` | Application dates, labelled "unverified, check the Official Journal" until a person confirms them |
+| PUT, DELETE | `/eudr/dates/{key}` | Set (date, note, verified) or reset a reference date (`large_medium_operators`, `micro_small_operators`); audited |
+| GET | `/eudr/plots/validation` | Validation report for every plot with machine-readable reasons and overlaps |
+| GET | `/eudr/plots/{id}/validation` | The report of one plot |
+| GET | `/cold-chain/excursions` | Sensor excursions with their disposition (`disposition=open\|quarantine\|release\|destroy`) |
+| GET | `/cold-chain/excursions/{id}` | Excursion report: readings, min/max/mean, mean kinetic temperature (`activationEnergyKJ` optional), decisions, lots |
+| GET | `/cold-chain/excursions/{id}/report` | Download as `format=json\|csv`; every download is audited |
+| POST | `/cold-chain/excursions/{id}/disposition` | `quarantine`, `release` or `destroy` with `reason`; release and destroy need `signatureId` (e-signature, entity `food_excursion`); admin / ops / compliance |
+| GET | `/cold-chain/mkt` | Mean kinetic temperature of a device window (`deviceId`, `from`, `to`, optional `activationEnergyKJ`) |
 | POST | `/eudr/dds/{id}/submit` | Mark submitted with a local reference (stub) |
 | GET | `/traceability-plan` | Current traceability plan (`siteId` optional) with editor helpers, review status and completeness hints |
 | GET | `/traceability-plan/versions` | All saved versions, newest first (who, when, why, current flag) |
@@ -75,6 +86,39 @@ they are off by default).
 
 Viewer may read (including downloads); writes need one of the roles above.
 
+## EUDR readiness
+
+- **Role.** `food_eudr_setting.dds_role` is `operator` (default) or `downstream_trader`. An operator
+  builds a statement from registered plots. A downstream trader records a reference to the upstream
+  statement (`upstreamReference`, optional `upstreamOperator`, no plots); the record has
+  `kind=upstream_reference`, status `referenced` and cannot be submitted. `TODO(spec)`: secondary
+  sources say the amended regime exempts downstream traders; the software does not assert it as law.
+- **Dates.** 2026-12-30 (large and medium) and 2027-06-30 (micro and small) are defaults from
+  secondary sources, always shown with the status "unverified, check the Official Journal" until a
+  tenant edits and confirms them.
+- **Plot validation** (`eudr_geo.go`, pure functions): closure, ring length, winding (RFC 7946),
+  self-intersection, coordinate range, decimals (working default 6), area sanity and mismatch,
+  point-versus-polygon by size (working default 4 ha, cattle exempt; `TODO(spec)`), overlap between
+  a tenant's plots (boundary crossing or containment of outer rings; the overlap area is not
+  computed). Each reason has a stable `code`, a `severity` (`error`, `warning`, `info`) and a
+  message; the status is `invalid` when any error is present.
+- **Checklist.** Covers the fields this software holds and the plot reports; it is not a legal
+  assessment (`TODO(spec)`: Article 9 / Annex II elements).
+
+## Cold chain
+
+- **Mean kinetic temperature** uses the Haynes formula; the default activation energy is
+  83.144 kJ/mol (`DefaultActivationEnergyKJ`, a documented convention). `TODO(spec)`: product-specific
+  values. Readings are weighted equally; the result says whether sampling was even.
+- **Dispositions** are append-only rows in `food_excursion_disposition`; the latest is current.
+  Allowed: open to any of quarantine / release / destroy, quarantine to release / destroy; release
+  and destroy are final. Quarantine, release and destroy move the named lots (`tlcs`) to
+  `quarantined`, back to their prior status, or `destroyed`. Release and destroy require the
+  caller's e-signature on the excursion, given after the last decision and usable once. Every
+  decision and every report download is audited.
+- Excursions and readings are written by the ecosystem module (`sensor_excursion`,
+  `sensor_reading`); this package reads them and leaves their status alone.
+
 ## Background work
 
 - Schedule `food.cert_expiry` (every 6 h): an alert (`food.certificate_expiring`; warning when
@@ -86,7 +130,9 @@ Viewer may read (including downloads); writes need one of the roles above.
 `food_lot`, `food_cte`, `food_lineage`, `farm_plot`, `recall`, `recall_notification`,
 `eudr_dds` (migration `00007_food.sql`); `food_certificate_link`, `food_authority_request` and
 the `supplier_record.scope` column (migration `00016_food_oneup_certificates.sql`);
-`food_traceability_plan` and `food_traceability_plan_setting` (migration `00020_traceability_plan.sql`).
+`food_traceability_plan` and `food_traceability_plan_setting` (migration `00020_traceability_plan.sql`);
+`food_eudr_setting`, `food_eudr_reference_date`, `food_excursion_disposition` and the
+`eudr_dds.kind` / `upstream_reference` / `upstream_operator` columns (migration `00028_food_eudr_coldchain.sql`).
 
 ## Depends on
 
@@ -102,6 +148,8 @@ the `supplier_record.scope` column (migration `00016_food_oneup_certificates.sql
 - Traceability plan: `TODO(spec)` confirm the element wording against the current eCFR text, the
   Food Traceability List categories offered as suggestions, and whether plan versions must be kept
   for a set period (all are kept) or reviewed on a schedule (none is asserted).
+- EUDR readiness and cold chain: see `docs/OPEN_QUESTIONS.md` (DDS roles, application dates,
+  geolocation thresholds, statement elements, activation energies, disposition approvals).
 - EUDR: "map the payload to the EU Information System (TRACES) DDS schema when submitting";
   submission is stubbed.
 - One-up/one-down: the Commission's guidance on Articles 11, 12, 14, 17, 18, 19 and 20 of
