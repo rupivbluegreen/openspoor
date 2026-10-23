@@ -31,11 +31,17 @@ type Line struct {
 	Expiry      string   `json:"expiry,omitempty"` // YYYY-MM-DD
 	Serials     []string `json:"serials,omitempty"`
 	Reason      string   `json:"reason,omitempty"` // returns and chargebacks
+	// Generic extensions used by the transaction types in the registry.
+	Status  string            `json:"status,omitempty"`  // canonical line status (see Type.LineStatuses)
+	Ref     string            `json:"ref,omitempty"`     // reference line: the referenced document number
+	RefType string            `json:"refType,omitempty"` // reference line: key from ReferenceKeys (or an X12 set number for acknowledgements)
+	Amount  float64           `json:"amount,omitempty"`  // reference line: monetary amount
+	Dates   map[string]string `json:"dates,omitempty"`   // line dates, YYYY-MM-DD (see DateKeys)
 }
 
 // Document is the canonical B2B document.
 type Document struct {
-	Type       string            `json:"type"` // order | asn | invoice | inventory | return | chargeback
+	Type       string            `json:"type"` // a key of the registry (Types), for example order, asn, forecast
 	Number     string            `json:"number"`
 	Date       time.Time         `json:"date"`
 	Buyer      Party             `json:"buyer"`
@@ -45,56 +51,60 @@ type Document struct {
 	References map[string]string `json:"references,omitempty"` // po, asn, invoice, contract
 	Lines      []Line            `json:"lines"`
 	SSCCs      []string          `json:"ssccs,omitempty"`
+	// Generic extensions used by the transaction types in the registry. All are optional.
+	Status  string             `json:"status,omitempty"`  // canonical status (see Type.Statuses)
+	Dates   map[string]string  `json:"dates,omitempty"`   // named dates, YYYY-MM-DD (see DateKeys)
+	Parties map[string]Party   `json:"parties,omitempty"` // further parties (see PartyKeys)
+	Amounts map[string]float64 `json:"amounts,omitempty"` // header amounts (see AmountKeys)
+	Note    string             `json:"note,omitempty"`    // free text
 }
 
 // Total sums line amounts.
 func (d Document) Total() float64 {
 	t := 0.0
 	for _, l := range d.Lines {
-		t += l.Quantity * l.UnitPrice
+		t += l.Quantity*l.UnitPrice + l.Amount
 	}
 	return t
-}
-
-// Validate checks required fields.
-func (d *Document) Validate() error {
-	if _, ok := x12Sets[d.Type]; !ok {
-		return fmt.Errorf("unknown document type %q", d.Type)
-	}
-	if d.Number == "" {
-		return errors.New("number is required")
-	}
-	if len(d.Lines) == 0 && d.Type != "inventory" {
-		return errors.New("at least one line is required")
-	}
-	if d.Date.IsZero() {
-		d.Date = time.Now().UTC()
-	}
-	if d.Currency == "" {
-		d.Currency = "USD"
-	}
-	for i := range d.Lines {
-		if d.Lines[i].Line == 0 {
-			d.Lines[i].Line = i + 1
-		}
-		if d.Lines[i].UOM == "" {
-			d.Lines[i].UOM = "EA"
-		}
-		if d.Lines[i].GTIN == "" {
-			return fmt.Errorf("line %d: gtin is required", i+1)
-		}
-	}
-	return nil
 }
 
 func num(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
 
 // --- X12 ---
 
-var x12Sets = map[string]string{"order": "850", "asn": "856", "invoice": "810", "inventory": "846", "return": "180", "chargeback": "844"}
+// x12Sets, edifactTypes and idocTypes are the type-to-identifier maps of the six hand-written
+// mappers (order, asn, invoice, inventory, return, chargeback); the registry fills them.
+var (
+	x12Sets      = map[string]string{}
+	edifactTypes = map[string]string{}
+	idocTypes    = map[string][2]string{}
+)
 
-// X12Set returns the transaction set number for a document type.
-func X12Set(docType string) string { return x12Sets[docType] }
+// X12Set returns the X12 transaction set number for a document type ("" when none is attributed).
+func X12Set(docType string) string { return byKeyX12(docType) }
+
+// gsCodes maps the hand-written sets to their functional identifier codes (GS01).
+var gsCodes = map[string]string{"850": "PO", "856": "SH", "810": "IN", "846": "IB", "180": "AN", "844": "CA"}
+
+// gsCode returns the functional identifier code for a transaction set ("" when unknown).
+func gsCode(set string) string {
+	if c, ok := gsCodes[set]; ok {
+		return c
+	}
+	if t, ok := LookupX12(set); ok && t.x12 != nil {
+		return t.x12.GS
+	}
+	return ""
+}
+
+// buyerSends reports whether the buyer is the interchange sender. The hand-written mappers
+// keep their original rule (order and return); registry types follow their flow.
+func (t Type) buyerSends() bool {
+	if t.legacy {
+		return t.Key == "order" || t.Key == "return"
+	}
+	return t.Flow == FlowBuyerToSeller
+}
 
 // Envelope carries interchange identifiers.
 type Envelope struct {
@@ -114,8 +124,13 @@ func clean(s string) string {
 	return strings.NewReplacer("*", " ", "~", " ", ":", " ", "'", " ", "+", " ", "?", " ").Replace(s)
 }
 
-// X12 renders an X12 interchange (version 004010) with one transaction set.
+// X12 renders an X12 interchange (version 004010) with one transaction set. It returns ""
+// when the document's type has no X12 writer (see Type.CanWriteX12).
 func X12(d Document, env Envelope) string {
+	t, ok := Lookup(d.Type)
+	if !ok || !t.CanWriteX12() {
+		return ""
+	}
 	if env.Control == 0 {
 		env.Control = 1
 	}
@@ -125,20 +140,19 @@ func X12(d Document, env Envelope) string {
 	if env.ReceiverID == "" {
 		env.ReceiverID = d.Buyer.GLN
 	}
-	if d.Type == "order" || d.Type == "return" {
+	if t.buyerSends() {
 		env.SenderID, env.ReceiverID = env.ReceiverID, env.SenderID
 		if env.SenderID == "" {
 			env.SenderID = d.Buyer.GLN
 		}
 	}
-	set := x12Sets[d.Type]
+	set := t.X12
 	ctrl := fmt.Sprintf("%09d", env.Control)
 	date, tm := d.Date.UTC().Format("060102"), d.Date.UTC().Format("1504")
 	var segs []string
 	seg := func(els ...string) { segs = append(segs, strings.Join(els, "*")) }
 	isa := []string{"ISA", "00", pad("", 10), "00", pad("", 10), "ZZ", pad(env.SenderID, 15), "ZZ", pad(env.ReceiverID, 15), date, tm, "U", "00401", ctrl, "0", "P", ">"}
-	gsCode := map[string]string{"850": "PO", "856": "SH", "810": "IN", "846": "IB", "180": "AN", "844": "CA"}[set]
-	header := []string{strings.Join(isa, "*"), strings.Join([]string{"GS", gsCode, env.SenderID, env.ReceiverID, d.Date.UTC().Format("20060102"), tm, strconv.Itoa(env.Control), "X", "004010"}, "*")}
+	header := []string{strings.Join(isa, "*"), strings.Join([]string{"GS", gsCode(set), env.SenderID, env.ReceiverID, d.Date.UTC().Format("20060102"), tm, strconv.Itoa(env.Control), "X", "004010"}, "*")}
 	seg("ST", set, "0001")
 	ymd := d.Date.UTC().Format("20060102")
 	party := func(code string, p Party) {
@@ -146,10 +160,19 @@ func X12(d Document, env Envelope) string {
 			seg("N1", code, clean(p.Name), "UL", p.GLN)
 		}
 	}
+	if t.x12 != nil {
+		segs = append(segs, t.x12Body(d)...)
+		set = ""
+	}
 	switch set {
 	case "850":
 		seg("BEG", "00", "SA", clean(d.Number), "", ymd)
 		seg("CUR", "BY", d.Currency)
+		for _, k := range dateOrder(d.Dates) {
+			if c := dateX12(k); c != "" {
+				seg("DTM", c, strings.ReplaceAll(d.Dates[k], "-", ""))
+			}
+		}
 		party("BY", d.Buyer)
 		party("SE", d.Seller)
 		party("ST", d.ShipTo)
@@ -234,8 +257,35 @@ func X12(d Document, env Envelope) string {
 	return strings.Join(append(append(header, segs...), trailer...), "~\n") + "~\n"
 }
 
-// ParseX12 reads an X12 850 (purchase order) into a canonical document.
+// ParseX12 reads an X12 interchange with one transaction set into a canonical document:
+// the 850 purchase order, and every registry type that has a segment template.
 func ParseX12(s string) (Document, error) {
+	if set, sep := firstSet(s); set != "" && set != "850" {
+		t, ok := LookupX12(set)
+		if !ok || t.x12 == nil {
+			return Document{}, fmt.Errorf("X12 %s import is not supported", set)
+		}
+		return parseX12Generic(t, splitSegments(s, '~'), sep)
+	}
+	return parseX12Order(s)
+}
+
+// firstSet returns the transaction set number of the first ST segment and the element separator.
+func firstSet(s string) (set, sep string) {
+	segs := splitSegments(s, '~')
+	if len(segs) == 0 || !strings.HasPrefix(segs[0], "ISA") || len(segs[0]) < 4 {
+		return "", ""
+	}
+	sep = string(segs[0][3])
+	for _, sg := range segs {
+		if e := strings.Split(sg, sep); e[0] == "ST" && len(e) > 1 {
+			return strings.TrimSpace(e[1]), sep
+		}
+	}
+	return "", sep
+}
+
+func parseX12Order(s string) (Document, error) {
 	d := Document{Type: "order", References: map[string]string{}}
 	segs := splitSegments(s, '~')
 	if len(segs) == 0 || !strings.HasPrefix(segs[0], "ISA") {
@@ -257,6 +307,14 @@ func ParseX12(s string) (Document, error) {
 				return d, fmt.Errorf("only X12 850 import is supported, got %s", get(1))
 			}
 			seenST = true
+		case "DTM":
+			for _, c := range DateKeys {
+				if c.X12 == get(1) && get(2) != "" {
+					if t, err := time.Parse("20060102", get(2)); err == nil {
+						setDate(&d.Dates, c.Key, t.Format("2006-01-02"))
+					}
+				}
+			}
 		case "BEG":
 			d.Number = get(3)
 			if t, err := time.Parse("20060102", get(5)); err == nil {
@@ -307,168 +365,15 @@ func splitSegments(s string, term byte) []string {
 	return out
 }
 
-// --- EDIFACT ---
-
-var edifactTypes = map[string]string{"order": "ORDERS", "asn": "DESADV", "invoice": "INVOIC", "inventory": "INVRPT", "return": "RETANN", "chargeback": "COMDIS"}
-
-// EDIFACTType returns the message type for a document type.
-func EDIFACTType(docType string) string { return edifactTypes[docType] }
-
-// EDIFACT renders a UN/EDIFACT D.96A interchange with one message.
-func EDIFACT(d Document, env Envelope) string {
-	if env.Control == 0 {
-		env.Control = 1
-	}
-	from, to := d.Seller.GLN, d.Buyer.GLN
-	if d.Type == "order" || d.Type == "return" {
-		from, to = to, from
-	}
-	if env.SenderID != "" {
-		from = env.SenderID
-	}
-	if env.ReceiverID != "" {
-		to = env.ReceiverID
-	}
-	msg := edifactTypes[d.Type]
-	ref := strconv.Itoa(env.Control)
-	var segs []string
-	seg := func(s string) { segs = append(segs, s) }
-	seg("UNH+1+" + msg + ":D:96A:UN:EAN008")
-	bgm := map[string]string{"ORDERS": "220", "DESADV": "351", "INVOIC": "380", "INVRPT": "35", "RETANN": "7", "COMDIS": "385"}[msg]
-	seg("BGM+" + bgm + "+" + clean(d.Number) + "+9")
-	seg("DTM+137:" + d.Date.UTC().Format("20060102") + ":102")
-	for k, v := range d.References {
-		code := map[string]string{"po": "ON", "asn": "AAK", "invoice": "IV", "contract": "CT"}[k]
-		if code != "" {
-			seg("RFF+" + code + ":" + clean(v))
-		}
-	}
-	nad := func(q string, p Party) {
-		if p.GLN != "" || p.Name != "" {
-			seg("NAD+" + q + "+" + p.GLN + "::9++" + clean(p.Name))
-		}
-	}
-	nad("BY", d.Buyer)
-	nad("SU", d.Seller)
-	nad("DP", d.ShipTo)
-	if msg == "ORDERS" || msg == "INVOIC" {
-		seg("CUX+2:" + d.Currency + ":9")
-	}
-	for _, s := range d.SSCCs {
-		seg("CPS+" + s)
-		seg("GIN+BJ+" + s)
-	}
-	for _, l := range d.Lines {
-		seg("LIN+" + strconv.Itoa(l.Line) + "++" + l.GTIN + ":SRV")
-		if l.Description != "" {
-			seg("IMD+F++:::" + clean(l.Description))
-		}
-		qtyCode := map[string]string{"ORDERS": "21", "DESADV": "12", "INVOIC": "47", "INVRPT": "145", "RETANN": "61", "COMDIS": "47"}[msg]
-		seg("QTY+" + qtyCode + ":" + num(l.Quantity) + ":" + l.UOM)
-		if l.Lot != "" {
-			seg("PIA+5+" + clean(l.Lot) + ":NB")
-		}
-		if l.Expiry != "" {
-			seg("DTM+361:" + strings.ReplaceAll(l.Expiry, "-", "") + ":102")
-		}
-		if l.UnitPrice != 0 {
-			seg("PRI+AAA:" + num(l.UnitPrice))
-		}
-		for _, s := range l.Serials {
-			seg("GIN+BN+" + clean(s))
-		}
-		if l.Reason != "" {
-			seg("FTX+AAI+++" + clean(l.Reason))
-		}
-	}
-	seg("UNS+S")
-	if msg == "INVOIC" || msg == "COMDIS" {
-		seg("MOA+86:" + num(d.Total()))
-	}
-	seg("CNT+2:" + strconv.Itoa(len(d.Lines)))
-	segs = append(segs, "UNT+"+strconv.Itoa(len(segs)+1)+"+1")
-	head := []string{"UNA:+.? ", "UNB+UNOC:3+" + from + ":14+" + to + ":14+" + d.Date.UTC().Format("060102:1504") + "+" + ref}
-	return strings.Join(head, "'\n") + "'\n" + strings.Join(segs, "'\n") + "'\nUNZ+1+" + ref + "'\n"
-}
-
-// ParseEDIFACT reads an EDIFACT ORDERS message into a canonical document.
-func ParseEDIFACT(s string) (Document, error) {
-	d := Document{Type: "order", References: map[string]string{}}
-	s = strings.TrimPrefix(strings.TrimSpace(s), "UNA:+.? ")
-	segs := splitSegments(s, '\'')
-	seen := false
-	for _, sg := range segs {
-		e := strings.Split(sg, "+")
-		comp := func(i, j int) string {
-			if i < len(e) {
-				c := strings.Split(e[i], ":")
-				if j < len(c) {
-					return c[j]
-				}
-			}
-			return ""
-		}
-		switch e[0] {
-		case "UNH":
-			if comp(2, 0) != "ORDERS" {
-				return d, fmt.Errorf("only EDIFACT ORDERS import is supported, got %s", comp(2, 0))
-			}
-			seen = true
-		case "BGM":
-			d.Number = comp(2, 0)
-		case "DTM":
-			if comp(1, 0) == "137" {
-				if t, err := time.Parse("20060102", comp(1, 1)); err == nil {
-					d.Date = t
-				}
-			}
-		case "RFF":
-			if comp(1, 0) == "ON" {
-				d.References["po"] = comp(1, 1)
-			}
-		case "NAD":
-			p := Party{GLN: comp(2, 0), Name: comp(4, 0)}
-			switch comp(1, 0) {
-			case "BY":
-				d.Buyer = p
-			case "SU":
-				d.Seller = p
-			case "DP":
-				d.ShipTo = p
-			}
-		case "CUX":
-			d.Currency = comp(1, 1)
-		case "LIN":
-			ln, _ := strconv.Atoi(comp(1, 0))
-			d.Lines = append(d.Lines, Line{Line: ln, GTIN: comp(3, 0)})
-		case "IMD":
-			if n := len(d.Lines); n > 0 {
-				d.Lines[n-1].Description = comp(3, 3)
-			}
-		case "QTY":
-			if n := len(d.Lines); n > 0 {
-				d.Lines[n-1].Quantity, _ = strconv.ParseFloat(comp(1, 1), 64)
-				d.Lines[n-1].UOM = comp(1, 2)
-			}
-		case "PRI":
-			if n := len(d.Lines); n > 0 {
-				d.Lines[n-1].UnitPrice, _ = strconv.ParseFloat(comp(1, 1), 64)
-			}
-		}
-	}
-	if !seen {
-		return d, errors.New("no UNH segment found")
-	}
-	return d, d.Validate()
-}
-
 // --- IDoc (XML) ---
 
-var idocTypes = map[string][2]string{"order": {"ORDERS05", "ORDERS"}, "asn": {"DELVRY07", "DESADV"}, "invoice": {"INVOIC02", "INVOIC"},
-	"inventory": {"WMMBID02", "WMMBXY"}, "return": {"ORDERS05", "ORDRSP"}, "chargeback": {"INVOIC02", "INVOIC"}}
-
-// IDocType returns the basic type and message type for a document type.
-func IDocType(docType string) (string, string) { t := idocTypes[docType]; return t[0], t[1] }
+// IDocType returns the basic type and message type for a document type ("" when none).
+func IDocType(docType string) (string, string) {
+	if t, ok := Lookup(docType); ok {
+		return t.IDocBasic, t.IDocMessage
+	}
+	return "", ""
+}
 
 type idocField struct {
 	XMLName xml.Name
@@ -485,6 +390,9 @@ type idocSegment struct {
 // IDoc renders an IDoc XML document (control record EDI_DC40 plus header, partner and item segments).
 func IDoc(d Document, env Envelope) (string, error) {
 	basic, msg := IDocType(d.Type)
+	if basic == "" {
+		return "", fmt.Errorf("no IDoc mapping for document type %q", d.Type)
+	}
 	var b strings.Builder
 	w := &b
 	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>`+"\n<%s>\n <IDOC BEGIN=\"1\">\n", basic)

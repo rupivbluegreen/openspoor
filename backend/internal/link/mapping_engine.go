@@ -91,25 +91,27 @@ type MapResult struct {
 	Errors    []RowError          `json:"errors"`
 }
 
-var docTypes = []string{"order", "asn", "invoice", "inventory", "return", "chargeback", "epcis"}
+// epcisDocType is the mapping target that produces EPCIS events instead of B2B documents.
+const epcisDocType = "epcis"
 
-// B2B targets: header-level and line-level ("lines." prefix). references.<key> is open-ended.
-var b2bHeaderTargets = []string{"number", "date", "currency", "buyer.name", "buyer.gln", "seller.name", "seller.gln", "shipTo.name", "shipTo.gln", "ssccs",
-	"references.po", "references.asn", "references.invoice", "references.contract"}
-var b2bLineTargets = []string{"lines.gtin", "lines.description", "lines.quantity", "lines.uom", "lines.unitPrice", "lines.lot", "lines.expiry", "lines.serials", "lines.reason"}
 var epcisTargets = []string{"type", "action", "eventTime", "eventTimeZoneOffset", "bizStep", "disposition", "readPoint", "bizLocation", "epcList", "parentID", "childEPCs",
 	"quantity.epcClass", "quantity.quantity", "quantity.uom", "bizTransaction.type", "bizTransaction.id"}
 
-// MappingTargets lists the target fields for a document type.
+// MappingTargets lists the target fields for a document type: for B2B types they come from
+// the registry type (header fields, then line fields with a "lines." prefix).
+// references.<key> is open-ended.
 func MappingTargets(docType string) []string {
-	if docType == "epcis" {
+	if docType == epcisDocType {
 		return epcisTargets
 	}
-	return append(append([]string{}, b2bHeaderTargets...), b2bLineTargets...)
+	if t, ok := edi.Lookup(docType); ok {
+		return t.Targets()
+	}
+	return nil
 }
 
 func validTarget(docType, t string) bool {
-	if docType != "epcis" && strings.HasPrefix(t, "references.") && len(t) > len("references.") {
+	if docType != epcisDocType && strings.HasPrefix(t, "references.") && len(t) > len("references.") {
 		return true
 	}
 	for _, x := range MappingTargets(docType) {
@@ -121,18 +123,17 @@ func validTarget(docType, t string) bool {
 }
 
 func validDocType(t string) bool {
-	for _, x := range docTypes {
-		if x == t {
-			return true
-		}
+	if t == epcisDocType {
+		return true
 	}
-	return false
+	_, ok := edi.Lookup(t)
+	return ok
 }
 
 // Validate checks the spec's shape (not the input).
 func (s *MappingSpec) Validate() error {
 	if !validDocType(s.DocType) {
-		return fmt.Errorf("docType must be one of %s", strings.Join(docTypes, ", "))
+		return fmt.Errorf("docType must be epcis or a B2B transaction type (GET /b2b/types), got %q", s.DocType)
 	}
 	switch s.Format {
 	case "csv", "json":
@@ -663,15 +664,59 @@ func setHeader(d *edi.Document, v map[string]string) *fieldErr {
 	d.Seller = edi.Party{Name: v["seller.name"], GLN: v["seller.gln"]}
 	d.ShipTo = edi.Party{Name: v["shipTo.name"], GLN: v["shipTo.gln"]}
 	d.SSCCs = splitList(v["ssccs"])
-	for k, x := range v {
-		if ref, ok := strings.CutPrefix(k, "references."); ok && x != "" {
+	d.Status, d.Note = v["status"], v["note"]
+	for _, k := range sortedKeys(v) {
+		x := v[k]
+		if x == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(k, "references."):
 			if d.References == nil {
 				d.References = map[string]string{}
 			}
-			d.References[ref] = x
+			d.References[strings.TrimPrefix(k, "references.")] = x
+		case strings.HasPrefix(k, "dates."):
+			if _, err := time.Parse("2006-01-02", x); err != nil {
+				return &fieldErr{k, fmt.Sprintf("%q is not YYYY-MM-DD; add a date transform", x)}
+			}
+			if d.Dates == nil {
+				d.Dates = map[string]string{}
+			}
+			d.Dates[strings.TrimPrefix(k, "dates.")] = x
+		case strings.HasPrefix(k, "parties."):
+			key, field, _ := strings.Cut(strings.TrimPrefix(k, "parties."), ".")
+			if d.Parties == nil {
+				d.Parties = map[string]edi.Party{}
+			}
+			p := d.Parties[key]
+			if field == "gln" {
+				p.GLN = x
+			} else {
+				p.Name = x
+			}
+			d.Parties[key] = p
+		case strings.HasPrefix(k, "amounts."):
+			n, err := parseNum(x)
+			if err != nil {
+				return &fieldErr{k, err.Error()}
+			}
+			if d.Amounts == nil {
+				d.Amounts = map[string]float64{}
+			}
+			d.Amounts[strings.TrimPrefix(k, "amounts.")] = n
 		}
 	}
 	return nil
+}
+
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func hasLine(v map[string]string) bool {
@@ -685,8 +730,22 @@ func hasLine(v map[string]string) bool {
 
 func makeLine(v map[string]string) (edi.Line, *fieldErr) {
 	l := edi.Line{GTIN: v["lines.gtin"], Description: v["lines.description"], UOM: v["lines.uom"], Lot: v["lines.lot"], Reason: v["lines.reason"],
-		Serials: splitList(v["lines.serials"])}
+		Serials: splitList(v["lines.serials"]), Status: v["lines.status"], Ref: v["lines.ref"], RefType: v["lines.refType"]}
 	var err error
+	if l.Amount, err = parseNum(v["lines.amount"]); err != nil {
+		return l, &fieldErr{"lines.amount", err.Error()}
+	}
+	for _, k := range sortedKeys(v) {
+		if key, ok := strings.CutPrefix(k, "lines.dates."); ok && v[k] != "" {
+			if _, err := time.Parse("2006-01-02", v[k]); err != nil {
+				return l, &fieldErr{k, fmt.Sprintf("%q is not YYYY-MM-DD; add a date transform", v[k])}
+			}
+			if l.Dates == nil {
+				l.Dates = map[string]string{}
+			}
+			l.Dates[key] = v[k]
+		}
+	}
 	if l.Quantity, err = parseNum(v["lines.quantity"]); err != nil {
 		return l, &fieldErr{"lines.quantity", err.Error()}
 	}

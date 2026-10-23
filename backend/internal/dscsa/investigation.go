@@ -928,29 +928,8 @@ func (m *Module) assembleTracingAnswer(w http.ResponseWriter, r *http.Request) e
 	}
 	ctx := r.Context()
 	return m.Tx(ctx, func(tx pgx.Tx) error {
-		inv, err := db.One[Investigation](ctx, tx, `select `+invCols+` from investigation where id=$1 for update`, id)
+		b, _, err := m.AssembleTracingAnswer(ctx, tx, id)
 		if err != nil {
-			return err
-		}
-		if inv.Status == StatusClosed {
-			return httpx.Conflict("investigation is closed")
-		}
-		ans, err := m.BuildTracingAnswer(ctx, tx, inv)
-		if err != nil {
-			return err
-		}
-		b, err := json.Marshal(ans)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `update investigation set tracing_answer=$2, answered_at=now(), updated_at=now() where id=$1`, id, b); err != nil {
-			return err
-		}
-		summary := map[string]any{"items": len(ans.Items), "transactions": len(ans.Transactions), "notFound": len(ans.NotFound), "truncated": ans.Truncated}
-		if err := addEvent(ctx, tx, id, "tracing_answer", inv.Status, inv.Status, "", summary); err != nil {
-			return err
-		}
-		if _, err := audit.Write(ctx, tx, audit.Record{Action: "investigation.tracing_answer", Entity: "investigation", EntityID: id.String(), After: summary}); err != nil {
 			return err
 		}
 		w.Header().Set("Content-Type", "application/json")

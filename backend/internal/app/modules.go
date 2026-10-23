@@ -63,6 +63,7 @@ func buildModules(d kernel.Deps, plat *platform.Module) ([]kernel.Module, error)
 		return stored.ID.String(), err
 	}
 	ac := act.New(d)
+	wireAgents(ac, ds)
 	ec := ecosystem.New(d, plat, ep)
 	mg := migration.New(d, ep, tr)
 	return []kernel.Module{plat, md, ser, ep, tr, pa, ds, vf, co, sa, fd, lk, ac, ec, mg}, nil

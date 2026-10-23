@@ -55,6 +55,7 @@ func (m *Module) Name() string { return "link" }
 func (m *Module) Routes(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Require(auth.RoleAdmin, auth.RoleOps, auth.RoleIntegration, auth.RoleCompliance))
+		r.Get("/b2b/types", httpx.Handler(m.listTypes))
 		r.Get("/b2b/documents", httpx.Handler(m.listDocs))
 		r.Post("/b2b/documents", httpx.Handler(m.createDoc))
 		r.Post("/b2b/documents/import", httpx.Handler(m.importDoc))
@@ -165,6 +166,31 @@ func (m *Module) getDoc(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+// listTypes lists the transaction type registry (pkg/edi): key, name, category, direction,
+// standard identifiers, required fields, validation rules and available renderings.
+// Filters: category, q (matches key, name, X12 set and EDIFACT message).
+func (m *Module) listTypes(w http.ResponseWriter, r *http.Request) error {
+	cat, q := r.URL.Query().Get("category"), strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	items := []edi.Info{}
+	counts := map[edi.Category]int{}
+	for _, t := range edi.Infos() {
+		counts[t.Category]++
+		if cat != "" && string(t.Category) != cat {
+			continue
+		}
+		if q != "" && !strings.Contains(strings.ToLower(t.Key+" "+t.Name+" "+t.Standards.X12+" "+t.Standards.EDIFACT), q) {
+			continue
+		}
+		items = append(items, t)
+	}
+	cats := []map[string]any{}
+	for _, c := range edi.Categories {
+		cats = append(cats, map[string]any{"key": c, "count": counts[c]})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items), "categories": cats})
+	return nil
+}
+
 // StoreDoc validates and stores a document inside tx.
 func StoreDoc(ctx context.Context, tx pgx.Tx, direction string, partnerID, related *uuid.UUID, d edi.Document) (Doc, error) {
 	if err := d.Validate(); err != nil {
@@ -198,6 +224,9 @@ func (m *Module) createDoc(w http.ResponseWriter, r *http.Request) error {
 	if in.Payload.Type == "" {
 		in.Payload.Type = in.Type
 	}
+	if in.Type != "" && in.Type != in.Payload.Type {
+		return httpx.BadRequest("type " + in.Type + " does not match payload.type " + in.Payload.Type)
+	}
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
 		if in.PartnerID != nil {
 			if _, err := partners.Get(r.Context(), tx, *in.PartnerID); err != nil {
@@ -212,7 +241,9 @@ func (m *Module) createDoc(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-// importDoc parses an inbound X12 850 or EDIFACT ORDERS message.
+// importDoc parses an inbound X12 or EDIFACT message of any registry type that has a reader
+// (see GET /b2b/types, formats), or maps a CSV, JSON or fixed-width file. For EDIFACT, "type"
+// names the registry type when several types share a message and document name code.
 func (m *Module) importDoc(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
 		Format        string     `json:"format"`
@@ -220,6 +251,7 @@ func (m *Module) importDoc(w http.ResponseWriter, r *http.Request) error {
 		ContentBase64 string     `json:"contentBase64"`
 		PartnerID     *uuid.UUID `json:"partnerId"`
 		MappingID     *uuid.UUID `json:"mappingId"`
+		Type          string     `json:"type"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		return err
@@ -236,7 +268,11 @@ func (m *Module) importDoc(w http.ResponseWriter, r *http.Request) error {
 	case "x12":
 		d, err = edi.ParseX12(in.Content)
 	case "edifact":
-		d, err = edi.ParseEDIFACT(in.Content)
+		if in.Type != "" {
+			d, err = edi.ParseEDIFACTAs(in.Content, in.Type)
+		} else {
+			d, err = edi.ParseEDIFACT(in.Content)
+		}
 	default:
 		return httpx.BadRequest("format must be x12, edifact, csv, json, flat or mapped")
 	}
@@ -266,8 +302,16 @@ func (m *Module) renderDoc(w http.ResponseWriter, r *http.Request) error {
 	}
 	env := edi.Envelope{Control: int(d.CreatedAt.Unix() % 1_000_000_000)}
 	var out, ct string
-	switch strings.ToLower(r.URL.Query().Get("format")) {
-	case "", "x12":
+	typ, _ := edi.Lookup(d.Payload.Type)
+	format := strings.ToLower(r.URL.Query().Get("format"))
+	if format == "" {
+		format = "x12"
+	}
+	if (format == "x12" && !typ.CanWriteX12()) || (format == "edifact" && !typ.CanWriteEDIFACT()) || (format == "idoc" && !typ.CanWriteIDoc()) {
+		return httpx.BadRequest("document type " + d.Payload.Type + " has no " + format + " rendering")
+	}
+	switch format {
+	case "x12":
 		out, ct = edi.X12(d.Payload, env), "application/edi-x12"
 	case "edifact":
 		out, ct = edi.EDIFACT(d.Payload, env), "application/edifact"

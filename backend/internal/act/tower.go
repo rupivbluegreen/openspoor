@@ -52,10 +52,14 @@ func OpenCase(ctx context.Context, tx pgx.Tx, in caseInput) (Case, error) {
 		in.Kind = "manual"
 	}
 	due := time.Now().Add(time.Duration(slaHours[in.Priority]) * time.Hour)
-	c, err := db.One[Case](ctx, tx, `insert into work_case (id, tenant_id, kind, title, priority, score, entity, entity_id, source, source_id, due_at)
-		values ($1, app_tenant(), $2,$3,$4,$5,$6,$7,$8,$9,$10)
+	notes := []map[string]string{}
+	for _, n := range in.Notes {
+		notes = append(notes, map[string]string{"by": "agent:" + in.Source, "at": time.Now().UTC().Format(time.RFC3339), "text": n})
+	}
+	c, err := db.One[Case](ctx, tx, `insert into work_case (id, tenant_id, kind, title, priority, score, entity, entity_id, source, source_id, due_at, notes)
+		values ($1, app_tenant(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		on conflict (tenant_id, source, source_id) where source_id <> '' and status <> 'resolved' do update set updated_at=now()
-		returning `+caseCols, ids.New(), in.Kind, in.Title, in.Priority, float64(5-in.Priority)*25, in.Entity, in.EntityID, in.Source, in.SourceID, due)
+		returning `+caseCols, ids.New(), in.Kind, in.Title, in.Priority, float64(5-in.Priority)*25, in.Entity, in.EntityID, in.Source, in.SourceID, due, notes)
 	if err != nil {
 		return c, err
 	}

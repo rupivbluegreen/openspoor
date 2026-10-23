@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -34,6 +35,15 @@ type Module struct {
 	tools  map[string]Tool
 	agents []Agent
 	LLM    LLM
+
+	// Mapping, Tracing and FSMA are the other modules' typed entry points used by the AI-native
+	// agents' tools; internal/app wires them (act may not import those modules).
+	Mapping MappingEngine
+	Tracing TracingAssembler
+	FSMA    FSMAExporter
+	// InsecureWatch lets the regulatory-source watcher fetch plain http and loopback addresses
+	// (tests and local development only). It is never set in production.
+	InsecureWatch bool
 }
 
 // New creates the module with the built-in tools and agents.
@@ -44,6 +54,7 @@ func New(d kernel.Deps) *Module {
 	}
 	m.agents = []Agent{exceptionTriage{}, regulatoryResubmitter{}, expiryQuarantine{}, partnerWatch{},
 		verificationSpike{}, reappearedSerial{}, duplicateVerification{}}
+	m.addAIAgents()
 	m.LLM = NewLLM(d.Cfg)
 	return m
 }
@@ -68,6 +79,7 @@ func (m *Module) Routes(r chi.Router) {
 	r.With(writer).Post("/cases", httpx.Handler(m.createCase))
 	r.With(writer).Patch("/cases/{id}", httpx.Handler(m.updateCase))
 	m.workflowRoutes(r)
+	m.agentRoutes(r)
 	r.Post("/assistant/chat", httpx.Handler(m.chat))
 }
 
@@ -121,7 +133,9 @@ type agentInfo struct {
 }
 
 var agentTools = map[string][]string{"exception-triage": {"case.open"}, "regulatory-resubmitter": {"report.resubmit"}, "expiry-quarantine": {"serials.set_status"}, "partner-watch": {"case.open"},
-	"verification-spike": {"case.open"}, "reappeared-serial": {"case.open"}, "duplicate-verification": {"case.open"}}
+	"verification-spike": {"case.open"}, "reappeared-serial": {"case.open"}, "duplicate-verification": {"case.open"},
+	"mapping-agent": {"mapping.save", "case.open"}, "onboarding-helper": {"case.open"}, "investigation-assistant": {"investigation.assemble_answer", "case.open"},
+	"inspection-agent": {"inspection.assemble"}, "reg-watch": {"case.open"}}
 
 func (m *Module) settings(ctx context.Context, tx pgx.Tx) (map[string][2]string, error) {
 	out := map[string][2]string{}
@@ -208,7 +222,11 @@ func (m *Module) Run(ctx context.Context, tenant uuid.UUID, a Agent) (int, error
 		if s, ok := st[a.Name()]; ok && s[0] == "false" {
 			return nil
 		}
-		auto := st[a.Name()][1] == "auto_low_risk"
+		agentAuto := st[a.Name()][1] == "auto_low_risk"
+		modes, err := m.toolModes(ctx, tx)
+		if err != nil {
+			return err
+		}
 		props, err := a.Observe(ctx, tx)
 		if err != nil {
 			return err
@@ -217,6 +235,11 @@ func (m *Module) Run(ctx context.Context, tenant uuid.UUID, a Agent) (int, error
 			tool := m.tools[p.Tool]
 			if tool == nil {
 				return fmt.Errorf("agent %s proposed unknown tool %s", a.Name(), p.Tool)
+			}
+			auto := effectiveMode(tool, modes, agentAuto) == ModeAuto
+			var evidence map[string]any
+			if _, ok := a.(polished); ok {
+				p, evidence = m.polish(ctx, p)
 			}
 			id := ids.New()
 			ct, err := tx.Exec(ctx, `insert into agent_action (id, tenant_id, agent, tool, title, summary, reasoning, input, after, risk, confidence, entity, entity_id, dedupe_key)
@@ -230,10 +253,10 @@ func (m *Module) Run(ctx context.Context, tenant uuid.UUID, a Agent) (int, error
 			}
 			n++
 			if _, err := audit.WriteAs(ctx, tx, tenant, "agent:"+a.Name(), audit.Record{Action: "agent.propose", Entity: "agent_action", EntityID: id.String(),
-				After: map[string]any{"tool": p.Tool, "title": p.Title, "input": p.Input}}); err != nil {
+				After: map[string]any{"tool": p.Tool, "title": p.Title, "input": p.Input, "confidence": p.Confidence, "reasoning": p.Reasoning, "llm": evidence}}); err != nil {
 				return err
 			}
-			if auto && tool.Risk() == "low" && tool.Reversible() {
+			if auto {
 				autoIDs = append(autoIDs, id)
 			}
 		}
@@ -243,7 +266,7 @@ func (m *Module) Run(ctx context.Context, tenant uuid.UUID, a Agent) (int, error
 		return n, err
 	}
 	for _, id := range autoIDs {
-		_, _ = m.execute(auth.With(ctx, auth.System(tenant)), tenant, id, "agent:"+a.Name()+" (auto, low risk)")
+		_, _ = m.execute(auth.With(ctx, auth.System(tenant)), tenant, id, "agent:"+a.Name()+autoSuffix)
 	}
 	return n, nil
 }
@@ -315,6 +338,7 @@ type Action struct {
 	CreatedAt     time.Time       `json:"createdAt" db:"created_at"`
 	Reversible    bool            `json:"reversible" db:"-"`
 	ApproverRoles []string        `json:"approverRoles" db:"-"`
+	Autonomy      string          `json:"autonomy" db:"-"` // suggest | approve | auto (the tool's mode for this tenant)
 }
 
 const actionCols = `id, agent, tool, title, summary, reasoning, input, before, after, risk, confidence, status, entity, entity_id, decided_by, decided_at, executed_at, reverted_at, result, created_at`
@@ -333,6 +357,9 @@ func (m *Module) listActions(w http.ResponseWriter, r *http.Request) error {
 			m.decorate(&items[i])
 		}
 		if err == nil {
+			err = m.withModes(r.Context(), tx, items)
+		}
+		if err == nil {
 			httpx.JSON(w, http.StatusOK, httpx.Page[Action]{Items: items, Total: len(items)})
 		}
 		return err
@@ -348,7 +375,10 @@ func (m *Module) getAction(w http.ResponseWriter, r *http.Request) error {
 		a, err := db.One[Action](r.Context(), tx, `select `+actionCols+` from agent_action where id=$1`, id)
 		m.decorate(&a)
 		if err == nil {
-			httpx.JSON(w, http.StatusOK, a)
+			one := []Action{a}
+			if err = m.withModes(r.Context(), tx, one); err == nil {
+				httpx.JSON(w, http.StatusOK, one[0])
+			}
 		}
 		return err
 	})
@@ -373,6 +403,15 @@ func (m *Module) approve(w http.ResponseWriter, r *http.Request) error {
 	t := m.tools[tool]
 	if !p.Has(t.Scope()...) {
 		return httpx.Forbidden("approving this action needs one of: " + fmt.Sprint(t.Scope()))
+	}
+	var mode string
+	_ = m.Tx(ctx, func(tx pgx.Tx) error {
+		modes, err := m.toolModes(ctx, tx)
+		mode = modes[tool]
+		return err
+	})
+	if mode == ModeSuggest {
+		return httpx.Conflict("this action type is set to suggest only: a person makes the change in the console and rejects the suggestion")
 	}
 	if t.Risk() == "high" {
 		var n int
@@ -400,8 +439,22 @@ func (m *Module) execute(ctx context.Context, tenant, id uuid.UUID, actor string
 			return httpx.Conflict("action is not awaiting approval")
 		}
 		t := m.tools[a.Tool]
-		before, after, execErr := t.Execute(ctx, tx, a.Input)
+		// The tool runs in a savepoint so a database error inside it leaves the action row updatable (as failed).
+		sp, err := tx.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		before, after, execErr := t.Execute(ctx, sp, a.Input)
+		if execErr != nil {
+			_ = sp.Rollback(ctx)
+		} else if cerr := sp.Commit(ctx); cerr != nil {
+			execErr = cerr
+		}
 		status, result := "executed", map[string]any{"ok": true}
+		if strings.HasSuffix(actor, autoSuffix) {
+			// Auto-applied: the audit entry and the stored before-state are the undo (POST .../revert).
+			result["auto"], result["undo"] = true, "/api/v1/agents/actions/"+id.String()+"/revert"
+		}
 		if execErr != nil {
 			status, result = "failed", map[string]any{"error": execErr.Error()}
 		}
@@ -496,6 +549,8 @@ type caseInput struct {
 	EntityID string `json:"entityId"`
 	Source   string `json:"source"`
 	SourceID string `json:"sourceId"`
+	// Notes are optional first notes of the case (an agent's evidence, for example).
+	Notes []string `json:"notes,omitempty"`
 }
 
 type caseOpenTool struct{}

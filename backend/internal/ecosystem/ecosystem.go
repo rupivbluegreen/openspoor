@@ -71,6 +71,10 @@ func (m *Module) Routes(r chi.Router) {
 	r.Get("/udi/devices", httpx.Handler(m.listDevices))
 	r.With(auth.Require(auth.RoleAdmin, auth.RoleCompliance)).Post("/udi/devices", httpx.Handler(m.createDevice))
 	r.With(auth.Require(auth.RoleAdmin, auth.RoleCompliance)).Post("/udi/devices/{id}/submit", httpx.Handler(m.submitDevice))
+	r.Get("/kpis", httpx.Handler(m.listKPIs))
+	r.Get("/kpis/{id}/series", httpx.Handler(m.kpiSeries))
+	r.With(auth.Require(auth.RoleAdmin, auth.RoleOps, auth.RoleCompliance)).Put("/kpis/{id}/goal", httpx.Handler(m.putGoal))
+	r.With(auth.Require(auth.RoleAdmin, auth.RoleOps, auth.RoleCompliance)).Delete("/kpis/{id}/goal", httpx.Handler(m.deleteGoal))
 	r.Get("/benchmarks", httpx.Handler(m.benchmarks))
 	r.With(auth.RequireOperator).Post("/benchmarks/runs", httpx.Handler(m.recordRun))
 }

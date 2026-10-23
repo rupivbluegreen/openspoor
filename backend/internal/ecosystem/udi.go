@@ -228,6 +228,7 @@ func (m *Module) benchmarks(w http.ResponseWriter, r *http.Request) error {
 	type kpi struct {
 		Key         string   `json:"key"`
 		Name        string   `json:"name"`
+		Category    string   `json:"category,omitempty"`
 		Unit        string   `json:"unit"`
 		Yours       *float64 `json:"yours"`
 		PeerMedian  *float64 `json:"peerMedian"`
@@ -248,6 +249,8 @@ func (m *Module) benchmarks(w http.ResponseWriter, r *http.Request) error {
 	}
 	me := kernelTenant(r)
 	out := []kpi{}
+	// ?kpis=library adds the peer-comparable entries of the KPI library (30-day window).
+	withLibrary := r.URL.Query().Get("kpis") == "library"
 	err := m.DB.OperatorTx(r.Context(), func(tx pgx.Tx) error {
 		for _, d := range defs {
 			rows, err := tx.Query(r.Context(), d.sql)
@@ -277,6 +280,39 @@ func (m *Module) benchmarks(w http.ResponseWriter, r *http.Request) error {
 			k.Peers = len(vals)
 			if len(vals) >= minPeers {
 				med, p90 := percentile(vals, 0.5), percentile(vals, 0.9)
+				k.PeerMedian, k.PeerP90 = &med, &p90
+			}
+			out = append(out, k)
+		}
+		if !withLibrary {
+			return nil
+		}
+		taken := map[string]bool{}
+		for _, k := range out {
+			taken[k.Key] = true
+		}
+		win := NewWindow(time.Now(), 30)
+		for _, l := range Library {
+			if !l.Peer || taken[l.ID] {
+				continue
+			}
+			vals, err := libraryPeerValues(r.Context(), tx, l, win)
+			if err != nil {
+				return err
+			}
+			k := kpi{Key: l.ID, Name: l.Name + " (30 d)", Category: l.Category, Unit: l.Unit, LowerBetter: l.Direction == LowerBetter}
+			var peers []float64
+			for t, v := range vals {
+				if t == me {
+					x := v
+					k.Yours = &x
+				} else {
+					peers = append(peers, v)
+				}
+			}
+			k.Peers = len(peers)
+			if len(peers) >= minPeers {
+				med, p90 := percentile(peers, 0.5), percentile(peers, 0.9)
 				k.PeerMedian, k.PeerP90 = &med, &p90
 			}
 			out = append(out, k)
