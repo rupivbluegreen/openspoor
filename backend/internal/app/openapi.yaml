@@ -2831,6 +2831,22 @@ paths:
             security: []
             tags:
                 - saas
+    /api/v1/search:
+        get:
+            operationId: getSearch
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - search
     /api/v1/sensors/excursions:
         get:
             operationId: getSensorsExcursions

@@ -204,6 +204,7 @@ func (a *App) routes() http.Handler {
 		}
 		r.Group(func(r chi.Router) {
 			r.Use(a.Deps.Auth.Middleware)
+			r.Get("/search", httpx.Handler(a.search))
 			for _, m := range a.Modules {
 				m.Routes(r)
 			}
