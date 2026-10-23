@@ -37,8 +37,8 @@ type LLM interface {
 	Answer(ctx context.Context, system string, msgs []ChatMessage) (string, error)
 }
 
-// NewLLM returns the Claude-backed model when ANTHROPIC_API_KEY and OPENSPOOR_ASSISTANT_MODEL are set, else nil
-// (the assistant then answers from the gathered context without a model).
+// NewLLM returns the Claude-backed model when ANTHROPIC_API_KEY and OPENSPOOR_ASSISTANT_MODEL
+// are set, else nil (the assistant then answers from the gathered context without a model).
 func NewLLM(cfg config.Config) LLM {
 	if cfg.AnthropicKey == "" || cfg.AnthropicModel == "" {
 		return nil

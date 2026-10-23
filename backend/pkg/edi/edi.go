@@ -482,7 +482,7 @@ type idocSegment struct {
 	Children []idocSegment `xml:"-"`
 }
 
-// IDoc renders an IDoc XML (control record EDI_DC40 plus header, partner and item segments).
+// IDoc renders an IDoc XML document (control record EDI_DC40 plus header, partner and item segments).
 func IDoc(d Document, env Envelope) (string, error) {
 	basic, msg := IDocType(d.Type)
 	var b strings.Builder

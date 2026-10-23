@@ -11,3 +11,11 @@ dist/
 .DS_Store
 bench-results/*.tmp
 /backend/openspoor
+
+# Local AI-assistant tooling and product-planning documents are never committed
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+*PRD*
+*prd*.md
+docs/prd/
