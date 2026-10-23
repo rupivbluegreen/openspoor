@@ -5,8 +5,5 @@
 # package dir                floor   reason
 internal/core/telemetry      10      OpenTelemetry exporter set-up; needs an OTLP endpoint to exercise
 pkg/appsdk                   70      developer SDK client; error paths untested
-internal/app                 73      wiring and CLI helpers; covered mostly through cmd/ and testkit
-internal/food                74      FSMA 204 / EUDR handlers; certificate and plan edge paths untested
 internal/core/db             74      connection and error-mapping branches that need a failing server
 internal/core/secrets        76      key-ring failure paths
-internal/act                 76      agents and assistant; provider-dependent branches
