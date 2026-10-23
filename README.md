@@ -63,6 +63,8 @@ One Go binary (`openspoor api | worker | all | migrate | bootstrap | seed | open
 - **Frontend**: React 19, Ant Design 6 and pro-components, in English, Dutch and Arabic (RTL). Three apps (console, verify, operator) served by the binary from `OPENSPOOR_WEB_ROOT`.
 - **API**: REST under `/api/v1`, OpenAPI 3.1 generated from the router ([`backend/internal/app/openapi.yaml`](backend/internal/app/openapi.yaml)), with RFC 9457 problem responses.
 
+Decisions are recorded in [`docs/adr/`](docs/adr).
+
 ## Deployment modes
 
 The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, host-based tenant routing), `single`, or `hub`. Kubernetes: [`deploy/helm/openspoor`](deploy/helm/openspoor). Backup and restore: [`docs/runbooks/backup-restore.md`](docs/runbooks/backup-restore.md).
@@ -97,7 +99,7 @@ backend/          Go module: cmd/, internal/ (modules), pkg/ (reusable GS1, EPCI
 connectors-sdk/   Standalone Go module for third-party country connectors, with a contract-test harness
 frontend/         pnpm workspace: apps/console, apps/verify, apps/operator, packages/ui
 deploy/           Dockerfile, docker-compose, Helm chart, k6 scripts
-docs/             changelog, open questions, runbooks, security, validation
+docs/             ADRs, changelog, open questions, runbooks, security, validation
 site/             GitHub Pages site
 ```
 

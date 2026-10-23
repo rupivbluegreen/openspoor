@@ -1,5 +1,6 @@
 // Package jobs is a durable PostgreSQL job queue with retries and exponential backoff.
 // It runs projections, webhooks, connector submissions and other background work.
+// See ADR-004 for how it relates to Temporal.
 package jobs
 
 import (

@@ -1,7 +1,7 @@
 // Package link is "Link at full scale": the full B2B transaction set (orders, ASN, invoices,
 // inventory, returns, chargebacks) with X12 / EDIFACT / IDoc mappers, the supplier
 // compliance hub (certificates, audits, specifications, expiry alerts), document exchange,
-// and node-to-node federation (did:web identities, Ed25519-signed envelopes).
+// and node-to-node federation (ADR-008).
 package link
 
 import (

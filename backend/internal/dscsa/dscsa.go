@@ -1,6 +1,6 @@
 // Package dscsa implements US DSCSA interoperability: Transaction Information and
 // Transaction Statement (TI/TS) EPCIS documents built from shipping data, partner exchange
-// over HTTPS (AS2 behind an interface), reconciliation of inbound TI/TS with the ASN,
+// over HTTPS (AS2 behind an interface, ADR-007), reconciliation of inbound TI/TS with the ASN,
 // Verification Router Service (VRS) requester and responder (GS1 Lightweight Messaging),
 // a VRS lookup directory and the six-year retention policy.
 package dscsa
@@ -464,13 +464,13 @@ func (t *HTTPSTransport) Send(ctx context.Context, _ uuid.UUID, p partners.Partn
 	return out, nil
 }
 
-// AS2Transport is the AS2 (RFC 4130) channel. Go AS2 libraries are immature, so the
+// AS2Transport is the AS2 (RFC 4130) channel. Go AS2 libraries are immature (ADR-007), so the
 // transport is an interface boundary: production installs plug in an AS2 gateway.
 type AS2Transport struct{}
 
 // Send implements Transport.
 func (AS2Transport) Send(context.Context, uuid.UUID, partners.Partner, Shipment, []byte) (map[string]any, error) {
-	return nil, httpx.Conflict("AS2 transport is not configured on this installation; use https or plug in an AS2 gateway")
+	return nil, httpx.Conflict("AS2 transport is not configured on this installation; use https or plug in an AS2 gateway (see ADR-007)")
 }
 
 // localTransport delivers to a partner tenant on the same Open Spoor node.
