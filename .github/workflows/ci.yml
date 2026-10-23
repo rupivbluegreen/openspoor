@@ -21,6 +21,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
     env:
+      OPENSPOOR_TEST_REQUIRE_DB: "1"
       OPENSPOOR_TEST_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
       OPENSPOOR_TEST_DATABASE_URL: postgres://openspoor:openspoor@localhost:5432/postgres?sslmode=disable
     defaults:
@@ -39,10 +40,10 @@ jobs:
       - name: Tests (unit + integration against PostgreSQL 16)
         run: go test -race -count=1 -coverpkg=./internal/...,./pkg/... -coverprofile=coverage.out ./...
       - run: go tool cover -func=coverage.out | tail -1
-      - name: Tests in saas and hub mode (single runs above)
+      - name: Tests in saas and hub mode, on Testcontainers PostgreSQL (single runs above on the service)
         run: |
-          OPENSPOOR_TEST_MODE=saas go test -count=1 ./...
-          OPENSPOOR_TEST_MODE=hub go test -count=1 ./...
+          env -u OPENSPOOR_TEST_ADMIN_URL -u OPENSPOOR_TEST_DATABASE_URL OPENSPOOR_TEST_MODE=saas go test -count=1 ./...
+          env -u OPENSPOOR_TEST_ADMIN_URL -u OPENSPOOR_TEST_DATABASE_URL OPENSPOOR_TEST_MODE=hub go test -count=1 ./...
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:

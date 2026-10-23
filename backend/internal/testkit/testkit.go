@@ -42,9 +42,16 @@ type Env struct {
 // New creates a fresh database, migrates it, starts the API and logs in as admin of tenant "acme".
 func New(t testing.TB, opts ...func(*config.Config)) *Env {
 	t.Helper()
+	// An existing server (CI service, scripts/testdb.sh) wins; otherwise Testcontainers starts one.
 	admin, appURL := os.Getenv("OPENSPOOR_TEST_ADMIN_URL"), os.Getenv("OPENSPOOR_TEST_DATABASE_URL")
 	if admin == "" || appURL == "" {
-		t.Skip("integration test: set OPENSPOOR_TEST_ADMIN_URL and OPENSPOOR_TEST_DATABASE_URL (see scripts/testdb.sh)")
+		var err error
+		if admin, appURL, err = containerURLs(); err != nil {
+			if os.Getenv("OPENSPOOR_TEST_REQUIRE_DB") == "1" { // CI: never pass by skipping
+				t.Fatal("no PostgreSQL for integration tests: ", err)
+			}
+			t.Skip("integration test: no PostgreSQL (set OPENSPOOR_TEST_ADMIN_URL/OPENSPOOR_TEST_DATABASE_URL, or run Docker for Testcontainers): ", err)
+		}
 	}
 	ctx := context.Background()
 	name := "openspoor_test_" + strings.ToLower(strings.ReplaceAll(ids.Secret(6), "-", "_"))
