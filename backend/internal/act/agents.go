@@ -42,7 +42,8 @@ func New(d kernel.Deps) *Module {
 	for _, t := range []Tool{caseOpenTool{}, reportResubmitTool{}, serialStatusTool{}} {
 		m.tools[t.Name()] = t
 	}
-	m.agents = []Agent{exceptionTriage{}, regulatoryResubmitter{}, expiryQuarantine{}, partnerWatch{}}
+	m.agents = []Agent{exceptionTriage{}, regulatoryResubmitter{}, expiryQuarantine{}, partnerWatch{},
+		verificationSpike{}, reappearedSerial{}, duplicateVerification{}}
 	m.LLM = NewLLM(d.Cfg)
 	return m
 }
@@ -119,7 +120,8 @@ type agentInfo struct {
 	Tools       []string `json:"tools"`
 }
 
-var agentTools = map[string][]string{"exception-triage": {"case.open"}, "regulatory-resubmitter": {"report.resubmit"}, "expiry-quarantine": {"serials.set_status"}, "partner-watch": {"case.open"}}
+var agentTools = map[string][]string{"exception-triage": {"case.open"}, "regulatory-resubmitter": {"report.resubmit"}, "expiry-quarantine": {"serials.set_status"}, "partner-watch": {"case.open"},
+	"verification-spike": {"case.open"}, "reappeared-serial": {"case.open"}, "duplicate-verification": {"case.open"}}
 
 func (m *Module) settings(ctx context.Context, tx pgx.Tx) (map[string][2]string, error) {
 	out := map[string][2]string{}

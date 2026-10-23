@@ -161,7 +161,7 @@ func TestAgentSettingsAndRuns(t *testing.T) {
 		}
 	}
 	e.Must(http.StatusOK, e.Call(viewer, "GET", "/api/v1/agents", nil), &agents)
-	if agents.Total != 4 || agents.Items[0].Name != "exception-triage" || !agents.Items[0].Enabled || agents.Items[0].Autonomy != "propose" || agents.Items[0].Tools[0] != "case.open" {
+	if agents.Total != 7 || agents.Items[0].Name != "exception-triage" || !agents.Items[0].Enabled || agents.Items[0].Autonomy != "propose" || agents.Items[0].Tools[0] != "case.open" {
 		t.Fatalf("agents: %+v", agents)
 	}
 	problem(t, e.Do("PUT", "/api/v1/agents/skynet", map[string]any{"enabled": true}), 404, "unknown agent")

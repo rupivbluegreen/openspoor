@@ -8,7 +8,7 @@ the tenant's own data. High-risk actions need an electronic signature; every dec
 audited and reversible tools can be reverted.
 
 Built-in agents: `exception-triage`, `regulatory-resubmitter`, `expiry-quarantine`,
-`partner-watch`. Built-in tools: `case.open`, `report.resubmit`, `serials.set_status`.
+`partner-watch`, and three watchers that flag counterfeit and diversion signals (`verification-spike`, `reappeared-serial`, `duplicate-verification`; fixed thresholds in `watchers.go`). Built-in tools: `case.open`, `report.resubmit`, `serials.set_status`.
 Built-in processes: `po-to-receipt`, `batch-release`, `order-to-cash`.
 
 The assistant uses an optional language model (configured with `ANTHROPIC_API_KEY` and
