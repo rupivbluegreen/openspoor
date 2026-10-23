@@ -173,6 +173,10 @@ func readDetail(roles []string, l *Line, get func(int) string) {
 }
 
 var x12Profiles = map[string]x12Profile{
+	// "none" is for sets whose lines are not carried (the document is its header).
+	"none": {start: "",
+		write: func(func(string, ...string), *x12Template, Line) {},
+		read:  func(*Line, string, func(int) string, *x12Template) {}},
 	// "lin" is the item profile of the report and advice sets: LIN with the GTIN, the set's own
 	// quantity segment (DetailID), then description (PID), lot (REF*LT), expiry (DTM*036), a reason
 	// (NTE*ADD) and the line status as message text (MSG). The status travels as text because no

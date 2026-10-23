@@ -36,7 +36,7 @@ export interface Mapping {
   name: string;
   partnerId?: string;
   docType: string;
-  format: 'csv' | 'json' | 'flat';
+  format: 'csv' | 'json' | 'flat' | 'xml' | 'x12' | 'edifact';
   options: MappingOptions;
   fields: MappingField[];
   updatedAt?: string;

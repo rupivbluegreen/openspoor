@@ -147,7 +147,9 @@ func TestAgentsApprovalsAndControlTower(t *testing.T) {
 		t.Fatalf("after revert: %+v", st)
 	}
 
-	// Autonomy: low-risk reversible tools may run automatically when the tenant opts in.
+	// Autonomy: low-risk reversible tools may run automatically when the tenant opts in and the
+	// agent's measured evaluation score meets the bar.
+	recordEvals(t, e)
 	e.Must(http.StatusOK, e.Call("", "POST", "/api/v1/verify/scan", map[string]any{"code": "(01)" + gtin + "(21)FAKE999"}), nil)
 	e.Must(http.StatusOK, e.Do("PUT", "/api/v1/agents/exception-triage", map[string]any{"enabled": true, "autonomy": "auto_low_risk"}), nil)
 	e.Must(http.StatusOK, e.Do("POST", "/api/v1/agents/exception-triage/run", nil), &run)

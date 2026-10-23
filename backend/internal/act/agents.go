@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -36,11 +37,17 @@ type Module struct {
 	agents []Agent
 	LLM    LLM
 
+	catOnce sync.Once
+	cat     *Catalog
+	catErr  error
+
 	// Mapping, Tracing and FSMA are the other modules' typed entry points used by the AI-native
 	// agents' tools; internal/app wires them (act may not import those modules).
 	Mapping MappingEngine
 	Tracing TracingAssembler
 	FSMA    FSMAExporter
+	// KPIs exposes the KPI library to the semantic layer (wired by internal/app; optional).
+	KPIs KPIProvider
 	// InsecureWatch lets the regulatory-source watcher fetch plain http and loopback addresses
 	// (tests and local development only). It is never set in production.
 	InsecureWatch bool
@@ -197,6 +204,11 @@ func (m *Module) configureAgent(w http.ResponseWriter, r *http.Request) error {
 	if in.Autonomy == "" {
 		in.Autonomy = "propose"
 	}
+	if in.Autonomy == "auto_low_risk" {
+		if err := m.requireEvalScores(r.Context(), "agent", name, []string{name}); err != nil {
+			return err
+		}
+	}
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
 		if _, err := tx.Exec(r.Context(), `insert into agent_setting (tenant_id, agent, enabled, autonomy) values (app_tenant(), $1,$2,$3)
 			on conflict (tenant_id, agent) do update set enabled=excluded.enabled, autonomy=excluded.autonomy`, name, in.Enabled, in.Autonomy); err != nil {
@@ -227,6 +239,11 @@ func (m *Module) Run(ctx context.Context, tenant uuid.UUID, a Agent) (int, error
 		if err != nil {
 			return err
 		}
+		// An evaluated agent whose score no longer meets the bar proposes only; a person approves.
+		blocked, err := blockedAgents(ctx, tx)
+		if err != nil {
+			return err
+		}
 		props, err := a.Observe(ctx, tx)
 		if err != nil {
 			return err
@@ -236,7 +253,7 @@ func (m *Module) Run(ctx context.Context, tenant uuid.UUID, a Agent) (int, error
 			if tool == nil {
 				return fmt.Errorf("agent %s proposed unknown tool %s", a.Name(), p.Tool)
 			}
-			auto := effectiveMode(tool, modes, agentAuto) == ModeAuto
+			auto := effectiveMode(tool, modes, agentAuto) == ModeAuto && !blocked[a.Name()]
 			var evidence map[string]any
 			if _, ok := a.(polished); ok {
 				p, evidence = m.polish(ctx, p)

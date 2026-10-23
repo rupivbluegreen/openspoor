@@ -102,6 +102,15 @@ func TestToolAutonomyLadder(t *testing.T) {
 	problem(t, e.Do("POST", "/api/v1/agents/actions/"+a.ID+"/approve", nil), 409, "suggest only")
 	e.Must(http.StatusOK, e.Do("POST", "/api/v1/agents/actions/"+a.ID+"/reject", map[string]any{"reason": "will do by hand"}), nil)
 
+	// Without a recorded evaluation score, raising autonomy is refused (and the refusal is audited).
+	before := auditCount(t, e, "agent.agent.autonomy.refused")
+	problem(t, e.Do("PUT", "/api/v1/agents/exception-triage", map[string]any{"enabled": true, "autonomy": "auto_low_risk"}), 409, "no evaluation score recorded")
+	problem(t, e.Call(qa, "PUT", "/api/v1/agents/tools/case.open", map[string]any{"mode": "auto"}), 409, "no evaluation score recorded")
+	if auditCount(t, e, "agent.agent.autonomy.refused") != before+1 || auditCount(t, e, "agent.tool.autonomy.refused") != 1 {
+		t.Fatal("refusals must be audited")
+	}
+	recordEvals(t, e)
+
 	// A tool setting wins over the agent setting: approve keeps proposals pending even when the
 	// agent is configured for auto_low_risk.
 	e.Must(http.StatusOK, e.Do("PUT", "/api/v1/agents/exception-triage", map[string]any{"enabled": true, "autonomy": "auto_low_risk"}), nil)

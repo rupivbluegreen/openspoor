@@ -101,6 +101,10 @@ const en = {
       coldchain_open_excursions: 'Open excursions',
     },
   },
+  mapping: {
+    lineSegment: 'Line segment',
+    lineSegmentHint: 'Segment that opens each line, for example PO1 or LIN (empty: detect)',
+  },
   b2b: {
     category: {
       planning: 'Planning',

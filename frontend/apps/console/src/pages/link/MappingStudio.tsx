@@ -69,7 +69,7 @@ export default function MappingStudio() {
   const [name, setName] = useState('');
   const [partnerId, setPartnerId] = useState<string>();
   const [docType, setDocType] = useState('order');
-  const [format, setFormat] = useState<'csv' | 'json' | 'flat'>('csv');
+  const [format, setFormat] = useState<Mapping['format']>('csv');
   const [options, setOptions] = useState<MappingOptions>({});
   const [flatCols, setFlatCols] = useState('');
   const [content, setContent] = useState('');
@@ -141,7 +141,7 @@ export default function MappingStudio() {
             <Input placeholder={t('field.name')} value={name} onChange={(e) => setName(e.target.value)} style={{ width: 220 }} />
             <Select style={{ minWidth: 200 }} placeholder={t('field.partner')} allowClear value={partnerId} onChange={setPartnerId} options={partners} />
             <Select style={{ width: 240 }} value={docType} onChange={setDocType} options={docTypes.grouped} showSearch optionFilterProp="label" popupMatchSelectWidth={420} />
-            <Select style={{ width: 110 }} value={format} onChange={setFormat} options={['csv', 'json', 'flat'].map((f) => ({ value: f, label: f.toUpperCase() }))} />
+            <Select style={{ width: 120 }} value={format} onChange={setFormat} options={['csv', 'json', 'xml', 'x12', 'edifact', 'flat'].map((f) => ({ value: f, label: f.toUpperCase() }))} />
             <Button type="primary" icon={<SaveOutlined />} disabled={!name || spec.fields.length === 0} loading={save.isPending} onClick={() => save.mutate(undefined)}>
               {t('action.save')}
             </Button>
@@ -154,7 +154,7 @@ export default function MappingStudio() {
               size="small"
               extra={
                 <Upload
-                  accept=".csv,.txt,.json,.dat"
+                  accept=".csv,.txt,.json,.dat,.xml,.edi,.x12,.edifact"
                   showUploadList={false}
                   beforeUpload={(f) => {
                     void f.text().then(setContent);
@@ -176,11 +176,20 @@ export default function MappingStudio() {
                     />
                   </Space>
                 )}
-                {format === 'json' && (
+                {(format === 'json' || format === 'xml') && (
                   <Space wrap>
                     <Input addonBefore="Records" placeholder="data.orders" value={options.recordsPath ?? ''} onChange={(e) => setOptions({ ...options, recordsPath: e.target.value || undefined })} />
                     <Input addonBefore="Lines" placeholder="items" value={options.linesPath ?? ''} onChange={(e) => setOptions({ ...options, linesPath: e.target.value || undefined })} />
                   </Space>
+                )}
+                {(format === 'x12' || format === 'edifact') && (
+                  <Input
+                    addonBefore={t('mapping.lineSegment')}
+                    style={{ width: 280 }}
+                    placeholder={t('mapping.lineSegmentHint')}
+                    value={options.linesPath ?? ''}
+                    onChange={(e) => setOptions({ ...options, linesPath: e.target.value.toUpperCase() || undefined })}
+                  />
                 )}
                 {format === 'flat' && (
                   <Input.TextArea rows={3} placeholder={'po:1:10\ngtin:11:14\nqty:25:5'} value={flatCols} onChange={(e) => setFlatCols(e.target.value)} />

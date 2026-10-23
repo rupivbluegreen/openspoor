@@ -24,7 +24,7 @@ var lineActions = map[string]string{"added": "1", "deleted": "2", "changed": "3"
 
 // withCurrency lists the messages that carry a CUX segment.
 var withCurrency = map[string]bool{"ORDERS": true, "ORDRSP": true, "ORDCHG": true, "INVOIC": true, "REMADV": true, "QUOTES": true, "REQOTE": true,
-	"COMDIS": true, "PRICAT": true}
+	"COMDIS": true, "PRICAT": true, "PAYORD": true}
 
 func statusFunction(status string) string {
 	if c, ok := codeByKey(StatusKeys, status); ok {

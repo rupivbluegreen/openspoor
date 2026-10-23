@@ -103,6 +103,10 @@ const ar: Messages = {
       coldchain_open_excursions: 'الانحرافات المفتوحة',
     },
   },
+  mapping: {
+    lineSegment: 'مقطع البنود',
+    lineSegmentHint: 'المقطع الذي يبدأ كل بند، مثل PO1 أو LIN (فارغ: اكتشاف تلقائي)',
+  },
   b2b: {
     category: {
       planning: 'التخطيط',

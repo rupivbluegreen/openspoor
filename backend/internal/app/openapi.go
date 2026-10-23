@@ -121,7 +121,7 @@ func (a *App) OpenAPI() ([]byte, error) {
 	doc := map[string]any{
 		"openapi": "3.1.0",
 		"info": map[string]any{"title": "Open Spoor API", "version": "1.0.0", "license": map[string]any{"name": "Apache-2.0", "identifier": "Apache-2.0"},
-			"description": "Open Agentic Supply Chain OS. Generated from the router (`go run ./cmd/openspoor openapi`); every endpoint is listed."},
+			"description": "Open Agentic Supply Chain OS. Generated from the router (`go run ./cmd/openspoor openapi`); every endpoint is listed. Authenticated requests are rate limited per tenant and per API key by plan; a limited request is answered 429 with a Retry-After header (seconds). Platform operators are exempt."},
 		"servers":  []any{map[string]any{"url": "/"}},
 		"security": []any{map[string]any{"bearer": []any{}}, map[string]any{"apiKey": []any{}}},
 		"paths":    paths,

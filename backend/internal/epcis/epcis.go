@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"io"
 	"net/http"
 	"sort"
@@ -69,7 +70,7 @@ func (m *Module) OnCapture(kind string) { m.onCapture = append(m.onCapture, kind
 
 // New creates the module.
 func New(d kernel.Deps, s *serialization.Module) *Module {
-	return &Module{Deps: d, Serials: s, Client: &http.Client{Timeout: 15 * time.Second},
+	return &Module{Deps: d, Serials: s, Client: egress.Client(15 * time.Second),
 		Archive: objstore.New(objstore.Config{Endpoint: d.Cfg.S3Endpoint, Bucket: d.Cfg.S3Bucket, Region: d.Cfg.S3Region,
 			AccessKey: d.Cfg.S3AccessKey, SecretKey: d.Cfg.S3SecretKey})}
 }

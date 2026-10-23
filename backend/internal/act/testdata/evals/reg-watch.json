@@ -1,0 +1,76 @@
+{
+  "agent": "reg-watch",
+  "description": "Compares watched regulator pages with the last version and proposes an impact case on a change. Pages are served by a local test server. Synthetic fixtures.",
+  "synthetic": true,
+  "threshold": 0.95,
+  "cases": [
+    {
+      "name": "first fetch is only a baseline",
+      "pages": {"/guidance": ["<html><body><div id=\"content\"><p>Old rule text</p></div></body></html>"]},
+      "rows": [{"table": "watch_source", "row": {"id": "@w", "name": "FDA guidance", "url": "{server}/guidance", "selector": "#content", "market": "US"}}],
+      "expect": []
+    },
+    {
+      "name": "changed text proposes a case with the affected product",
+      "pages": {"/guidance": ["<html><body><div id=\"content\"><p>Old rule text</p></div></body></html>", "<html><body><div id=\"content\"><p>New rule text</p><p>Second paragraph</p></div></body></html>"]},
+      "rounds": 2,
+      "rows": [
+        {"table": "watch_source", "row": {"id": "@w", "name": "FDA guidance", "url": "{server}/guidance", "selector": "#content", "market": "US"}},
+        {"table": "product", "row": {"gtin": "09506000134352", "name": "Synthetic tablets", "target_markets": ["US"]}}
+      ],
+      "expect": [{"tool": "case.open", "entity": "@w", "priority": 2, "titleContains": "Regulatory source changed: FDA guidance", "reasoningContains": ["1 products target market US: Synthetic tablets (09506000134352)"]}]
+    },
+    {
+      "name": "unchanged page proposes nothing",
+      "pages": {"/guidance": ["<html><body><div id=\"content\"><p>Stable text</p></div></body></html>"]},
+      "rounds": 2,
+      "rows": [{"table": "watch_source", "row": {"id": "@w", "name": "FDA guidance", "url": "{server}/guidance", "selector": "#content", "market": "US"}}],
+      "expect": []
+    },
+    {
+      "name": "change outside the selector is ignored",
+      "pages": {"/guidance": ["<html><body><nav>Home v1</nav><div id=\"content\"><p>Same rule</p></div></body></html>", "<html><body><nav>Home v2</nav><div id=\"content\"><p>Same rule</p></div></body></html>"]},
+      "rounds": 2,
+      "rows": [{"table": "watch_source", "row": {"id": "@w", "name": "FDA guidance", "url": "{server}/guidance", "selector": "#content", "market": "US"}}],
+      "expect": []
+    },
+    {
+      "name": "script-only change is ignored",
+      "pages": {"/guidance": ["<html><body><p>Rule</p><script>var build=1</script></body></html>", "<html><body><p>Rule</p><script>var build=2</script></body></html>"]},
+      "rounds": 2,
+      "rows": [{"table": "watch_source", "row": {"id": "@w", "name": "EMA notice", "url": "{server}/guidance", "market": "EU"}}],
+      "expect": []
+    },
+    {
+      "name": "disabled source is not fetched",
+      "pages": {"/guidance": ["<p>One</p>", "<p>Two</p>"]},
+      "rounds": 2,
+      "rows": [{"table": "watch_source", "row": {"id": "@w", "name": "Disabled", "url": "{server}/guidance", "enabled": false}}],
+      "expect": []
+    },
+    {
+      "name": "unreachable page is an error on the source, not a proposal",
+      "pages": {"/other": ["<p>x</p>"]},
+      "rounds": 2,
+      "rows": [{"table": "watch_source", "row": {"id": "@w", "name": "Missing page", "url": "{server}/gone", "market": "US"}}],
+      "expect": []
+    },
+    {
+      "name": "change in a market without products says so",
+      "pages": {"/guidance": ["<p>Version one</p>", "<p>Version two with new obligations</p>"]},
+      "rounds": 2,
+      "rows": [{"table": "watch_source", "row": {"id": "@w", "name": "SFDA notice", "url": "{server}/guidance", "market": "SA"}}],
+      "expect": [{"tool": "case.open", "entity": "@w", "priority": 2, "reasoningContains": ["No product in this workspace targets market SA"]}]
+    },
+    {
+      "name": "only the changed source of two proposes a case",
+      "pages": {"/a": ["<p>A one</p>", "<p>A two</p>"], "/b": ["<p>B same</p>"]},
+      "rounds": 2,
+      "rows": [
+        {"table": "watch_source", "row": {"id": "@a", "name": "Source A", "url": "{server}/a", "market": "US"}},
+        {"table": "watch_source", "row": {"id": "@b", "name": "Source B", "url": "{server}/b", "market": "US"}}
+      ],
+      "expect": [{"tool": "case.open", "entity": "@a", "priority": 2}]
+    }
+  ]
+}

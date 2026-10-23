@@ -17,8 +17,8 @@ import (
 	lib "github.com/openspoor/openspoor/pkg/epcis"
 )
 
-// Mapping studio engine: turns a partner's CSV, JSON or fixed-width file into canonical B2B
-// documents (pkg/edi) or EPCIS events, field by field, with simple transforms.
+// Mapping studio engine: turns a partner's CSV, JSON, XML, X12, EDIFACT or fixed-width file into
+// canonical B2B documents (pkg/edi) or EPCIS events, field by field, with simple transforms.
 
 // Transform is one step applied to a field value.
 type Transform struct {
@@ -56,9 +56,10 @@ type MappingOptions struct {
 	Delimiter string `json:"delimiter,omitempty"`
 	// NoHeader: the CSV has no header row; columns are named col1, col2, ...
 	NoHeader bool `json:"noHeader,omitempty"`
-	// RecordsPath is the dotted path to the array of records in a JSON file (default: the root).
+	// RecordsPath is the dotted path to the array of records in a JSON or XML file (default: the root).
 	RecordsPath string `json:"recordsPath,omitempty"`
-	// LinesPath is the dotted path, inside each JSON record, to its array of lines.
+	// LinesPath is the dotted path, inside each JSON or XML record, to its array of lines. For X12
+	// and EDIFACT it is the ID of the segment that opens a line (PO1, LIN ...); empty detects it.
 	LinesPath string `json:"linesPath,omitempty"`
 	// Columns define a fixed-width (flat) file.
 	Columns []FlatColumn `json:"columns,omitempty"`
@@ -136,7 +137,11 @@ func (s *MappingSpec) Validate() error {
 		return fmt.Errorf("docType must be epcis or a B2B transaction type (GET /b2b/types), got %q", s.DocType)
 	}
 	switch s.Format {
-	case "csv", "json":
+	case "csv", "json", "xml":
+	case "x12", "edifact":
+		if p := s.Options.LinesPath; p != "" && !segmentIDRE.MatchString(p) {
+			return fmt.Errorf("linesPath for %s is a segment ID such as PO1 or LIN, got %q", s.Format, p)
+		}
 	case "flat":
 		if len(s.Options.Columns) == 0 {
 			return errors.New("a flat (fixed-width) mapping needs options.columns")
@@ -147,7 +152,7 @@ func (s *MappingSpec) Validate() error {
 			}
 		}
 	default:
-		return errors.New("format must be csv, json or flat")
+		return errors.New("format must be " + formatList)
 	}
 	if d := s.Options.Delimiter; d != "" && d != "tab" && d != `\t` && len([]rune(d)) != 1 {
 		return errors.New("delimiter must be a single character or tab")
@@ -220,6 +225,10 @@ func readRecords(s MappingSpec, content []byte) ([]record, []string, error) {
 		return readCSV(s.Options, content)
 	case "flat":
 		return readFlat(s.Options, content)
+	case "x12", "edifact":
+		return readEDI(s.Format, s.Options, content)
+	case "xml":
+		return readXML(s.Options, content)
 	default:
 		return readJSON(s.Options, content)
 	}
@@ -321,6 +330,12 @@ func readJSON(o MappingOptions, content []byte) ([]record, []string, error) {
 	if err := dec.Decode(&root); err != nil {
 		return nil, nil, fmt.Errorf("cannot read JSON: %w", err)
 	}
+	return readTree(o, root)
+}
+
+// readTree turns a decoded JSON or XML tree into records: RecordsPath selects the records, LinesPath
+// the lines inside each (a single object counts as one line).
+func readTree(o MappingOptions, root any) ([]record, []string, error) {
 	node := root
 	if o.RecordsPath != "" {
 		var ok bool
@@ -342,7 +357,12 @@ func readJSON(o MappingOptions, content []byte) ([]record, []string, error) {
 		recNode := it
 		if o.LinesPath != "" {
 			if ln, ok := lookupPath(it, o.LinesPath); ok {
-				lineNodes, _ = ln.([]any)
+				switch x := ln.(type) {
+				case []any:
+					lineNodes = x
+				case map[string]any:
+					lineNodes = []any{x}
+				}
 			}
 			recNode = withoutPath(it, o.LinesPath)
 		}
@@ -883,11 +903,74 @@ func normHeader(h string) string {
 	return nonAlnum.ReplaceAllString(strings.ToLower(h), "")
 }
 
+// ediHints lists, per target, the source paths (see readEDI) where X12 and EDIFACT messages
+// usually carry the value, in order of preference. They follow the segment layouts pkg/edi writes
+// and reads; a suggestion is only made when the path occurs in the sample.
+var ediHints = map[string][]string{
+	"number":   {"BGM.02", "BEG.03", "BIG.02", "BSN.02", "BIA.03", "BGN.02", "BCP.02", "BFR.02", "BRA.01", "BPT.02"},
+	"date":     {"DTM(137).01.02", "BEG.05", "BIG.01", "BSN.03", "BIA.04", "BGN.03", "BCP.03", "BRA.02", "BPT.03"},
+	"currency": {"CUX.01.02", "CUR.02"},
+
+	"buyer.name":  {"NAD(BY).04.01", "NAD(BY).04", "N1(BY).02"},
+	"buyer.gln":   {"NAD(BY).02.01", "NAD(BY).02", "N1(BY).04"},
+	"seller.name": {"NAD(SU).04.01", "NAD(SU).04", "N1(SE).02", "N1(SF).02", "N1(RE).02"},
+	"seller.gln":  {"NAD(SU).02.01", "NAD(SU).02", "N1(SE).04", "N1(SF).04", "N1(RE).04"},
+	"shipTo.name": {"NAD(DP).04.01", "NAD(DP).04", "N1(ST).02"},
+	"shipTo.gln":  {"NAD(DP).02.01", "NAD(DP).02", "N1(ST).04"},
+
+	"references.po":       {"RFF(ON).01.02", "REF(PO).02", "PRF.01", "BIG.04"},
+	"references.asn":      {"RFF(AAK).01.02"},
+	"references.invoice":  {"RFF(IV).01.02", "REF(IV).02"},
+	"references.contract": {"RFF(CT).01.02", "REF(CT).02", "BCP.05"},
+
+	"dates.delivery_requested": {"DTM(2).01.02", "DTM(002).02"},
+	"dates.ship":               {"DTM(11).01.02", "DTM(011).02"},
+	"dates.delivery_estimated": {"DTM(17).01.02", "DTM(017).02"},
+	"dates.delivered":          {"DTM(35).01.02", "DTM(035).02"},
+	"dates.received":           {"DTM(50).01.02", "DTM(050).02"},
+	"dates.effective":          {"DTM(7).01.02", "DTM(007).02"},
+	"dates.expiry":             {"DTM(36).01.02", "DTM(036).02"},
+	"dates.period_start":       {"DTM(194).01.02", "DTM(150).02"},
+	"dates.period_end":         {"DTM(206).01.02", "DTM(151).02"},
+
+	"lines.gtin":        {"LIN.03.01", "PO1.07", "IT1.07", "LIN.03", "POC.09", "BLI.02"},
+	"lines.description": {"IMD.03.04", "PID.05"},
+	"lines.quantity":    {"QTY.01.02", "PO1.02", "IT1.02", "POC.03", "SN1.02", "BLI.03", "FST.01", "RCD.02", "ZA.02", "QTY.02"},
+	"lines.uom":         {"QTY.01.03", "PO1.03", "IT1.03", "POC.05", "SN1.03", "BLI.05", "UIT.01", "RCD.03", "ZA.03", "QTY.03"},
+	"lines.unitPrice":   {"PRI.01.02", "PO1.04", "IT1.04", "POC.06"},
+	"lines.lot":         {"PIA.02.01", "REF(LT).02", "LIN.05"},
+	"lines.expiry":      {"DTM(361).01.02", "DTM(036).02"},
+	"lines.serials":     {"GIN(BN).02.01", "REF(SE).02"},
+	"lines.reason":      {"RDR.03", "NTE(ADD).02", "FTX(AAI).04.01"},
+}
+
+// isDateTarget reports targets whose EDI value is a CCYYMMDD date.
+func isDateTarget(t string) bool {
+	return t == "date" || strings.HasPrefix(t, "dates.") || t == "lines.expiry"
+}
+
 // SuggestMapping proposes field mappings from column names. A person reviews and saves them.
+// Columns that look like X12 or EDIFACT paths (BEG.03, DTM(137).01.02) are matched against the
+// usual segment positions; other columns, including XML and JSON paths, by their last name part.
 func SuggestMapping(docType string, columns []string) []MappingField {
 	out := []MappingField{}
 	used := map[string]bool{}
+	present := make(map[string]bool, len(columns))
+	for _, c := range columns {
+		present[c] = true
+	}
 	for _, target := range MappingTargets(docType) {
+		if docType != epcisDocType {
+			if src := firstPresent(ediHints[target], present, used); src != "" {
+				used[src] = true
+				f := MappingField{Target: target, Source: src, Transforms: []Transform{{Op: "trim"}}}
+				if isDateTarget(target) {
+					f.Transforms = append(f.Transforms, Transform{Op: "date", From: "YYYYMMDD"})
+				}
+				out = append(out, f)
+				continue
+			}
+		}
 		syn := synonyms[target]
 		for _, c := range columns {
 			if used[c] {
@@ -906,4 +989,13 @@ func SuggestMapping(docType string, columns []string) []MappingField {
 		}
 	}
 	return out
+}
+
+func firstPresent(cands []string, present, used map[string]bool) string {
+	for _, c := range cands {
+		if present[c] && !used[c] {
+			return c
+		}
+	}
+	return ""
 }

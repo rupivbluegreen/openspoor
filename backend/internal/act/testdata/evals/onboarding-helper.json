@@ -1,0 +1,100 @@
+{
+  "agent": "onboarding-helper",
+  "description": "Proposes the next onboarding step for partners whose checklist has stalled or whose test keeps failing. Synthetic fixtures.",
+  "synthetic": true,
+  "threshold": 0.95,
+  "cases": [
+    {
+      "name": "stalled for 8 days proposes the next open item",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p", "name": "Acme Wholesale", "status": "active"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p", "template": "dscsa_wholesaler", "started_at": "now-8d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 1, "key": "agreement", "title": "Sign the data exchange agreement.", "kind": "manual", "done": true, "done_at": "now-8d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 2, "key": "contacts", "title": "Record technical contacts.", "kind": "manual"}}
+      ],
+      "expect": [{"tool": "case.open", "entity": "@p", "priority": 3, "titleContains": "Onboarding reminder: Acme Wholesale - Record technical contacts", "reasoningContains": ["1 of 2 checklist items complete"]}]
+    },
+    {
+      "name": "failing test for 3 days is priority 2 and cites the channel",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p", "name": "Beta Pharma", "status": "active"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p", "template": "dscsa_wholesaler", "started_at": "now-4d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 1, "key": "as2_test", "title": "Exchange a test message.", "kind": "test", "channel": "as2"}},
+        {"table": "partner_test_run", "row": {"partner_id": "@p", "channel": "as2", "passed": false, "detail": {"error": "signature rejected"}, "created_at": "now-3d"}}
+      ],
+      "expect": [{"tool": "case.open", "entity": "@p", "priority": 2, "titleContains": "test failing", "reasoningContains": ["Failing test: latest run on channel as2 failed", "signature rejected"]}]
+    },
+    {
+      "name": "activity yesterday means no reminder",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p", "name": "Gamma Distribution", "status": "active"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p", "template": "dscsa_wholesaler", "started_at": "now-20d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 1, "key": "agreement", "title": "Sign the agreement.", "kind": "manual", "done": true, "done_at": "now-1d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 2, "key": "contacts", "title": "Record contacts.", "kind": "manual"}}
+      ],
+      "expect": []
+    },
+    {
+      "name": "five idle days without a failing test is below the stall limit",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p", "name": "Delta Logistics", "status": "active"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p", "template": "dscsa_wholesaler", "started_at": "now-5d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 1, "key": "agreement", "title": "Sign the agreement.", "kind": "manual"}}
+      ],
+      "expect": []
+    },
+    {
+      "name": "complete checklist needs nothing",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p", "name": "Epsilon Health", "status": "active"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p", "template": "dscsa_wholesaler", "started_at": "now-30d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 1, "key": "agreement", "title": "Sign the agreement.", "kind": "manual", "done": true, "done_at": "now-25d"}}
+      ],
+      "expect": []
+    },
+    {
+      "name": "rejected partner is skipped",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p", "name": "Zeta Trading", "status": "rejected"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p", "template": "dscsa_wholesaler", "started_at": "now-30d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 1, "key": "agreement", "title": "Sign the agreement.", "kind": "manual"}}
+      ],
+      "expect": []
+    },
+    {
+      "name": "a failed run followed by a passing run satisfies the test item",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p", "name": "Eta Pharma", "status": "active"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p", "template": "dscsa_wholesaler", "started_at": "now-10d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 1, "key": "https_test", "title": "Exchange a test message.", "kind": "test", "channel": "https"}},
+        {"table": "partner_test_run", "row": {"partner_id": "@p", "channel": "https", "passed": false, "created_at": "now-6d"}},
+        {"table": "partner_test_run", "row": {"partner_id": "@p", "channel": "https", "passed": true, "created_at": "now-3d"}}
+      ],
+      "expect": []
+    },
+    {
+      "name": "test item with no run yet and a stalled partner asks for the test",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p", "name": "Theta Supply", "status": "active"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p", "template": "dscsa_wholesaler", "started_at": "now-9d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p", "position": 1, "key": "https_test", "title": "Exchange a test message.", "kind": "test", "channel": "https"}}
+      ],
+      "expect": [{"tool": "case.open", "entity": "@p", "priority": 3, "reasoningContains": ["Send the test message on the https channel"]}]
+    },
+    {
+      "name": "two stalled partners get one reminder each",
+      "rows": [
+        {"table": "partner", "row": {"id": "@p1", "name": "Iota One", "status": "active"}},
+        {"table": "partner", "row": {"id": "@p2", "name": "Kappa Two", "status": "pending"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p1", "template": "dscsa_wholesaler", "started_at": "now-12d"}},
+        {"table": "partner_onboarding", "row": {"partner_id": "@p2", "template": "dscsa_wholesaler", "started_at": "now-9d"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p1", "position": 1, "key": "agreement", "title": "Sign the agreement.", "kind": "manual"}},
+        {"table": "partner_onboarding_item", "row": {"partner_id": "@p2", "position": 1, "key": "agreement", "title": "Sign the agreement.", "kind": "manual"}}
+      ],
+      "expect": [
+        {"tool": "case.open", "entity": "@p1", "priority": 3},
+        {"tool": "case.open", "entity": "@p2", "priority": 3}
+      ]
+    }
+  ]
+}

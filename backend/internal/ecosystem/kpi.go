@@ -296,6 +296,10 @@ var KPICategories = []KPICategory{
 	{"verification", "Verification"},
 	{"inventory", "Inventory"},
 	{"safety", "Recall and cold chain"},
+	{"traceability", "Traceability"},
+	{"serialization", "Serialization and aggregation"},
+	{"agents", "Agents and exceptions"},
+	{"security", "Security and audit"},
 }
 
 // KPIByID returns a library KPI.

@@ -5,6 +5,7 @@ package partners
 import (
 	"context"
 	"errors"
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"net/http"
 	"strings"
 	"sync"
@@ -35,7 +36,7 @@ type Module struct {
 
 // New creates the module.
 func New(d kernel.Deps) *Module {
-	return &Module{Deps: d, Client: &http.Client{Timeout: 5 * time.Second}}
+	return &Module{Deps: d, Client: egress.Client(5 * time.Second)}
 }
 
 // Name implements kernel.Module.

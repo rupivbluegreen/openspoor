@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"github.com/openspoor/openspoor/internal/core/secretsrc"
 )
 
@@ -66,6 +67,19 @@ type Config struct {
 	// (OPENSPOOR_TRUSTED_PROXIES, default 0: the TCP peer address is the client address).
 	TrustedProxies int
 
+	// EgressAllowPrivate lets outbound calls to tenant-supplied destinations (webhooks, connectors,
+	// federation peers, DSCSA and AS2 transports) reach loopback, private and link-local addresses
+	// (OPENSPOOR_EGRESS_ALLOW_PRIVATE, default false; for development and air-gapped installations).
+	// EgressAllowCIDRs additionally allows exactly these networks (OPENSPOOR_EGRESS_ALLOW_CIDRS, comma-separated).
+	// See package egress.
+	EgressAllowPrivate bool
+	EgressAllowCIDRs   []string
+
+	// RateLimit configures per-tenant and per-API-key limits on the authenticated API (package ratelimit).
+	// OPENSPOOR_RATE_LIMIT=false turns them off; OPENSPOOR_RATE_LIMITS overrides the per-plan values.
+	RateLimit      bool
+	RateLimitPlans string
+
 	TLS TLS
 }
 
@@ -114,6 +128,14 @@ func LoadWith(ctx context.Context, res *secretsrc.Resolver) (Config, error) {
 		CORSOrigins:       envList("OPENSPOOR_CORS_ORIGINS"),
 		LogLevel:          env("OPENSPOOR_LOG_LEVEL", "info"),
 		TrustedProxies:    envInt("OPENSPOOR_TRUSTED_PROXIES", 0),
+
+		EgressAllowPrivate: envBool("OPENSPOOR_EGRESS_ALLOW_PRIVATE", false),
+		EgressAllowCIDRs:   envList("OPENSPOOR_EGRESS_ALLOW_CIDRS"),
+		RateLimit:          envBool("OPENSPOOR_RATE_LIMIT", true),
+		RateLimitPlans:     env("OPENSPOOR_RATE_LIMITS", ""),
+	}
+	if _, err := egress.ParseCIDRs(c.EgressAllowCIDRs); err != nil {
+		return c, fmt.Errorf("OPENSPOOR_EGRESS_ALLOW_CIDRS: %w", err)
 	}
 	switch c.Mode {
 	case ModeSaaS, ModeSingle, ModeHub:

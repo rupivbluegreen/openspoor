@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"io"
 	"net/http"
 	"sort"
@@ -107,7 +108,7 @@ type Connector struct {
 
 // New creates a connector for p.
 func New(p Profile) *Connector {
-	return &Connector{Client: &http.Client{Timeout: 15 * time.Second}, Profile: p}
+	return &Connector{Client: egress.Client(15 * time.Second), Profile: p}
 }
 
 // Info implements connector.Connector.

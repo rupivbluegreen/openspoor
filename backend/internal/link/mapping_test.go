@@ -75,7 +75,7 @@ func TestMappingEngine(t *testing.T) {
 	// Invalid specs.
 	for name, s := range map[string]link.MappingSpec{
 		"docType":      {DocType: "x", Format: "csv"},
-		"format":       {DocType: "order", Format: "xml"},
+		"format":       {DocType: "order", Format: "pdf"},
 		"flat columns": {DocType: "order", Format: "flat"},
 		"flat column":  {DocType: "order", Format: "flat", Options: link.MappingOptions{Columns: []link.FlatColumn{{Name: "a"}}}},
 		"delimiter":    {DocType: "order", Format: "csv", Options: link.MappingOptions{Delimiter: ";;"}},
@@ -233,7 +233,7 @@ func TestMappingStudioAPI(t *testing.T) {
 	if len(res.Columns) != 9 || len(res.Documents) != 0 {
 		t.Fatalf("unmapped preview: %+v", res)
 	}
-	problem(t, e.Do("POST", "/api/v1/b2b/mappings/preview", map[string]any{"mapping": map[string]any{"format": "xml"}, "content": "x"}), 400, "format must be")
+	problem(t, e.Do("POST", "/api/v1/b2b/mappings/preview", map[string]any{"mapping": map[string]any{"format": "pdf"}, "content": "x"}), 400, "format must be")
 	problem(t, e.Do("POST", "/api/v1/b2b/mappings/preview", map[string]any{"mapping": map[string]any{"docType": "order", "format": "csv", "fields": []map[string]any{{"target": "x", "source": "y"}}}, "content": "x"}), 400, "unknown target")
 	problem(t, e.Do("POST", "/api/v1/b2b/mappings/preview", map[string]any{"content": "x"}), 400, "mappingId or mapping")
 	problem(t, e.Do("POST", "/api/v1/b2b/mappings/preview", map[string]any{"mappingId": mp.ID}), 400, "content is required")

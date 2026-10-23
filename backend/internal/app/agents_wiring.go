@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/openspoor/openspoor/internal/act"
 	"github.com/openspoor/openspoor/internal/dscsa"
+	"github.com/openspoor/openspoor/internal/ecosystem"
 	"github.com/openspoor/openspoor/internal/food"
 	"github.com/openspoor/openspoor/internal/link"
 )
@@ -23,6 +25,7 @@ func wireAgents(ac *act.Module, ds *dscsa.Module) {
 	ac.Mapping = mappingStudio{}
 	ac.Tracing = tracingAnswers{ds}
 	ac.FSMA = fsmaSheet{}
+	ac.KPIs = kpiLibrary{}
 }
 
 type mappingStudio struct{}
@@ -120,4 +123,38 @@ func (fsmaSheet) CSV(ctx context.Context, tx pgx.Tx, from, to time.Time, tlc str
 	n, err := food.FSMACSV(ctx, tx, w, from, to, tlc)
 	w.Flush()
 	return sb.String(), n, err
+}
+
+// kpiLibrary hands the KPI library (ecosystem module) to the act module's semantic layer, so
+// "KPI by day over a period" questions use the same formulas as the KPI screens.
+type kpiLibrary struct{}
+
+func (kpiLibrary) List() []act.KPIInfo {
+	out := make([]act.KPIInfo, 0, len(ecosystem.Library))
+	for _, k := range ecosystem.Library {
+		out = append(out, act.KPIInfo{ID: k.ID, Name: k.Name, Description: k.Description, Unit: k.Unit, Category: k.Category})
+	}
+	return out
+}
+
+func (kpiLibrary) Compute(ctx context.Context, tx pgx.Tx, id string, from, to time.Time) (*float64, []act.KPIPoint, error) {
+	k, ok := ecosystem.KPIByID(id)
+	if !ok {
+		return nil, nil, errors.New("unknown KPI")
+	}
+	days := max(int(to.Sub(from).Hours()/24)+1, 1)
+	w := ecosystem.Window{From: from.UTC(), To: to.UTC(), Days: days}
+	res, err := k.Compute(ctx, tx, w)
+	if err != nil {
+		return nil, nil, err
+	}
+	pts, _, err := k.SeriesOf(ctx, tx, w)
+	if err != nil {
+		return nil, nil, err
+	}
+	series := make([]act.KPIPoint, 0, len(pts))
+	for _, p := range pts {
+		series = append(series, act.KPIPoint{Day: p.Day, Value: p.Value})
+	}
+	return res.Value, series, nil
 }

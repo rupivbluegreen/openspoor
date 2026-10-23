@@ -212,8 +212,8 @@ func (m *Module) previewMapping(w http.ResponseWriter, r *http.Request) error {
 			if err := spec.Validate(); err != nil {
 				return httpx.BadRequest(err.Error())
 			}
-		} else if spec.Format != "csv" && spec.Format != "json" && spec.Format != "flat" {
-			return httpx.BadRequest("format must be csv, json or flat")
+		} else if !validFormat(spec.Format) {
+			return httpx.BadRequest("format must be " + formatList)
 		}
 	default:
 		return httpx.BadRequest("mappingId or mapping is required")

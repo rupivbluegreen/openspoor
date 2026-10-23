@@ -25,7 +25,7 @@ components:
             scheme: bearer
             type: http
 info:
-    description: Open Agentic Supply Chain OS. Generated from the router (`go run ./cmd/openspoor openapi`); every endpoint is listed.
+    description: Open Agentic Supply Chain OS. Generated from the router (`go run ./cmd/openspoor openapi`); every endpoint is listed. Authenticated requests are rate limited per tenant and per API key by plan; a limited request is answered 429 with a Retry-After header (seconds). Platform operators are exempt.
     license:
         identifier: Apache-2.0
         name: Apache-2.0
@@ -201,6 +201,54 @@ paths:
                   required: true
                   schema:
                     type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - agents
+    /api/v1/agents/evals:
+        get:
+            operationId: getAgentsEvals
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - agents
+    /api/v1/agents/evals/policy:
+        put:
+            operationId: putAgentsEvalsPolicy
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - agents
+    /api/v1/agents/evals/run:
+        post:
+            operationId: postAgentsEvalsRun
             responses:
                 2XX:
                     content:
@@ -1923,6 +1971,27 @@ paths:
             tags:
                 - documents
     /api/v1/documents/{id}:
+        delete:
+            operationId: deleteDocumentsId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - documents
         get:
             operationId: getDocumentsId
             parameters:
@@ -1953,6 +2022,22 @@ paths:
                   required: true
                   schema:
                     type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - documents
+    /api/v1/documents/search:
+        get:
+            operationId: getDocumentsSearch
             responses:
                 2XX:
                     content:
@@ -4804,6 +4889,38 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - search
+    /api/v1/semantic/catalog:
+        get:
+            operationId: getSemanticCatalog
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - semantic
+    /api/v1/semantic/query:
+        post:
+            operationId: postSemanticQuery
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - semantic
     /api/v1/sensors/excursions:
         get:
             operationId: getSensorsExcursions

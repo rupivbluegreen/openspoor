@@ -1,0 +1,66 @@
+{
+  "agent": "exception-triage",
+  "description": "Turns open alerts into prioritized cases. Synthetic fixtures; not a measure of accuracy on real alerts.",
+  "synthetic": true,
+  "threshold": 0.95,
+  "cases": [
+    {
+      "name": "regulatory rejection is priority 1",
+      "rows": [{"table": "alert", "row": {"id": "@a", "kind": "regulatory.rejection", "severity": "error", "title": "Hub rejected report", "entity": "regulatory_report", "entity_id": "r-1"}}],
+      "expect": [{"tool": "case.open", "entity": "@a", "priority": 1, "titleContains": "Hub rejected report"}]
+    },
+    {
+      "name": "failed verification is priority 1",
+      "rows": [{"table": "alert", "row": {"id": "@a", "kind": "verify.unknown_serial", "severity": "error", "title": "Unknown serial scanned"}}],
+      "expect": [{"tool": "case.open", "entity": "@a", "priority": 1}]
+    },
+    {
+      "name": "recall received is priority 1",
+      "rows": [{"table": "alert", "row": {"id": "@a", "kind": "recall.received", "severity": "error", "title": "Recall notice from supplier"}}],
+      "expect": [{"tool": "case.open", "entity": "@a", "priority": 1}]
+    },
+    {
+      "name": "other error is priority 2",
+      "rows": [{"table": "alert", "row": {"id": "@a", "kind": "connector.timeout", "severity": "error", "title": "Hub timeout"}}],
+      "expect": [{"tool": "case.open", "entity": "@a", "priority": 2}]
+    },
+    {
+      "name": "warning is priority 3",
+      "rows": [{"table": "alert", "row": {"id": "@a", "kind": "license.expiring", "severity": "warning", "title": "License expires in 20 days"}}],
+      "expect": [{"tool": "case.open", "entity": "@a", "priority": 3}]
+    },
+    {
+      "name": "alert that already has a case is left alone",
+      "rows": [
+        {"table": "alert", "row": {"id": "@a", "kind": "connector.timeout", "severity": "error", "title": "Hub timeout"}},
+        {"table": "work_case", "row": {"kind": "connector.timeout", "title": "Hub timeout", "source": "alert", "source_id": "@a"}}
+      ],
+      "expect": []
+    },
+    {
+      "name": "resolved alert is left alone",
+      "rows": [{"table": "alert", "row": {"id": "@a", "kind": "regulatory.rejection", "severity": "error", "title": "Old rejection", "status": "resolved"}}],
+      "expect": []
+    },
+    {
+      "name": "no alerts, no proposals",
+      "rows": [],
+      "expect": []
+    },
+    {
+      "name": "several alerts are triaged independently",
+      "rows": [
+        {"table": "alert", "row": {"id": "@a", "kind": "regulatory.rejection", "severity": "error", "title": "Rejected", "created_at": "now-5h"}},
+        {"table": "alert", "row": {"id": "@b", "kind": "connector.timeout", "severity": "error", "title": "Timeout", "created_at": "now-4h"}},
+        {"table": "alert", "row": {"id": "@c", "kind": "license.expiring", "severity": "warning", "title": "License", "created_at": "now-3h"}},
+        {"table": "alert", "row": {"id": "@d", "kind": "regulatory.rejection", "severity": "error", "title": "Handled", "created_at": "now-2h"}},
+        {"table": "work_case", "row": {"kind": "regulatory.rejection", "title": "Handled", "source": "alert", "source_id": "@d"}}
+      ],
+      "expect": [
+        {"tool": "case.open", "entity": "@a", "priority": 1},
+        {"tool": "case.open", "entity": "@b", "priority": 2},
+        {"tool": "case.open", "entity": "@c", "priority": 3}
+      ]
+    }
+  ]
+}

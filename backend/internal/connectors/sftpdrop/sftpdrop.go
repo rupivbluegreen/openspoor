@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"io"
 	"net"
 	"os"
@@ -137,8 +138,7 @@ func pinned(want string) ssh.HostKeyCallback {
 }
 
 func dialTCP(ctx context.Context, ep Endpoint) (net.Conn, error) {
-	d := net.Dialer{Timeout: ep.Timeout}
-	conn, err := d.DialContext(ctx, "tcp", ep.addr())
+	conn, err := egress.DialContext(ctx, "tcp", ep.addr(), ep.Timeout)
 	if err != nil {
 		return nil, err
 	}

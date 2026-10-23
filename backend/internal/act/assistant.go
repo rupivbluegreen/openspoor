@@ -222,6 +222,7 @@ func offline(question string, data map[string]any) string {
 		fmt.Fprintf(&b, ", %d agent actions awaiting approval", len(pa))
 	}
 	b.WriteString(".")
+	b.WriteString(offlineExtra(data))
 	if len(alerts) > 0 {
 		fmt.Fprintf(&b, " Most recent alert: %v.", alerts[0]["title"])
 	}
@@ -245,25 +246,48 @@ func (m *Module) chat(w http.ResponseWriter, r *http.Request) error {
 	question := in.Messages[len(in.Messages)-1].Content
 	var data map[string]any
 	var cites []Citation
+	sq := m.semanticChoice(r.Context(), question) // before the transaction: a model call must not hold it open
 	err := m.Tx(r.Context(), func(tx pgx.Tx) error {
 		var err error
 		data, cites, err = gather(r.Context(), tx, question)
 		if err != nil {
 			return err
 		}
-		_, err = audit.Write(r.Context(), tx, audit.Record{Action: "assistant.ask", Entity: "assistant", EntityID: "chat", After: map[string]any{"question": truncate(question, 500)}})
+		if cites, err = m.enrich(r.Context(), tx, question, sq, data, cites); err != nil {
+			return err
+		}
+		ask := map[string]any{"question": truncate(question, 500)}
+		if sq != nil {
+			ask["metric"], ask["dimension"] = sq.Metric, sq.Dimension
+		}
+		_, err = audit.Write(r.Context(), tx, audit.Record{Action: "assistant.ask", Entity: "assistant", EntityID: "chat", After: ask})
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	ctxJSON, _ := json.Marshal(data)
+	// Metric results and document passages travel apart from the general context so truncating
+	// the latter never cuts them.
+	extra := map[string]any{}
+	base := map[string]any{}
+	for k, v := range data {
+		if k == "semantic" || k == "documentPassages" {
+			extra[k] = v
+		} else {
+			base[k] = v
+		}
+	}
+	ctxJSON, _ := json.Marshal(base)
 	if len(ctxJSON) > maxContext {
 		ctxJSON = ctxJSON[:maxContext]
 	}
+	extraJSON, _ := json.Marshal(extra)
+	if len(extraJSON) > 8000 {
+		extraJSON = extraJSON[:8000]
+	}
 	reply, model := "", "none"
 	if m.LLM != nil {
-		system := fmt.Sprintf(systemIntro, time.Now().UTC().Format(time.RFC3339)) + "\n\nCONTEXT (JSON):\n" + string(ctxJSON)
+		system := fmt.Sprintf(systemIntro, time.Now().UTC().Format(time.RFC3339)) + "\n\nCONTEXT (JSON):\n" + string(ctxJSON) + "\n\nQUERY RESULT AND DOCUMENT PASSAGES (JSON; cite passages by their ref):\n" + string(extraJSON)
 		reply, err = m.LLM.Answer(r.Context(), system, in.Messages)
 		model = m.LLM.Name()
 		if err != nil {

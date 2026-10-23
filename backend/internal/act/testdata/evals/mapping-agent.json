@@ -1,0 +1,54 @@
+{
+  "agent": "mapping-agent",
+  "description": "Proposes a mapping for sample partner files through the mapping studio, or a case for a person when no mapping can be saved. Uses the real mapping engine wired by the application. Synthetic fixtures.",
+  "synthetic": true,
+  "threshold": 0.95,
+  "cases": [
+    {
+      "name": "order CSV with common headers",
+      "rows": [{"table": "mapping_sample", "row": {"id": "@s", "name": "Acme orders", "doc_type": "order", "content": "PO Number,Order Date,Buyer GLN,GTIN,Qty,Lot,Notes\nPO-1,2026-01-05,9506000000008,09506000134352,10,L1,rush\nPO-1,2026-01-05,9506000000008,09506000134369,5,L2,\n"}}],
+      "expect": [{"tool": "mapping.save", "entity": "@s", "titleContains": "Acme orders", "fields": {"number": "PO Number", "lines.quantity": "Qty", "lines.lot": "Lot"}, "reasoningContains": ["Not mapped (a person decides): Notes"]}]
+    },
+    {
+      "name": "semicolon separated order file",
+      "rows": [{"table": "mapping_sample", "row": {"id": "@s", "name": "Semicolon orders", "doc_type": "order", "content": "PO Number;Order Date;GTIN;Qty\nPO-9;2026-02-01;09506000134352;3\nPO-9;2026-02-01;09506000134369;4\n"}}],
+      "expect": [{"tool": "mapping.save", "entity": "@s", "fields": {"number": "PO Number", "lines.quantity": "Qty"}}]
+    },
+    {
+      "name": "XML sample needs a person",
+      "rows": [{"table": "mapping_sample", "row": {"id": "@s", "name": "Odd XML", "doc_type": "order", "content": "<Order><No>1</No></Order>"}}],
+      "expect": [{"tool": "case.open", "entity": "@s", "priority": 3, "titleContains": "Mapping sample needs a person: Odd XML"}]
+    },
+    {
+      "name": "EDI interchange needs a person",
+      "rows": [{"table": "mapping_sample", "row": {"id": "@s", "name": "X12 850", "doc_type": "order", "content": "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *260101*1200*U*00401*000000001*0*P*>~"}}],
+      "expect": [{"tool": "case.open", "entity": "@s", "priority": 3}]
+    },
+    {
+      "name": "single column file needs a person",
+      "rows": [{"table": "mapping_sample", "row": {"id": "@s", "name": "One column", "doc_type": "order", "format": "csv", "content": "PO Number\nPO-1\nPO-2\n"}}],
+      "expect": [{"tool": "case.open", "entity": "@s", "priority": 3}]
+    },
+    {
+      "name": "dismissed sample is ignored",
+      "rows": [{"table": "mapping_sample", "row": {"id": "@s", "name": "Dismissed", "doc_type": "order", "status": "dismissed", "content": "PO Number,Qty\nPO-1,1\n"}}],
+      "expect": []
+    },
+    {
+      "name": "no samples, no proposals",
+      "rows": [],
+      "expect": []
+    },
+    {
+      "name": "two samples each get a proposal",
+      "rows": [
+        {"table": "mapping_sample", "row": {"id": "@a", "name": "Orders A", "doc_type": "order", "created_at": "now-2h", "content": "PO Number,GTIN,Qty,Lot\nPO-1,09506000134352,10,L1\n"}},
+        {"table": "mapping_sample", "row": {"id": "@b", "name": "Broken XML", "doc_type": "order", "created_at": "now-1h", "content": "<a/>"}}
+      ],
+      "expect": [
+        {"tool": "mapping.save", "entity": "@a", "fields": {"number": "PO Number", "lines.quantity": "Qty"}},
+        {"tool": "case.open", "entity": "@b"}
+      ]
+    }
+  ]
+}

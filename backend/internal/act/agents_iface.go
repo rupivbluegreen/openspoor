@@ -84,4 +84,7 @@ func (m *Module) aiRoutes(r chi.Router) {
 	m.mappingRoutes(r)
 	m.inspectionRoutes(r)
 	m.watchRoutes(r)
+	m.documentRoutes(r)
+	m.semanticRoutes(r)
+	m.evalRoutes(r)
 }

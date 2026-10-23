@@ -28,8 +28,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-go@v5.5.0
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
@@ -40,12 +40,24 @@ jobs:
       - name: Tests (unit + integration against PostgreSQL 16)
         run: go test -race -count=1 -coverpkg=./internal/...,./pkg/... -coverprofile=coverage.out ./...
       - run: go tool cover -func=coverage.out | tail -1
+      - name: Coverage gate (every domain package under internal/ and pkg/ must reach 80 %)
+        # Computed from coverage.out: cmd/, internal/testkit, *test helper packages and generated files are excluded.
+        # See scripts/coverage-gate.sh; COVERAGE_MIN overrides the threshold.
+        run: ../scripts/coverage-gate.sh coverage.out 80
+      - name: Keep the coverage profile
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: coverage-backend
+          path: backend/coverage.out
+          retention-days: 14
+          if-no-files-found: ignore
       - name: Tests in saas and hub mode, on Testcontainers PostgreSQL (single runs above on the service)
         run: |
           env -u OPENSPOOR_TEST_ADMIN_URL -u OPENSPOOR_TEST_DATABASE_URL OPENSPOOR_TEST_MODE=saas go test -count=1 ./...
           env -u OPENSPOOR_TEST_ADMIN_URL -u OPENSPOOR_TEST_DATABASE_URL OPENSPOOR_TEST_MODE=hub go test -count=1 ./...
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v8.0.0
         with:
           working-directory: backend
           version: v2.15.0
@@ -72,11 +84,11 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -87,3 +99,38 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm -r test
       - run: pnpm -r build
+
+  sbom:
+    # Software bills of materials in CycloneDX JSON, uploaded as a workflow artifact on every run.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Install SBOM tools (pinned)
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.12.0
+          go install github.com/anchore/syft/cmd/syft@v1.52.0
+      - name: Backend SBOM (modules that go into the openspoor binary)
+        working-directory: backend
+        env:
+          CGO_ENABLED: "0"
+        run: cyclonedx-gomod app -json -output ../sbom-backend.cdx.json -main cmd/openspoor .
+      - name: Frontend SBOM (from frontend/pnpm-lock.yaml)
+        run: syft scan dir:frontend --exclude './**/node_modules/**' -o cyclonedx-json=sbom-frontend.cdx.json
+      - name: Check that both SBOMs list components
+        run: |
+          for f in sbom-backend.cdx.json sbom-frontend.cdx.json; do
+            n=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1])).get('components', [])))" "$f")
+            echo "$f: $n components"
+            test "$n" -gt 0
+          done
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: sbom
+          path: |
+            sbom-backend.cdx.json
+            sbom-frontend.cdx.json
+          retention-days: 90

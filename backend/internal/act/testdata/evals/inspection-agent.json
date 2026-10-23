@@ -1,0 +1,60 @@
+{
+  "agent": "inspection-agent",
+  "description": "Builds draft inspection packages with a checklist on request, and refuses invalid requests. The food and tracing modules are stubbed with fixed outputs. Synthetic fixtures.",
+  "synthetic": true,
+  "threshold": 0.95,
+  "cases": [
+    {
+      "name": "FSMA 204 spreadsheet with rows",
+      "request": {"kind": "fsma204", "scope": {"from": "2026-01-01", "to": "2026-03-31"}, "fsmaRows": 12},
+      "expect": [{"tool": "inspection.assemble", "entity": "fsma204", "titleContains": "FSMA 204", "checklist": {"rows": "ok", "scope": "todo", "layout": "todo", "reviewed": "todo", "sender": "todo"}}]
+    },
+    {
+      "name": "FSMA 204 spreadsheet without rows warns",
+      "request": {"kind": "fsma204", "scope": {"tlc": "LOT-404"}, "fsmaRows": 0},
+      "expect": [{"tool": "inspection.assemble", "entity": "fsma204", "titleContains": "lot LOT-404", "checklist": {"rows": "warn"}}]
+    },
+    {
+      "name": "FSMA 204 with an invalid date is refused",
+      "request": {"kind": "fsma204", "scope": {"from": "2026-13-45"}, "fsmaRows": 3},
+      "expect": [],
+      "expectError": "YYYY-MM-DD"
+    },
+    {
+      "name": "tracing package with identifiers",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "tracing_request", "title": "FDA request"}}],
+      "request": {"kind": "tracing", "scope": {"investigationId": "@i"}, "tracing": {"items": 3, "transactions": 2}},
+      "expect": [{"tool": "inspection.assemble", "entity": "tracing", "titleContains": "Tracing answer: FDA request", "checklist": {"items": "ok", "format": "todo"}}]
+    },
+    {
+      "name": "tracing package flags missing and truncated identifiers",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "suspect", "title": "Suspect"}}],
+      "request": {"kind": "tracing", "scope": {"investigationId": "@i"}, "tracing": {"items": 5, "transactions": 1, "notFound": 2, "truncated": true}},
+      "expect": [{"tool": "inspection.assemble", "entity": "tracing", "checklist": {"items": "ok", "not_found": "warn", "truncated": "warn"}}]
+    },
+    {
+      "name": "tracing package without identifiers warns",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "suspect", "title": "Empty"}}],
+      "request": {"kind": "tracing", "scope": {"investigationId": "@i"}, "tracing": {"items": 0, "transactions": 0}},
+      "expect": [{"tool": "inspection.assemble", "entity": "tracing", "checklist": {"items": "warn"}}]
+    },
+    {
+      "name": "tracing package for an unknown investigation is refused",
+      "request": {"kind": "tracing", "scope": {"investigationId": "@missing"}, "tracing": {"items": 1}},
+      "expect": [],
+      "expectError": "unknown investigation"
+    },
+    {
+      "name": "tracing package without an investigation id is refused",
+      "request": {"kind": "tracing", "scope": {}, "tracing": {"items": 1}},
+      "expect": [],
+      "expectError": "investigationId is required"
+    },
+    {
+      "name": "unknown package kind is refused",
+      "request": {"kind": "gdp-audit", "scope": {}},
+      "expect": [],
+      "expectError": "kind must be fsma204 or tracing"
+    }
+  ]
+}

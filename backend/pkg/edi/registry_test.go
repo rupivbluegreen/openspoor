@@ -215,7 +215,8 @@ func TestRegistryConsistency(t *testing.T) {
 					}
 				}
 				for _, s := range ty.LineStatuses {
-					if _, ok := tm.LineStatus[s]; !ok {
+					// The "lin" profile carries the line status as MSG text, without a code table.
+					if _, ok := tm.LineStatus[s]; !ok && tm.Lines != "lin" {
 						t.Errorf("line status %q has no X12 code", s)
 					}
 				}
@@ -226,7 +227,7 @@ func TestRegistryConsistency(t *testing.T) {
 					}
 					codes[c] = true
 				}
-				if ty.Lines == LinesReference != (tm.Lines == "rmt" || tm.Lines == "oti" || tm.Lines == "ak2") {
+				if ty.Lines == LinesReference != (tm.Lines == "rmt" || tm.Lines == "oti" || tm.Lines == "ak2" || tm.Lines == "none") {
 					t.Errorf("line kind %s does not suit profile %s", ty.Lines, tm.Lines)
 				}
 			}
@@ -354,6 +355,9 @@ func fixture(ty Type, rich bool) Document {
 		}
 	}
 	n := 2
+	if ty.Lines == LinesReference && !hasKey(ty.Required, "lines") {
+		n = 0
+	}
 	if ty.Lines == LinesReference {
 		for i := 0; i < n; i++ {
 			l := Line{RefType: "invoice", Ref: fmt.Sprintf("INV-%d", i+1)}
@@ -385,7 +389,7 @@ func fixture(ty Type, rich bool) Document {
 			if len(ty.LineDates) > 0 {
 				l.Dates = map[string]string{ty.LineDates[0]: fmt.Sprintf("2026-07-%02d", 15+i)}
 			}
-			if ty.x12 != nil && (ty.x12.Lines == "fst") {
+			if ty.x12 != nil && (ty.x12.Lines == "fst" || ty.x12.Lines == "lin") {
 				l.UnitPrice = 0
 			}
 			if rich {
@@ -550,7 +554,7 @@ func TestRepresentativeSamples(t *testing.T) {
 		Lines: []Line{{RefType: "po", Ref: "PO-4711", Status: "accepted"}, {RefType: "invoice", Ref: "INV-9", Status: "rejected"}}}
 	credit := Document{Type: "credit_note", Number: "CN-1", Date: midnight(), Currency: "EUR", References: map[string]string{"invoice": "INV-1"},
 		Lines: []Line{{GTIN: "09506000134352", Quantity: 10, UOM: "EA", UnitPrice: 3.25}}, Amounts: map[string]float64{"total": 32.5}}
-	recadv := Document{Type: "receiving_advice", Number: "RC-1", Date: midnight(), References: map[string]string{"asn": "ASN-1"}, Dates: map[string]string{"received": "2026-07-03"},
+	recadv := Document{Type: "receiving_advice", Number: "RC-1", Date: midnight(), References: map[string]string{"po": "PO-1"}, Dates: map[string]string{"received": "2026-07-03"},
 		Lines: []Line{{GTIN: "09506000134352", Quantity: 118, UOM: "EA", Status: "accepted"}, {GTIN: "09506000134369", Quantity: 2, UOM: "EA", Status: "damaged", Reason: "crushed"}}}
 	for _, d := range []Document{forecast, ack, remit, fack, advice, credit, recadv} {
 		d := d
@@ -620,7 +624,7 @@ func TestOrderDatesRoundTripOnHandWrittenMappers(t *testing.T) {
 }
 
 func TestWritersRefuseTypesWithoutThem(t *testing.T) {
-	ghost := Document{Type: "customs_declaration", Number: "C-1", Lines: []Line{{GTIN: "09506000134352", Quantity: 1}}}
+	ghost := Document{Type: "grocery_order", Number: "C-1", Lines: []Line{{GTIN: "09506000134352", Quantity: 1}}}
 	if X12(ghost, Envelope{}) != "" || EDIFACT(ghost, Envelope{}) != "" {
 		t.Error("catalogued-only types must not render")
 	}

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"net/http"
 	"slices"
 	"strings"
@@ -60,7 +61,8 @@ type Module struct {
 // *.mock.local to the in-process mock hubs and everything else to the network.
 func New(d kernel.Deps) (*Module, error) {
 	mt := mockhub.NewTransport()
-	client := &http.Client{Timeout: 15 * time.Second, Transport: mt}
+	mt.Base = egress.NewTransport() // everything that is not a mock hub goes through the egress guard
+	client := &http.Client{Timeout: 15 * time.Second, Transport: mt, CheckRedirect: egress.CheckRedirect}
 	eu, sa, ae, eg := eufmd.New(), sarsd.New(), aetatmeen.New(), egeda.New()
 	eu.Client, sa.Client, ae.Client, eg.Client = client, client, client, client
 	packs, err := rulepacks.Load()

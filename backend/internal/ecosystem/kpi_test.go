@@ -14,6 +14,7 @@ import (
 	"github.com/openspoor/openspoor/internal/ecosystem"
 	"github.com/openspoor/openspoor/internal/testkit"
 	"github.com/openspoor/openspoor/pkg/edi"
+	lib "github.com/openspoor/openspoor/pkg/epcis"
 )
 
 type kpiItem struct {
@@ -580,4 +581,241 @@ func TestOTIFFromDocumentsCreatedThroughTheAPI(t *testing.T) {
 	}
 	want(t, l.get(t, "otif_pct"), 25)
 	e.Must(http.StatusInternalServerError, e.Do("GET", "/api/v1/kpis/broken/series", nil), nil)
+}
+
+// TestExtendedKPIValuesFromFixtures computes the KPIs added to the library (traceability,
+// serialization and aggregation, recall and cold chain, partner exchange, agents and exceptions,
+// security) from known rows, and checks that another tenant sees none of them.
+func TestExtendedKPIValuesFromFixtures(t *testing.T) {
+	e := testkit.New(t)
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, e.SuperURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	now := time.Now().UTC()
+	f := &fixture{t: t, c: conn, tid: e.Tenant.ID.String(), base: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)}
+	const g1 = "09506000134352"
+
+	// --- traceability ---
+	capture := func(id string, created time.Time, finished *time.Time) {
+		f.exec(`insert into epcis_capture (id, tenant_id, status, format, event_count, created_by, created_at, finished_at) values ($1, $2, 'accepted', 'json', 1, 'test', $3, $4)`, id, f.tid, created, finished)
+	}
+	const cap1 = "00000000-0000-0000-0000-0000000000a1"
+	fin := []time.Time{f.at(-2, 0).Add(100 * time.Millisecond), f.at(-2, 1).Add(200 * time.Millisecond), f.at(-2, 2).Add(300 * time.Millisecond), f.at(-2, 3).Add(400 * time.Millisecond)}
+	capture(cap1, f.at(-2, 0), &fin[0])
+	for i := 1; i < 4; i++ {
+		capture(fmt.Sprintf("00000000-0000-0000-0000-0000000000a%d", i+1), f.at(-2, float64(i)), &fin[i])
+	}
+	capture("00000000-0000-0000-0000-0000000000b0", f.at(-2, 5), nil) // unfinished: no sample
+	event := func(id, typ, action, bizStep string, eventTime, recorded time.Time, readPoint, bizLoc string, epcs []string) {
+		f.exec(`insert into epcis_event (id, tenant_id, capture_id, event_id, event_type, action, biz_step, event_time, record_time, read_point, biz_location, epcs, doc)
+			values (gen_random_uuid(), $1, $2, $3, $4, nullif($5, ''), nullif($6, ''), $7, $8, nullif($9, ''), nullif($10, ''), $11, '{}')`,
+			f.tid, cap1, id, typ, action, bizStep, eventTime, recorded, readPoint, bizLoc, epcs)
+	}
+	// Recorded 2 h, 10 h, 48 h and 0 h after happening; the last one is dated after it was recorded (counts as 0 h).
+	event("ev1", "ObjectEvent", "ADD", "commissioning", f.at(-3, 20), f.at(-3, 22), "urn:epc:id:sgln:9506000.00001.0", "", []string{"e1", "e2", "e3"})
+	event("ev2", "ObjectEvent", "ADD", "commissioning", f.at(-3, 12), f.at(-3, 22), "", "urn:epc:id:sgln:9506000.00001.0", []string{"e4", "e5"})
+	event("ev3", "AggregationEvent", "ADD", "packing", f.at(-5, 22), f.at(-3, 22), "", "", []string{"e1", "e2"})
+	event("ev4", "AggregationEvent", "DELETE", "unpacking", f.at(-3, 23), f.at(-3, 22), "x", "", []string{"e1"})
+	event("ev5", "ObjectEvent", "OBSERVE", "storing", f.at(-60, 0), f.at(-40, 0), "x", "", []string{"e9"}) // outside the 30-day window
+	f.exec(`insert into food_cte (id, tenant_id, type, tlc, event_time, created_at) values (gen_random_uuid(), $1, 'receiving', 'TLC1', $2, $3), (gen_random_uuid(), $1, 'shipping', 'TLC1', $4, $3)`,
+		f.tid, f.at(-2, 0), f.at(-2, 6), f.at(-1, 0)) // 6 h late; one dated after it was recorded (0 h)
+
+	// --- serialization ---
+	var product, pool string
+	if err := conn.QueryRow(ctx, `insert into product (id, tenant_id, gtin, name) values (gen_random_uuid(), $1, $2, 'P') returning id::text`, f.tid, g1).Scan(&product); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.QueryRow(ctx, `insert into serial_pool (id, tenant_id, product_id, gtin, market, mode, alphabet, length, prefix, key_material, next_counter, capacity)
+		values (gen_random_uuid(), $1, $2, $3, 'EU', 'random', 'abc', 8, 'a', '\x00', 300, 1000) returning id::text`, f.tid, product, g1).Scan(&pool); err != nil {
+		t.Fatal(err)
+	}
+	f.exec(`insert into serial_pool (id, tenant_id, product_id, gtin, market, mode, alphabet, length, prefix, key_material, next_counter, capacity, status)
+		values (gen_random_uuid(), $1, $2, $3, 'EU', 'random', 'abc', 8, 'b', '\x00', 0, 5000, 'retired')`, f.tid, product, g1)
+	for i, n := range []int{100, 50} {
+		f.exec(`insert into serial_allocation (id, tenant_id, pool_id, idempotency_key, start_counter, count, requested_by, created_at) values (gen_random_uuid(), $1, $2, $3, $4, $5, 'test', $6)`,
+			f.tid, pool, fmt.Sprint("k", i), i*100, n, f.at(-2, float64(i)))
+	}
+	for i, st := range []struct {
+		status, parent string
+		gtin           *string
+	}{{"commissioned", "urn:parent:1", ptrS(g1)}, {"active", "", ptrS(g1)}, {"sellable_accessible", "", ptrS(g1)}, {"commissioned", "urn:parent:1", ptrS(g1)}, {"decommissioned", "urn:parent:1", ptrS(g1)}, {"commissioned", "urn:parent:2", nil}} {
+		f.exec(`insert into serial_state (tenant_id, epc, gtin, status, parent_epc, last_event_time, last_event_id) values ($1, $2, $3, $4, nullif($5, ''), now(), 'e')`, f.tid, fmt.Sprint("urn:epc:", i), st.gtin, st.status, st.parent)
+	}
+
+	// --- recall and cold chain ---
+	f.exec(`insert into recall (id, tenant_id, title, reason, status, created_at, closed_at) values
+		(gen_random_uuid(), $1, 'R1', 'x', 'closed', $2, $3), (gen_random_uuid(), $1, 'R2', 'x', 'closed', $2, $4), (gen_random_uuid(), $1, 'R3', 'x', 'notifying', $2, null), (gen_random_uuid(), $1, 'R4', 'x', 'open', $2, null)`,
+		f.tid, f.at(-6, 0), f.at(-4, 0), f.at(-5, 0)) // 48 h and 24 h
+	for i, x := range []struct{ min, max, peak float64 }{{2, 8, 11}, {2, 8, 0}, {2, 8, 9}} { // 3 above, 2 below, 1 above: mean 2
+		f.exec(`insert into sensor_excursion (id, tenant_id, device_id, min_c, max_c, started_at, ended_at, peak_c, minutes, status) values (gen_random_uuid(), $1, 'dev', $2, $3, $4, $4, $5, 5, 'closed')`,
+			f.tid, x.min, x.max, f.at(-2, float64(i)), x.peak)
+	}
+
+	// --- partner exchange ---
+	var partner string
+	if err := conn.QueryRow(ctx, `insert into partner (id, tenant_id, name) values (gen_random_uuid(), $1, 'Globex') returning id::text`, f.tid).Scan(&partner); err != nil {
+		t.Fatal(err)
+	}
+	for i, ok := range []bool{true, true, true, false} {
+		f.exec(`insert into partner_test_run (id, tenant_id, partner_id, channel, passed, created_at) values (gen_random_uuid(), $1, $2, 'https', $3, $4)`, f.tid, partner, ok, f.at(-2, float64(i)))
+	}
+	for i, st := range []string{"delivered", "delivered", "failed", "mdn_pending", "sent"} {
+		f.exec(`insert into as2_message (id, tenant_id, direction, message_id, as2_from, as2_to, status, created_at) values (gen_random_uuid(), $1, 'outbound', $2, 'A', 'B', $3, $4)`, f.tid, fmt.Sprint("m", i), st, f.at(-2, float64(i)))
+	}
+	f.exec(`insert into as2_message (id, tenant_id, direction, message_id, as2_from, as2_to, status, created_at) values (gen_random_uuid(), $1, 'inbound', 'in', 'B', 'A', 'rejected', $2)`, f.tid, f.at(-2, 0))
+	f.exec(`insert into connector_instance (id, tenant_id, connector, name) values ('00000000-0000-0000-0000-0000000000c2', $1, 'sftp', 'drop')`, f.tid)
+	for i, st := range []string{"processed", "processed", "processed", "failed"} {
+		f.exec(`insert into sftp_file (id, tenant_id, instance_id, direction, name, status, created_at) values (gen_random_uuid(), $1, '00000000-0000-0000-0000-0000000000c2', 'inbound', $2, $3, $4)`, f.tid, fmt.Sprint("f", i), st, f.at(-2, float64(i)))
+	}
+	for i, hrs := range []float64{2, 6} {
+		f.exec(`insert into b2b_document (id, tenant_id, type, direction, number, status, payload, created_at, sent_at, acked_at) values (gen_random_uuid(), $1, 'invoice', 'outbound', $2, 'sent', '{}', $3, $3, $4)`,
+			f.tid, fmt.Sprint("INV-", i), f.at(-3, 1), f.at(-3, 1).Add(time.Duration(hrs*float64(time.Hour))))
+	}
+
+	// --- agents and exceptions ---
+	for i, x := range []struct {
+		status  string
+		decided *time.Time
+	}{{"executed", tp(f.at(-2, 2))}, {"executed", tp(f.at(-2, 4))}, {"rejected", tp(f.at(-2, 6))}, {"reverted", tp(f.at(-2, 8))}, {"proposed", nil}, {"proposed", nil}} {
+		f.exec(`insert into agent_action (id, tenant_id, agent, tool, title, status, decided_at, created_at) values (gen_random_uuid(), $1, 'a', 't', $2, $3, $4, $5)`,
+			f.tid, fmt.Sprint("x", i), x.status, x.decided, f.at(-2, 0)) // decided 2, 4, 6 and 8 h after proposal: mean 5
+	}
+	for i, st := range []string{"new", "proposed", "unsupported", "mapped", "dismissed"} {
+		f.exec(`insert into mapping_sample (id, tenant_id, name, doc_type, content, status) values (gen_random_uuid(), $1, $2, 'order', 'x', $3)`, f.tid, fmt.Sprint("s", i), st)
+	}
+
+	// --- security ---
+	var baseAdmins float64
+	if err := conn.QueryRow(ctx, `select count(*) from app_user where tenant_id = $1 and status = 'active' and 'Admin' = any(roles) and not operator`, f.tid).Scan(&baseAdmins); err != nil {
+		t.Fatal(err)
+	}
+	f.exec(`insert into app_user (id, tenant_id, email, roles, status) values (gen_random_uuid(), $1, 'a2@acme.test', '{Admin,Ops}', 'active'), (gen_random_uuid(), $1, 'a3@acme.test', '{Admin}', 'disabled'),
+		(gen_random_uuid(), $1, 'v@acme.test', '{Viewer}', 'active')`, f.tid)
+	for i, x := range []struct {
+		expires, revoked, used, created string
+	}{
+		{"", "", "", "-200 days"},               // never used, old: unused
+		{"", "", "-100 days", "-200 days"},      // last used 100 days ago: unused
+		{"", "", "-1 day", "-200 days"},         // used recently
+		{"", "now()", "", "-200 days"},          // revoked: not counted
+		{"+10 days", "", "-1 day", "-20 days"},  // expires within 30 days
+		{"-1 day", "", "", "-200 days"},         // already expired: neither
+		{"+90 days", "", "-2 days", "-20 days"}, // fine
+	} {
+		ex, rv, us := "null", "null", "null"
+		if x.expires != "" {
+			ex = "now() + interval '" + x.expires[1:] + "'"
+			if x.expires[0] == '-' {
+				ex = "now() - interval '" + x.expires[1:] + "'"
+			}
+		}
+		if x.revoked != "" {
+			rv = x.revoked
+		}
+		if x.used != "" {
+			us = "now() - interval '" + x.used[1:] + "'"
+		}
+		f.exec(fmt.Sprintf(`insert into api_key (id, tenant_id, name, prefix, hash, roles, created_by, expires_at, revoked_at, last_used_at, created_at)
+			values (gen_random_uuid(), $1, $2, 'p', $3, '{Ops}', 'test', %s, %s, %s, now() - interval '%s')`, ex, rv, us, x.created[1:]), f.tid, fmt.Sprint("k", i), fmt.Sprint("hash", i))
+	}
+	for i := 0; i < 3; i++ {
+		f.exec(`insert into esignature (id, tenant_id, user_id, email, meaning, reason, entity, entity_id, audit_seq, signed_at) values (gen_random_uuid(), $1, gen_random_uuid(), 'a@acme.test', 'approved', 'r', 'recall', 'x', $2, $3)`,
+			f.tid, i+1, f.at(-1, float64(i)))
+	}
+
+	l := loadKPIs(t, e, "")
+	for _, k := range l.Items {
+		if k.Error != "" {
+			t.Errorf("%s: %s", k.ID, k.Error)
+		}
+	}
+	for id, v := range map[string]float64{
+		// recorded 2, 10, 48 and 0 hours after the event, over the four events inside the window
+		"event_capture_lag_hours": (2 + 10 + 48 + 0) / 4.0, "events_late_pct": 25, "events_missing_location_pct": 25,
+		"capture_processing_p95_ms": 385, "food_cte_record_lag_hours": 3,
+		"serials_allocated": 150, "packs_commissioned": 5, "aggregation_events": 1,
+		"packs_aggregated_pct": 50, "serial_capacity_remaining": 700,
+		"recalls_open": 2, "recall_duration_hours": 36, "coldchain_excursion_peak_c": 2,
+		"partner_test_pass_pct": 75, "as2_delivery_pct": 200.0 / 3, "sftp_failure_pct": 25, "b2b_ack_hours": 4,
+		"agent_acceptance_pct": 75, "agent_actions_pending": 2, "agent_decision_hours": 5, "mapping_samples_unmapped": 3,
+		"esignatures_captured": 3, "api_keys_unused": 2, "api_keys_expiring": 1, "admin_users": baseAdmins + 1,
+	} {
+		want(t, l.get(t, id), v)
+	}
+	// Categories: every new category lists its KPIs.
+	for cat, n := range map[string]int{"traceability": 5, "serialization": 5, "agents": 4, "security": 4} {
+		if got := loadKPIs(t, e, "?category="+cat); len(got.Items) != n {
+			t.Errorf("%s: %d KPIs, want %d", cat, len(got.Items), n)
+		}
+	}
+	// Event KPIs have daily series; the lag series has data on the day the events were recorded.
+	var s struct {
+		Available bool
+		Points    []struct {
+			Day   string
+			Value *float64
+		}
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/kpis/packs_commissioned/series?days=7", nil), &s)
+	byDay := map[string]float64{}
+	for _, p := range s.Points {
+		if p.Value != nil {
+			byDay[p.Day] = *p.Value
+		}
+	}
+	if !s.Available || byDay[f.ymd(-3)] != 5 || byDay[f.ymd(-1)] != 0 {
+		t.Errorf("packs_commissioned series: %+v", byDay)
+	}
+
+	// Tenant isolation: another tenant measures nothing of this.
+	_, other := e.NewTenant("globex", "admin@globex.test")
+	var ol kpiList
+	e.Must(http.StatusOK, e.Call(other, "GET", "/api/v1/kpis", nil), &ol)
+	for id, v := range map[string]float64{"serials_allocated": 0, "packs_commissioned": 0, "recalls_open": 0, "agent_actions_pending": 0, "esignatures_captured": 0, "mapping_samples_unmapped": 0, "api_keys_unused": 0, "admin_users": 1} {
+		want(t, ol.get(t, id), v)
+	}
+	for _, id := range []string{"event_capture_lag_hours", "packs_aggregated_pct", "serial_capacity_remaining", "partner_test_pass_pct", "agent_acceptance_pct", "recall_duration_hours"} {
+		if ol.get(t, id).Value != nil {
+			t.Errorf("%s: another tenant has nothing to measure", id)
+		}
+	}
+}
+
+func ptrS(s string) *string     { return &s }
+func tp(t time.Time) *time.Time { return &t }
+
+// TestRecordedEventsUseTheShortBizStepForm checks, with a real capture, that the stored business
+// step is the short form the commissioning and packing KPIs filter on.
+func TestRecordedEventsUseTheShortBizStepForm(t *testing.T) {
+	e := testkit.New(t)
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, e.SuperURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	ev := lib.Event{Type: lib.ObjectEvent, Action: "OBSERVE", BizStep: "urn:epcglobal:cbv:bizstep:storing", EventTime: time.Now().Add(-3 * time.Hour).UTC(), EventTimeZoneOffset: "+00:00",
+		EPCList: []string{"urn:epc:id:sscc:9506000.0000000017"}}
+	b, _ := lib.WriteJSON(lib.NewDocument([]lib.Event{ev}))
+	e.Must(http.StatusAccepted, e.Do("POST", "/api/v1/epcis/capture", b), nil)
+	var step string
+	if err := conn.QueryRow(ctx, `select biz_step from epcis_event where tenant_id = $1`, e.Tenant.ID.String()).Scan(&step); err != nil {
+		t.Fatal(err)
+	}
+	if step != "storing" {
+		t.Fatalf("stored biz_step = %q; the KPI filters on the short form", step)
+	}
+	l := loadKPIs(t, e, "?category=traceability")
+	if v := l.get(t, "event_capture_lag_hours").Value; v == nil || *v < 2.9 || *v > 3.2 {
+		t.Errorf("lag of a real capture: %v", v)
+	}
+	if v := l.get(t, "events_missing_location_pct").Value; v == nil || *v != 100 {
+		t.Errorf("missing location: %v", v)
+	}
+	if v := l.get(t, "capture_processing_p95_ms").Value; v == nil || *v < 0 {
+		t.Errorf("processing time: %v", v)
+	}
 }

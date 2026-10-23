@@ -78,12 +78,59 @@ func (m *Module) withModes(ctx context.Context, tx pgx.Tx, items []Action) error
 	if err != nil {
 		return err
 	}
+	blocked, err := blockedAgents(ctx, tx)
+	if err != nil {
+		return err
+	}
 	for i := range items {
 		if t := m.tools[items[i].Tool]; t != nil {
 			items[i].Autonomy = effectiveMode(t, modes, st[items[i].Agent][1] == "auto_low_risk")
+			if items[i].Autonomy == ModeAuto && blocked[items[i].Agent] {
+				items[i].Autonomy = ModeApprove
+			}
 		}
 	}
 	return nil
+}
+
+// usersOf lists the agents that use a tool.
+func usersOf(tool string) []string {
+	var out []string
+	for ag, tools := range agentTools {
+		for _, t := range tools {
+			if t == tool {
+				out = append(out, ag)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// requireEvalScores refuses (and audits the refusal) unless every evaluated agent in agents has a
+// latest recorded evaluation score that meets the tenant's bar. Agents without a golden dataset
+// are not gated. kind is "tool" or "agent"; target its name.
+func (m *Module) requireEvalScores(ctx context.Context, kind, target string, agents []string) error {
+	var blockers []string
+	if err := m.Tx(ctx, func(tx pgx.Tx) error {
+		var err error
+		blockers, err = evalBlockers(ctx, tx, agents)
+		return err
+	}); err != nil {
+		return err
+	}
+	if len(blockers) == 0 {
+		return nil
+	}
+	// The refusal is evidence too: it is written in its own transaction, so the request failing does not undo it.
+	if err := m.Tx(ctx, func(tx pgx.Tx) error {
+		_, err := audit.Write(ctx, tx, audit.Record{Action: "agent." + kind + ".autonomy.refused", Entity: "agent_" + kind, EntityID: target,
+			After: map[string]any{"requested": "auto", "blockers": blockers}})
+		return err
+	}); err != nil {
+		return err
+	}
+	return httpx.Conflict("autonomy above approve is refused until the evaluation scores meet the threshold (run POST /api/v1/agents/evals/run): " + strings.Join(blockers, "; "))
 }
 
 type toolInfo struct {
@@ -95,6 +142,8 @@ type toolInfo struct {
 	Mode        string   `json:"mode"`        // effective: suggest | approve | auto
 	Configured  bool     `json:"configured"`  // a tenant setting exists
 	AutoAllowed bool     `json:"autoAllowed"` // low risk and reversible
+	// EvalBlocked lists the evaluation scores that currently keep an auto setting from applying.
+	EvalBlocked []string `json:"evalBlocked,omitempty"`
 }
 
 func (m *Module) listTools(w http.ResponseWriter, r *http.Request) error {
@@ -113,8 +162,17 @@ func (m *Module) listTools(w http.ResponseWriter, r *http.Request) error {
 		for name, t := range m.tools {
 			sort.Strings(users[name])
 			_, conf := modes[name]
-			out = append(out, toolInfo{Name: name, Risk: t.Risk(), Reversible: t.Reversible(), Roles: t.Scope(), Agents: users[name],
-				Mode: effectiveMode(t, modes, false), Configured: conf, AutoAllowed: AutoEligible(t)})
+			ti := toolInfo{Name: name, Risk: t.Risk(), Reversible: t.Reversible(), Roles: t.Scope(), Agents: users[name],
+				Mode: effectiveMode(t, modes, false), Configured: conf, AutoAllowed: AutoEligible(t)}
+			if ti.Mode == ModeAuto {
+				if ti.EvalBlocked, err = evalBlockers(r.Context(), tx, users[name]); err != nil {
+					return err
+				}
+				if len(ti.EvalBlocked) > 0 {
+					ti.Mode = ModeApprove
+				}
+			}
+			out = append(out, ti)
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 		httpx.JSON(w, http.StatusOK, httpx.Page[toolInfo]{Items: out, Total: len(out)})
@@ -145,6 +203,12 @@ func (m *Module) setToolMode(w http.ResponseWriter, r *http.Request) error {
 		return httpx.BadRequest("mode must be suggest, approve or auto")
 	}
 	p := auth.MustFrom(r.Context())
+	if in.Mode == ModeAuto {
+		// Raising a tool above "approve" needs a measured score for every evaluated agent that uses it.
+		if err := m.requireEvalScores(r.Context(), "tool", name, usersOf(name)); err != nil {
+			return err
+		}
+	}
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
 		modes, err := m.toolModes(r.Context(), tx)
 		if err != nil {

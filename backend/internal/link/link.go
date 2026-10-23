@@ -246,7 +246,7 @@ func (m *Module) createDoc(w http.ResponseWriter, r *http.Request) error {
 }
 
 // importDoc parses an inbound X12 or EDIFACT message of any registry type that has a reader
-// (see GET /b2b/types, formats), or maps a CSV, JSON or fixed-width file. For EDIFACT, "type"
+// (see GET /b2b/types, formats), or maps a CSV, JSON, XML, X12, EDIFACT or fixed-width file. For EDIFACT, "type"
 // names the registry type when several types share a message and document name code.
 func (m *Module) importDoc(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
@@ -262,8 +262,18 @@ func (m *Module) importDoc(w http.ResponseWriter, r *http.Request) error {
 	}
 	var d edi.Document
 	var err error
-	switch f := strings.ToLower(in.Format); f {
-	case "csv", "json", "flat", "mapped":
+	f := strings.ToLower(in.Format)
+	// X12 and EDIFACT with a mappingId go through the mapping studio (a partner's own layout);
+	// without one they are parsed natively into the registry type.
+	if (f == "x12" || f == "edifact") && in.MappingID != nil {
+		content, err := fileContent(in.Content, in.ContentBase64)
+		if err != nil {
+			return err
+		}
+		return m.importMapped(w, r, in.MappingID, in.PartnerID, f, content)
+	}
+	switch f {
+	case "csv", "json", "xml", "flat", "mapped":
 		content, err := fileContent(in.Content, in.ContentBase64)
 		if err != nil {
 			return err
@@ -278,7 +288,7 @@ func (m *Module) importDoc(w http.ResponseWriter, r *http.Request) error {
 			d, err = edi.ParseEDIFACT(in.Content)
 		}
 	default:
-		return httpx.BadRequest("format must be x12, edifact, csv, json, flat or mapped")
+		return httpx.BadRequest("format must be x12, edifact, csv, json, xml, flat or mapped")
 	}
 	if err != nil {
 		return httpx.BadRequest("cannot parse: " + err.Error())

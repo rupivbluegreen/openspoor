@@ -30,6 +30,7 @@ Commands:
   migrate    apply database migrations
   bootstrap  create the first tenant and admin (--slug --name --email --password)
   rotate-keys re-seal the data keys and node key under OPENSPOOR_NEW_MASTER_KEY (--dry-run to check only)
+  eval-agents run the agent golden datasets and print the score table (--tenant SLUG records the scores, --agent NAME limits it)
   seed       load the demo data set (3 fictional companies, --packs N serialized packs)
   openapi    print the OpenAPI 3.1 document generated from the router
   version    print the version
@@ -115,6 +116,23 @@ func main() {
 		if err := runRotateKeys(ctx, a, cfg, *dry, os.Stdout); err != nil {
 			fatal(err)
 		}
+	case "eval-agents":
+		fs := flag.NewFlagSet("eval-agents", flag.ExitOnError)
+		tenant := fs.String("tenant", "", "record the scores for this tenant (slug)")
+		var only multiFlag
+		fs.Var(&only, "agent", "evaluate only this agent (repeatable)")
+		_ = fs.Parse(os.Args[2:])
+		a := mustApp(ctx, cfg)
+		defer a.Close()
+		res, err := a.EvalAgents(ctx, os.Stdout, *tenant, only)
+		if err != nil {
+			fatal(err)
+		}
+		for _, r := range res {
+			if r.Error != "" || !r.Pass {
+				os.Exit(1)
+			}
+		}
 	case "seed":
 		fs := flag.NewFlagSet("seed", flag.ExitOnError)
 		packs := fs.Int("packs", 10000, "serialized packs to create")
@@ -130,6 +148,12 @@ func main() {
 		os.Exit(2)
 	}
 }
+
+// multiFlag collects a repeatable string flag.
+type multiFlag []string
+
+func (m *multiFlag) String() string     { return fmt.Sprint(*m) }
+func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
 
 // runRotateKeys re-seals the master-key-sealed material under cfg.NewMasterKey and reports it on out.
 func runRotateKeys(ctx context.Context, a *app.App, cfg config.Config, dryRun bool, out io.Writer) error {

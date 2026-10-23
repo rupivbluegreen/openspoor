@@ -1,0 +1,100 @@
+name: release
+# Runs only when a version tag is pushed. Builds the container image, pushes it to the GitHub
+# container registry and signs it with cosign "keyless": the signature is bound to this workflow's
+# OIDC identity (Sigstore Fulcio certificate, Rekor transparency log), so no signing key is stored.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push the image
+      id-token: write # keyless signing (OIDC token for Sigstore)
+    env:
+      REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: docker/setup-buildx-action@v3.10.0
+
+      - uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image name and tags
+        id: meta
+        uses: docker/metadata-action@v5.7.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ github.ref_name }}
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: sigstore/cosign-installer@v3.9.2
+        with:
+          cosign-release: v2.5.3
+
+      - name: Sign the image (keyless, by digest)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ steps.meta.outputs.tags }}
+        run: |
+          # One signature per digest covers every tag that points at it.
+          ref=$(echo "$IMAGE" | head -n1 | cut -d: -f1)
+          cosign sign --yes "${ref}@${DIGEST}"
+          echo "IMAGE_REF=${ref}@${DIGEST}" >> "$GITHUB_ENV"
+
+      - name: Check the signature against this workflow's identity
+        run: |
+          cosign verify "$IMAGE_REF" \
+            --certificate-identity "https://github.com/${{ github.workflow_ref }}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+      - uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: SBOMs (CycloneDX)
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.12.0
+          go install github.com/anchore/syft/cmd/syft@v1.52.0
+          (cd backend && CGO_ENABLED=0 cyclonedx-gomod app -json -output ../sbom-backend.cdx.json -main cmd/openspoor .)
+          syft scan dir:frontend --exclude './**/node_modules/**' -o cyclonedx-json=sbom-frontend.cdx.json
+
+      - name: Attach the backend SBOM to the image as a signed attestation
+        run: cosign attest --yes --type cyclonedx --predicate sbom-backend.cdx.json "$IMAGE_REF"
+
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: sbom-${{ github.ref_name }}
+          path: |
+            sbom-backend.cdx.json
+            sbom-frontend.cdx.json
+          retention-days: 365

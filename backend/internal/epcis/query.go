@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -370,6 +371,9 @@ func (m *Module) createSub(w http.ResponseWriter, r *http.Request) error {
 	u, err := url.Parse(in.Dest)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return httpx.BadRequest("dest must be an http(s) URL")
+	}
+	if _, err := egress.ValidateURL(in.Dest); err != nil {
+		return httpx.BadRequest("dest: " + err.Error())
 	}
 	if in.Query == nil {
 		in.Query = Query{}

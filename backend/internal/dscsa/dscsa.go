@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"io"
 	"net/http"
 	"sort"
@@ -48,7 +49,7 @@ type Module struct {
 
 // New creates the module.
 func New(d kernel.Deps, ep *epcis.Module) *Module {
-	m := &Module{Deps: d, EPCIS: ep, Client: &http.Client{Timeout: 10 * time.Second}}
+	m := &Module{Deps: d, EPCIS: ep, Client: egress.Client(10 * time.Second)}
 	m.Transports = map[string]Transport{"https": &HTTPSTransport{Client: m.Client}, "as2": AS2Transport{M: m}, "local": &localTransport{m: m}}
 	return m
 }

@@ -79,7 +79,7 @@ func New(t testing.TB, opts ...func(*config.Config)) *Env {
 		mode = config.ModeSingle
 	}
 	cfg := config.Config{Mode: mode, DatabaseURL: dbURL, JWTSecret: []byte("test-secret-0123456789"), JWTTTL: time.Hour,
-		DevAuth: true, PublicURL: "http://localhost", BaseDomain: "localhost", BillingDriver: "none", WorkerConcurrency: 2, MasterKey: []byte("test-master-key")}
+		DevAuth: true, EgressAllowPrivate: true, PublicURL: "http://localhost", BaseDomain: "localhost", BillingDriver: "none", WorkerConcurrency: 2, MasterKey: []byte("test-master-key")}
 	for _, o := range opts {
 		o(&cfg)
 	}

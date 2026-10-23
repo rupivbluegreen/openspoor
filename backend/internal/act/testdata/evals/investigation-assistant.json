@@ -1,0 +1,61 @@
+{
+  "agent": "investigation-assistant",
+  "description": "Proposes assembling the tracing answer, or lists what is missing, for investigations near their due date or without evidence. Synthetic fixtures.",
+  "synthetic": true,
+  "threshold": 0.95,
+  "cases": [
+    {
+      "name": "due within a day and unanswered proposes assembling the answer",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "tracing_request", "title": "FDA tracing request", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001", "urn:epc:id:sgtin:9506000.134352.1002"], "due_at": "now+10h", "created_at": "now-2h"}}],
+      "expect": [{"tool": "investigation.assemble_answer", "entity": "@i", "titleContains": "Assemble tracing answer: FDA tracing request"}]
+    },
+    {
+      "name": "overdue, answered, without evidence opens a case at priority 2",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "suspect", "title": "Suspect lot L7", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001"], "due_at": "now-5h", "answered_at": "now-6h", "created_at": "now-3d"}}],
+      "expect": [{"tool": "case.open", "entity": "@i", "priority": 2, "reasoningContains": ["Overdue by", "no evidence or verification finding is recorded"]}]
+    },
+    {
+      "name": "due in five days and created an hour ago needs nothing",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "tracing_request", "title": "Routine request", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001"], "due_at": "now+5d", "created_at": "now-1h"}}],
+      "expect": []
+    },
+    {
+      "name": "no evidence after 30 hours proposes assembling the answer",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "illegitimate", "title": "Illegitimate notice", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001"], "created_at": "now-30h"}}],
+      "expect": [{"tool": "investigation.assemble_answer", "entity": "@i"}]
+    },
+    {
+      "name": "closed investigation is ignored",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "tracing_request", "status": "closed", "title": "Closed", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001"], "due_at": "now-2d", "created_at": "now-5d"}}],
+      "expect": []
+    },
+    {
+      "name": "answered with evidence and nothing missing needs nothing",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "tracing_request", "title": "Complete", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001"], "due_at": "now+6h", "answered_at": "now-1h", "findings": [{"kind": "evidence", "note": "scanned"}], "created_at": "now-2d"}}],
+      "expect": []
+    },
+    {
+      "name": "identifiers not found are listed",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "tracing_request", "title": "Gaps", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001"], "not_found": ["urn:epc:id:sgtin:9506000.134352.9998", "urn:epc:id:sgtin:9506000.134352.9999"], "due_at": "now+3h", "answered_at": "now-1h", "findings": [{"kind": "verification"}], "created_at": "now-2d"}}],
+      "expect": [{"tool": "case.open", "entity": "@i", "priority": 2, "reasoningContains": ["2 identifiers in scope were not found"]}]
+    },
+    {
+      "name": "empty scope near the due date opens a case instead of assembling",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "suspect", "title": "No scope", "due_at": "now+2h", "created_at": "now-1h"}}],
+      "expect": [{"tool": "case.open", "entity": "@i", "priority": 2, "reasoningContains": ["no identifiers are in scope"]}]
+    },
+    {
+      "name": "stale without evidence but not due is priority 3",
+      "rows": [{"table": "investigation", "row": {"id": "@i", "kind": "tracing_request", "title": "Slow", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001"], "answered_at": "now-30h", "created_at": "now-40h"}}],
+      "expect": [{"tool": "case.open", "entity": "@i", "priority": 3}]
+    },
+    {
+      "name": "two investigations are handled independently",
+      "rows": [
+        {"table": "investigation", "row": {"id": "@a", "kind": "tracing_request", "title": "A", "epcs": ["urn:epc:id:sgtin:9506000.134352.1001"], "due_at": "now+4h", "created_at": "now-1h"}},
+        {"table": "investigation", "row": {"id": "@b", "kind": "tracing_request", "title": "B", "epcs": ["urn:epc:id:sgtin:9506000.134352.1002"], "due_at": "now+9d", "created_at": "now-1h"}}
+      ],
+      "expect": [{"tool": "investigation.assemble_answer", "entity": "@a"}]
+    }
+  ]
+}

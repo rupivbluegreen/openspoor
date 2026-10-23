@@ -63,8 +63,8 @@ func TestTransactionTypeRegistryEndpoint(t *testing.T) {
 	if o := got["order"]; o.Standards.X12 != "850" || o.Standards.EDIFACT != "ORDERS" || o.Standards.EdifactBgm != "220" || !o.Formats.IDocWrite {
 		t.Fatalf("order: %+v", o)
 	}
-	if c := got["customs_declaration"]; c.Formats.X12Write || c.Formats.EDIFACTWrite || c.Standards.EDIFACT != "CUSDEC" {
-		t.Fatalf("customs_declaration is catalogued only: %+v", c)
+	if c := got["grocery_order"]; c.Formats.X12Write || c.Formats.EDIFACTWrite || c.Standards.X12 != "875" {
+		t.Fatalf("grocery_order is catalogued only: %+v", c)
 	}
 	for _, f := range []string{"dates.period_start", "lines.status", "lines.dates.delivery_requested"} {
 		if !contains(fc.Fields, f) {
@@ -198,7 +198,7 @@ func TestDocumentsOfAnyRegistryType(t *testing.T) {
 		t.Errorf("unknown format: %d", r.Status)
 	}
 	var cd struct{ ID string }
-	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/b2b/documents", map[string]any{"type": "customs_declaration", "payload": map[string]any{
+	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/b2b/documents", map[string]any{"type": "grocery_order", "payload": map[string]any{
 		"number": "CD-1", "lines": []map[string]any{{"gtin": "09506000134352", "quantity": 1}}}}), &cd)
 	for _, f := range []string{"x12", "edifact", "idoc"} {
 		if r := e.Do("GET", "/api/v1/b2b/documents/"+cd.ID+"/edi?format="+f, nil); r.Status != http.StatusBadRequest {

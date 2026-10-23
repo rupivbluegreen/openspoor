@@ -214,4 +214,106 @@ var Library = []KPI{
 	{ID: "coldchain_open_excursions", Name: "Open excursions", Category: "safety", Unit: "count", Direction: LowerBetter, Kind: KindSnapshot,
 		Description: "Temperature excursions not yet closed. A snapshot as of now.",
 		SQL:         `select count(*)::float8 from sensor_excursion where status = 'open'`},
+
+	// --- traceability: how promptly and how completely supply-chain events are recorded ---
+	{ID: "event_capture_lag_hours", Name: "Event recording delay", Category: "traceability", Unit: "h", Direction: LowerBetter, Kind: KindRatio, Peer: true,
+		Description: "Mean hours between an EPCIS event happening (its event time) and the node recording it, for events recorded in the period. Events dated in the future count as zero.",
+		SQL: `select tenant_id, ` + utcDay("record_time") + `, greatest(extract(epoch from record_time - event_time), 0)::float8 / 3600, 1::float8 from epcis_event
+			where record_time >= $1 and record_time < $2`},
+	{ID: "events_late_pct", Name: "Events recorded more than 24 h late", Category: "traceability", Unit: "%", Direction: LowerBetter, Kind: KindRatio, Scale: 100, Peer: true,
+		Description: "Share of EPCIS events recorded in the period more than 24 hours after their event time.",
+		SQL: `select tenant_id, ` + utcDay("record_time") + `, (record_time - event_time > interval '24 hours')::int::float8, 1::float8 from epcis_event
+			where record_time >= $1 and record_time < $2`},
+	{ID: "capture_processing_p95_ms", Name: "Capture processing time (p95)", Category: "traceability", Unit: "ms", Direction: LowerBetter, Kind: KindQuantile, Q: 0.95, Peer: true,
+		Description: "95th percentile of the time from receiving an EPCIS capture request to finishing it, for captures that finished.",
+		SQL: `select tenant_id, ` + utcDay("created_at") + `, extract(epoch from finished_at - created_at)::float8 * 1000, 0::float8 from epcis_capture
+			where finished_at is not null and created_at >= $1 and created_at < $2`},
+	{ID: "events_missing_location_pct", Name: "Events without a location", Category: "traceability", Unit: "%", Direction: LowerBetter, Kind: KindRatio, Scale: 100, Peer: true,
+		Description: "Share of EPCIS events recorded in the period that carry neither a read point nor a business location.",
+		SQL: `select tenant_id, ` + utcDay("record_time") + `, (coalesce(read_point, '') = '' and coalesce(biz_location, '') = '')::int::float8, 1::float8 from epcis_event
+			where record_time >= $1 and record_time < $2`},
+	{ID: "food_cte_record_lag_hours", Name: "Critical tracking event recording delay", Category: "traceability", Unit: "h", Direction: LowerBetter, Kind: KindRatio, Peer: true,
+		Description: "Mean hours between a food critical tracking event happening and its being recorded, for events recorded in the period. Events dated in the future count as zero.",
+		SQL: `select tenant_id, ` + utcDay("created_at") + `, greatest(extract(epoch from created_at - event_time), 0)::float8 / 3600, 1::float8 from food_cte
+			where created_at >= $1 and created_at < $2`},
+
+	// --- serialization and aggregation ---
+	{ID: "serials_allocated", Name: "Serial numbers allocated", Category: "serialization", Unit: "count", Direction: HigherBetter, Kind: KindSum,
+		Description: "Serial numbers handed out from serial pools in the period.",
+		SQL:         `select tenant_id, ` + utcDay("created_at") + `, count::float8, 1::float8 from serial_allocation where created_at >= $1 and created_at < $2`},
+	{ID: "packs_commissioned", Name: "Packs commissioned", Category: "serialization", Unit: "count", Direction: HigherBetter, Kind: KindSum,
+		Description: "Serialised items named in commissioning object events recorded in the period.",
+		SQL: `select tenant_id, ` + utcDay("record_time") + `, cardinality(epcs)::float8, 1::float8 from epcis_event
+			where event_type = 'ObjectEvent' and biz_step = 'commissioning' and record_time >= $1 and record_time < $2`},
+	{ID: "aggregation_events", Name: "Packing (aggregation) events", Category: "serialization", Unit: "count", Direction: HigherBetter, Kind: KindSum,
+		Description: "Aggregation events with action ADD (children packed into a parent) recorded in the period.",
+		SQL: `select tenant_id, ` + utcDay("record_time") + `, 1::float8, 1::float8 from epcis_event
+			where event_type = 'AggregationEvent' and action = 'ADD' and record_time >= $1 and record_time < $2`},
+	{ID: "packs_aggregated_pct", Name: "Saleable packs packed into a parent", Category: "serialization", Unit: "%", Direction: HigherBetter, Kind: KindSnapshot,
+		Description: "Share of saleable serialised items (those with a GTIN) that are currently aggregated into a parent such as a case or pallet. A snapshot as of now.",
+		SQL: `select (100.0 * count(*) filter (where parent_epc is not null) / nullif(count(*), 0))::float8 from serial_state
+			where gtin is not null and status in ` + saleableStatuses},
+	{ID: "serial_capacity_remaining", Name: "Serial numbers left in active pools", Category: "serialization", Unit: "count", Direction: HigherBetter, Kind: KindSnapshot,
+		Description: "Capacity minus serial numbers issued, summed over active serial pools. A snapshot as of now.",
+		SQL:         `select sum(capacity - next_counter)::float8 from serial_pool where status = 'active'`},
+
+	// --- recall and cold chain (added) ---
+	{ID: "recalls_open", Name: "Recalls not closed", Category: "safety", Unit: "count", Direction: LowerBetter, Kind: KindSnapshot,
+		Description: "Recalls that have been started and not closed. A snapshot as of now.",
+		SQL:         `select count(*)::float8 from recall where status <> 'closed'`},
+	{ID: "recall_duration_hours", Name: "Recall duration", Category: "safety", Unit: "h", Direction: LowerBetter, Kind: KindRatio, Peer: true,
+		Description: "Mean hours from starting a recall to closing it, for recalls closed in the period.",
+		SQL: `select tenant_id, ` + utcDay("closed_at") + `, extract(epoch from closed_at - created_at)::float8 / 3600, 1::float8 from recall
+			where closed_at >= $1 and closed_at < $2`},
+	{ID: "coldchain_excursion_peak_c", Name: "Excursion severity", Category: "safety", Unit: "°C", Direction: LowerBetter, Kind: KindRatio, Peer: true,
+		Description: "Mean number of degrees the peak temperature of an excursion lay outside the allowed range, for excursions that started in the period.",
+		SQL: `select tenant_id, ` + utcDay("started_at") + `, greatest(peak_c - max_c, min_c - peak_c)::float8, 1::float8 from sensor_excursion
+			where started_at >= $1 and started_at < $2`},
+
+	// --- partner exchange (added) ---
+	{ID: "partner_test_pass_pct", Name: "Partner connection tests passed", Category: "exchange", Unit: "%", Direction: HigherBetter, Kind: KindRatio, Scale: 100, Peer: true,
+		Description: "Share of onboarding connection tests run in the period that passed.",
+		SQL:         `select tenant_id, ` + utcDay("created_at") + `, passed::int::float8, 1::float8 from partner_test_run where created_at >= $1 and created_at < $2`},
+	{ID: "as2_delivery_pct", Name: "AS2 messages delivered", Category: "exchange", Unit: "%", Direction: HigherBetter, Kind: KindRatio, Scale: 100, Peer: true,
+		Description: "Share of outbound AS2 messages created in the period that ended delivered (receipt verified) rather than failed. Messages still in flight are not counted.",
+		SQL: `select tenant_id, ` + utcDay("created_at") + `, (status = 'delivered')::int::float8, 1::float8 from as2_message
+			where direction = 'outbound' and status in ('delivered', 'failed') and created_at >= $1 and created_at < $2`},
+	{ID: "sftp_failure_pct", Name: "SFTP files failed", Category: "exchange", Unit: "%", Direction: LowerBetter, Kind: KindRatio, Scale: 100, Peer: true,
+		Description: "Share of files exchanged over SFTP in the period (either direction) that failed processing or delivery.",
+		SQL:         `select tenant_id, ` + utcDay("created_at") + `, (status = 'failed')::int::float8, 1::float8 from sftp_file where created_at >= $1 and created_at < $2`},
+	{ID: "b2b_ack_hours", Name: "Time to acknowledgement", Category: "exchange", Unit: "h", Direction: LowerBetter, Kind: KindRatio, Peer: true,
+		Description: "Mean hours from sending an outbound B2B document to its acknowledgement, for documents acknowledged in the period.",
+		SQL: `select tenant_id, ` + utcDay("acked_at") + `, extract(epoch from acked_at - sent_at)::float8 / 3600, 1::float8 from b2b_document
+			where direction = 'outbound' and sent_at is not null and acked_at >= $1 and acked_at < $2`},
+
+	// --- agents and exceptions ---
+	{ID: "agent_acceptance_pct", Name: "Agent proposals accepted", Category: "agents", Unit: "%", Direction: HigherBetter, Kind: KindRatio, Scale: 100, Peer: true,
+		Description: "Of the agent proposals created in the period that have been decided, the share that were not rejected by a person.",
+		SQL: `select tenant_id, ` + utcDay("created_at") + `, (status <> 'rejected')::int::float8, 1::float8 from agent_action
+			where status in ('approved', 'executed', 'failed', 'reverted', 'rejected') and created_at >= $1 and created_at < $2`},
+	{ID: "agent_actions_pending", Name: "Agent proposals waiting for a decision", Category: "agents", Unit: "count", Direction: LowerBetter, Kind: KindSnapshot,
+		Description: "Agent proposals that nobody has approved or rejected yet. A snapshot as of now.",
+		SQL:         `select count(*)::float8 from agent_action where status = 'proposed'`},
+	{ID: "agent_decision_hours", Name: "Time to decide on agent proposals", Category: "agents", Unit: "h", Direction: LowerBetter, Kind: KindRatio, Peer: true,
+		Description: "Mean hours from an agent proposing an action to its being decided, for proposals decided in the period.",
+		SQL: `select tenant_id, ` + utcDay("decided_at") + `, extract(epoch from decided_at - created_at)::float8 / 3600, 1::float8 from agent_action
+			where decided_at >= $1 and decided_at < $2`},
+	{ID: "mapping_samples_unmapped", Name: "Partner files waiting for a mapping", Category: "agents", Unit: "count", Direction: LowerBetter, Kind: KindSnapshot,
+		Description: "Uploaded or failed partner files that have no accepted mapping yet (new, proposed or unsupported). A snapshot as of now.",
+		SQL:         `select count(*)::float8 from mapping_sample where status in ('new', 'proposed', 'unsupported')`},
+
+	// --- security and audit ---
+	{ID: "esignatures_captured", Name: "Electronic signatures captured", Category: "security", Unit: "count", Direction: HigherBetter, Kind: KindSum,
+		Description: "Electronic signatures applied in the period, each linked to its audit entry.",
+		SQL:         `select tenant_id, ` + utcDay("signed_at") + `, 1::float8, 1::float8 from esignature where signed_at >= $1 and signed_at < $2`},
+	{ID: "api_keys_unused", Name: "API keys unused for 90 days", Category: "security", Unit: "count", Direction: LowerBetter, Kind: KindSnapshot,
+		Description: "Active API keys (not revoked, not expired) that have not been used in 90 days, counting from creation when never used. A snapshot as of now.",
+		SQL: `select count(*)::float8 from api_key where revoked_at is null and (expires_at is null or expires_at > now())
+			and coalesce(last_used_at, created_at) < now() - interval '90 days'`},
+	{ID: "api_keys_expiring", Name: "API keys expiring in 30 days", Category: "security", Unit: "count", Direction: LowerBetter, Kind: KindSnapshot,
+		Description: "Active API keys whose expiry falls within the next 30 days. A snapshot as of now.",
+		SQL:         `select count(*)::float8 from api_key where revoked_at is null and expires_at between now() and now() + interval '30 days'`},
+	{ID: "admin_users", Name: "Active administrators", Category: "security", Unit: "count", Direction: LowerBetter, Kind: KindSnapshot,
+		Description: "Active user accounts holding the Admin role (least privilege: keep few). A snapshot as of now.",
+		SQL:         `select count(*)::float8 from app_user where status = 'active' and 'Admin' = any(roles) and not operator`},
 }

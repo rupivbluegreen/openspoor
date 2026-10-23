@@ -24,9 +24,11 @@ import (
 	"github.com/openspoor/openspoor/internal/core/bus"
 	"github.com/openspoor/openspoor/internal/core/config"
 	"github.com/openspoor/openspoor/internal/core/db"
+	"github.com/openspoor/openspoor/internal/core/egress"
 	"github.com/openspoor/openspoor/internal/core/httpx"
 	"github.com/openspoor/openspoor/internal/core/jobs"
 	"github.com/openspoor/openspoor/internal/core/kernel"
+	"github.com/openspoor/openspoor/internal/core/ratelimit"
 	"github.com/openspoor/openspoor/internal/core/secrets"
 	"github.com/openspoor/openspoor/internal/platform"
 )
@@ -43,6 +45,8 @@ type App struct {
 	Modules  []kernel.Module
 	Platform *platform.Module
 	Router   http.Handler
+	// Limiter is the per-tenant and per-API-key request limiter of the authenticated API; nil when disabled.
+	Limiter *ratelimit.Limiter
 }
 
 // New connects infrastructure and assembles modules.
@@ -61,6 +65,15 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		d.Close()
 		return nil, err
 	}
+	egressPolicy, err := egress.NewPolicy(cfg.EgressAllowPrivate, cfg.EgressAllowCIDRs)
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	egress.SetDefault(egressPolicy)
+	if cfg.EgressAllowPrivate || len(cfg.EgressAllowCIDRs) > 0 {
+		slog.Warn("outbound calls may reach internal networks", "allowPrivate", cfg.EgressAllowPrivate, "allowCIDRs", cfg.EgressAllowCIDRs)
+	}
 	deps := kernel.Deps{Cfg: cfg, DB: d, Bus: b, Jobs: jobs.NewRunner(d.Pool, cfg.WorkerConcurrency), Keys: secrets.NewKeyring(sealer, d.Pool)}
 	plat := platform.New(deps)
 	a, err := auth.New(ctx, cfg.JWTSecret, cfg.JWTTTL, plat, cfg.OIDCIssuer, cfg.OIDCAudience)
@@ -73,6 +86,10 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	audit.SetPseudonymizer(deps.Keys.Pseudonym)
 	plat.Deps = deps
 	app := &App{Deps: deps, Platform: plat}
+	if app.Limiter, err = newLimiter(cfg, d); err != nil {
+		d.Close()
+		return nil, err
+	}
 	app.Modules, err = buildModules(deps, plat)
 	if err != nil {
 		d.Close()
@@ -230,6 +247,9 @@ func (a *App) routes() http.Handler {
 		}
 		r.Group(func(r chi.Router) {
 			r.Use(noStore, a.Deps.Auth.Middleware)
+			if a.Limiter != nil {
+				r.Use(a.Limiter.Middleware)
+			}
 			r.Get("/search", httpx.Handler(a.search))
 			mcpServer := a.mcpServer()
 			r.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, &mcp.StreamableHTTPOptions{Stateless: true}))

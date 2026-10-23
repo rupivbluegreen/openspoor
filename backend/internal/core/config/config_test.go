@@ -134,3 +134,33 @@ func TestLoadShortSecretAllowedWithDevAuth(t *testing.T) {
 		}
 	}
 }
+
+func TestEgressAndRateLimitSettings(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("OPENSPOOR_DEV_AUTH", "true")
+	for _, k := range []string{"OPENSPOOR_EGRESS_ALLOW_PRIVATE", "OPENSPOOR_EGRESS_ALLOW_CIDRS", "OPENSPOOR_RATE_LIMIT", "OPENSPOOR_RATE_LIMITS"} {
+		t.Setenv(k, "")
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.EgressAllowPrivate || c.EgressAllowCIDRs != nil || !c.RateLimit || c.RateLimitPlans != "" {
+		t.Fatalf("defaults must be strict egress and limiting on: %+v", c)
+	}
+	t.Setenv("OPENSPOOR_EGRESS_ALLOW_PRIVATE", "true")
+	t.Setenv("OPENSPOOR_EGRESS_ALLOW_CIDRS", "10.0.0.0/8, 192.168.1.5")
+	t.Setenv("OPENSPOOR_RATE_LIMIT", "false")
+	t.Setenv("OPENSPOOR_RATE_LIMITS", "trial=1/2")
+	c, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.EgressAllowPrivate || len(c.EgressAllowCIDRs) != 2 || c.RateLimit || c.RateLimitPlans != "trial=1/2" {
+		t.Fatalf("overrides: %+v", c)
+	}
+	t.Setenv("OPENSPOOR_EGRESS_ALLOW_CIDRS", "10.0.0.0/8,nonsense")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "OPENSPOOR_EGRESS_ALLOW_CIDRS") {
+		t.Fatalf("invalid CIDR accepted: %v", err)
+	}
+}

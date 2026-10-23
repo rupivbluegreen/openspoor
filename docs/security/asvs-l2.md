@@ -83,7 +83,7 @@ Local sessions are signed JWTs (HS256) or OIDC tokens. A local token carries the
 | Group | Status | Evidence or gap |
 |---|---|---|
 | 5.1 Input validation | partly | JSON bodies are decoded into typed structs, unknown fields rejected, size-capped (`httpx.Decode`, 32 MiB; inbox 64 MiB); semantic validation is per endpoint and varies |
-| 5.2 Sanitization, SSRF | partly | frontend output encoding by React/Ant Design (not assessed here). SSRF protection exists only for the regulatory-source watcher (`internal/act/safefetch.go`); webhook destinations, connector endpoints and peer URLs are not filtered (gap) |
+| 5.2 Sanitization, SSRF | partly | frontend output encoding by React/Ant Design (not assessed here). SSRF: one outbound guard, `internal/core/egress`, refuses loopback, private, link-local, carrier-grade NAT, multicast, unspecified, reserved and cloud-metadata addresses by default. The check runs in the dialer's `Control` hook on every connection attempt, after DNS and for every redirect, so a name that changes its answer between validation and connection (rebinding) is refused at dial time (`TestDNSRebinding`, `TestRedirectToInternalAddressIsRefused`). Opt-outs: `OPENSPOOR_EGRESS_ALLOW_PRIVATE=true` (loopback, private, link-local, CGNAT; never metadata) and `OPENSPOOR_EGRESS_ALLOW_CIDRS` (exact networks, including metadata). Wired for webhooks (`TestWebhookDeliveryRefusesInternalDestinations`, literal addresses also refused when the subscription is saved), connectors (`TestConnectorClientsRefuseInternalAddresses` and the eufmd, sarsd, hubjson and sftpdrop tests), DSCSA HTTPS and AS2 transports (`TestHTTPSTransportRefusesInternalPartnerEndpoint`, `TestAS2TransportRefusesInternalPartnerEndpoint`) and partner health probes (`TestHealthProbeRefusesInternalEndpoint`). **Not yet on the guard: federation peer delivery (`internal/link`) and the regulatory-source watcher (`internal/act/safefetch.go`, which keeps its own equivalent check); see `docs/OPEN_QUESTIONS.md`.** Not covered by design: mail, object storage, the message bus and the secret store (operator configuration). Outbound HTTP proxies are not used |
 | 5.3 Output encoding, injection | partly | SQL uses pgx placeholders by convention and gosec runs in CI; no dedicated injection test suite. API output is JSON |
 | 5.5 Deserialization | met | JSON and XML only; Go's `encoding/xml` does not resolve external entities; no native object deserialization |
 
@@ -135,7 +135,7 @@ Local sessions are signed JWTs (HS256) or OIDC tokens. A local token carries the
 
 | Group | Status | Evidence or gap |
 |---|---|---|
-| 11.1 Business logic security | partly | state machines are enforced server-side (capture is idempotent, serial states, approval gates for agent actions, e-signatures re-authenticate with the password); federation replays are rejected (`TestFederationTwoNodes`). No systematic abuse-case analysis or per-tenant rate limits on authenticated calls |
+| 11.1 Business logic security | partly | state machines are enforced server-side (capture is idempotent, serial states, approval gates for agent actions, e-signatures re-authenticate with the password); federation replays are rejected (`TestFederationTwoNodes`). Authenticated calls are rate limited per tenant and per API key (`internal/core/ratelimit`; see the threat model, section 5; `TestRateLimitPerTenantAnswers429WithRetryAfter`, `TestRateLimitPerAPIKeyIsSeparateFromTheTenant`); limits are per node. No systematic abuse-case analysis |
 
 ## V12 Files and resources
 
@@ -143,7 +143,7 @@ Local sessions are signed JWTs (HS256) or OIDC tokens. A local token carries the
 |---|---|---|
 | 12.1 Upload | partly | request size caps on decode paths; no antivirus scanning, no per-tenant quota |
 | 12.3 – 12.5 File execution and storage | partly | uploaded documents are stored and served as data, never executed; the served content type comes from the upload |
-| 12.6 SSRF | partly | see V5.2 |
+| 12.6 SSRF | partly | see V5.2 (federation peers and the regulatory-source watcher still to move onto the shared guard) |
 
 ## V13 API and web service
 
@@ -180,6 +180,8 @@ were reachable.
 Collected in `docs/OPEN_QUESTIONS.md`, section "Security gaps". Closed in this round: password change, e-mailed password recovery,
 TOTP second factor with an administrator policy, token revocation, no cookie credential, sealed webhook secrets with a master-key
 rotation command, `Cache-Control: no-store`, proxy-aware public rate limits. Still open: password limits (12 characters, 72-byte
-ceiling); a second factor beyond TOTP and for every role; idle timeout and per-device sessions; SSRF protection for webhooks,
-connectors and peers; per-tenant API rate limits; centralised security logging; signed images and SBOM; independent penetration test.
+ceiling); a second factor beyond TOTP and for every role; idle timeout and per-device sessions; SSRF guard on federation peer delivery and the regulatory-source watcher (webhooks, connectors, DSCSA and AS2 are done); cluster-wide
+(not per-node) API rate limits; centralised security logging; independent penetration test. Closed in this round: shared egress guard,
+per-tenant and per-API-key rate limits, a coverage gate and SBOM generation in CI, and keyless-signed images in the release workflow
+(not yet run; it needs a tag).
 The new code is covered by `internal/platform/account_test.go` (platform package coverage 89.5 %, measured with the test command above).

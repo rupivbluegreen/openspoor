@@ -103,6 +103,10 @@ const nl: Messages = {
       coldchain_open_excursions: 'Openstaande afwijkingen',
     },
   },
+  mapping: {
+    lineSegment: 'Regelsegment',
+    lineSegmentHint: 'Segment waarmee elke regel begint, bijvoorbeeld PO1 of LIN (leeg: automatisch)',
+  },
   b2b: {
     category: {
       planning: 'Planning',
