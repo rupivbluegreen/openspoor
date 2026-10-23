@@ -3,6 +3,7 @@ const en = {
   pillar: { trace: 'Trace', link: 'Link', act: 'Act', comply: 'Comply', food: 'Food', settings: 'Settings', ecosystem: 'Ecosystem' },
   nav: {
     investigations: 'Investigations',
+    security: 'Security',
     dashboard: 'Dashboard', serialization: 'Serialization', epcisInbox: 'EPCIS Inbox', serialLookup: 'Serial lookup',
     eventQuery: 'Event query', subscriptions: 'Subscriptions', partners: 'Partners', shipments: 'Shipments',
     b2bDocuments: 'B2B documents', supplierCompliance: 'Supplier compliance', federation: 'Federation peers',
@@ -146,6 +147,25 @@ const en = {
   auth: {
     title: 'Sign in to Open Spoor', subtitle: 'Trace · Link · Act · Comply', tenantSlug: 'Tenant',
     operatorTitle: 'Operator sign in', operatorOnly: 'This account is not an operator.', sessionExpired: 'Your session has expired.',
+  },
+  security: {
+    title: 'Security', passwordTitle: 'Change password', currentPassword: 'Current password', newPassword: 'New password',
+    confirmPassword: 'Repeat the new password', passwordMismatch: 'The passwords do not match',
+    passwordChanged: 'Password changed. Your other sessions were signed out.',
+    mfaTitle: 'Two-factor authentication', mfaOn: 'On', mfaOff: 'Off', mfaPending: 'Set-up not finished',
+    mfaIntro: 'Ask for a code from an authenticator app at every sign-in.', mfaSetup: 'Set up',
+    mfaScan: 'Add this key to an authenticator app (time-based, 6 digits), then enter the code the app shows.',
+    mfaSecret: 'Setup key', mfaUri: 'Setup link', mfaCode: 'Verification code', mfaConfirm: 'Confirm and turn on',
+    mfaEnabled: 'Two-factor authentication is on.', recoveryTitle: 'Recovery codes',
+    recoveryHint: 'Each code works once. Keep them somewhere safe: they are not shown again.', recoveryLeft: '{{n}} recovery codes left',
+    mfaDisable: 'Turn off', mfaDisableHint: 'Enter your password and a current code or a recovery code.', codeOrRecovery: 'Code or recovery code',
+    regenerate: 'New recovery codes', policyTitle: 'Tenant policy', requireAdminMfa: 'Require two-factor authentication for administrators',
+    policyHint: 'Administrators without it can only set it up until they have.',
+    setupRequired: 'Your organisation requires two-factor authentication for administrators. Set it up to continue.',
+    signInCode: 'Verification code or recovery code', forgot: 'Forgot your password?',
+    forgotIntro: 'Enter your tenant and e-mail address. If the account exists we send a link that works once, for 30 minutes.',
+    forgotSent: 'If the account exists, an e-mail is on its way.', sendLink: 'Send link', resetTitle: 'Choose a new password',
+    resetDone: 'Password changed. You can sign in now.', backToSignIn: 'Back to sign in',
   },
   esig: {
     title: 'Electronic signature', intro: 'Re-enter your password to sign. Your signature is bound to the audit trail.',

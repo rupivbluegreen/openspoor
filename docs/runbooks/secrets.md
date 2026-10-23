@@ -56,12 +56,33 @@ Secret / CSI volume and use `file:` references with `extraEnv`.
 
 | Secret | If lost | If leaked | Rotation |
 |---|---|---|---|
-| Master key | sealed tenant keys, pool keys, connector secrets and the federation key cannot be opened: restore from backup together with the database | all of the above can be unsealed with database access | not automated. Re-sealing needs a maintenance window: stop writers, unseal and re-seal `tenant_key`, `federation_node` and connector secrets with a new key. Plan it as a migration; test on a restore |
+| Master key | sealed tenant keys, pool keys, connector and webhook secrets, TOTP secrets and the federation key cannot be opened: restore from backup together with the database | all of the above can be unsealed with database access | `openspoor rotate-keys` (below), in a maintenance window |
 | JWT secret | nothing (users sign in again) | tokens can be forged until rotated | rotate any time; all sessions end |
 | Database password | no access | data access within the role's RLS limits | change in PostgreSQL, update the reference, restart |
 | API keys | n/a | revoke the key (`DELETE /api/v1/api-keys/{id}`) | issue a new key |
 
 Never put these in values files, images, the job queue, or logs.
+
+## Rotating the master key
+
+The master key wraps two kinds of material: the per-tenant data keys (`tenant_key`) and the federation node's signing key
+(`federation_node`). Everything else that is sealed (pool keys, connector credentials, webhook secrets, TOTP secrets) is sealed
+with a tenant data key, which does not change, so it is not touched.
+
+1. Generate the new key (`openssl rand -base64 32`) and make it available as `OPENSPOOR_NEW_MASTER_KEY` to the process that runs
+   the command, in any of the forms above (plain, `file:`, `vault:`). Keep `OPENSPOOR_MASTER_KEY` at the current key.
+2. Take a database backup. Stop every `api` and `worker` process: a process still holding the old key cannot read what is
+   re-sealed, and a data key created meanwhile would be sealed with the old key.
+3. `openspoor rotate-keys --dry-run` opens every wrapped key with the current key, re-seals it with the new one, checks that the
+   new key opens it, and rolls back. A wrong current key stops here with the tenant it failed on.
+4. `openspoor rotate-keys` does the same in one transaction (both tables are locked until it commits) and commits. It first seals
+   any webhook secret still stored in clear text from before sealing existed, and prints what it did.
+5. Set `OPENSPOOR_MASTER_KEY` to the new key, remove `OPENSPOOR_NEW_MASTER_KEY`, start the processes. Keep the old key in custody
+   until a restore of the pre-rotation backup is no longer needed: that backup is only readable with the old key.
+
+If the command fails, nothing changed. The command does not rotate the JWT secret (rotate that separately; all sessions end) and
+does not re-encrypt database or object-storage volumes. It cannot run while the old key is unknown: there is no recovery from a lost
+master key except a backup together with its key.
 
 ## KMS and Vault transit
 

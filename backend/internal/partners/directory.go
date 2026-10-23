@@ -2,7 +2,6 @@ package partners
 
 import (
 	"errors"
-	"net"
 	"net/http"
 	"net/mail"
 	"regexp"
@@ -193,10 +192,8 @@ func ptrEq(a, b *string) bool {
 
 func (m *Module) limit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			host = r.RemoteAddr
-		}
+		// Behind a reverse proxy the TCP peer is the proxy; the client address honours OPENSPOOR_TRUSTED_PROXIES.
+		host := httpx.ClientIP(r, m.Cfg.TrustedProxies)
 		m.mu.Lock()
 		if m.limiters == nil || len(m.limiters) > 100_000 {
 			m.limiters = map[string]*rate.Limiter{}

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -83,10 +82,8 @@ func (m *Module) Public(r chi.Router) {
 
 func (m *Module) limit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			host = r.RemoteAddr
-		}
+		// Behind a reverse proxy the TCP peer is the proxy; the client address honours OPENSPOOR_TRUSTED_PROXIES.
+		host := httpx.ClientIP(r, m.Cfg.TrustedProxies)
 		m.mu.Lock()
 		l, ok := m.limiters[host]
 		if !ok {

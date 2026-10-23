@@ -578,7 +578,9 @@ func (m *Module) traceLot(w http.ResponseWriter, r *http.Request) error {
 // --- FSMA 204 sortable spreadsheet ---
 
 // fsmaColumns follow the KDEs of 21 CFR 1.1325–1.1350.
-// TODO(spec): align header names and order with FDA's published sortable spreadsheet template.
+// TODO(spec): align header names and order with FDA's published sortable spreadsheet template. The
+// template is not available in this repository, so nothing here is claimed to match it; the open
+// points are listed in docs/OPEN_QUESTIONS.md ("FSMA 204 sortable spreadsheet").
 var fsmaColumns = []string{"Traceability Lot Code", "Traceability Lot Code Source", "Product Description", "Quantity", "Unit of Measure",
 	"Critical Tracking Event", "Event Date", "Event Time (UTC)", "Location GLN", "Location Description", "Ship From", "Ship To", "Ship To Name",
 	"Reference Document Type", "Reference Document Number", "Input Traceability Lot Codes", "Harvest Date", "Pack Date", "Additional KDEs"}

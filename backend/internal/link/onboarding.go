@@ -74,7 +74,7 @@ func (m *Module) runPartnerTest(w http.ResponseWriter, r *http.Request) error {
 	case "epcis":
 		detail, err = m.testEPCIS(ctx, p)
 	case "as2":
-		err = errors.New("AS2 is not a built-in transport; test it through the AS2 gateway")
+		err = errors.New("AS2 has no connection test message; configure the partner's AS2 profile and verify the connection with a first shipment")
 	case "":
 		ch, err = "none", errors.New("the partner has no channel configured")
 	default:

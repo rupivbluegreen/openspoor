@@ -55,6 +55,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         tokenStore.set(res.token);
       },
       signOut: () => {
+        // Ends the server-side session (every token of this user) before the local token is dropped.
+        void api.post('/auth/logout').catch(() => undefined);
         tokenStore.set(null);
         qc.clear();
       },

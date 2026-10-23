@@ -1,9 +1,9 @@
 # dscsa
 
 US DSCSA interoperability. The module owns outbound shipments and their Transaction
-Information / Transaction Statement (TI/TS) EPCIS documents, partner exchange (HTTPS; AS2 is
-an interface boundary for an external gateway, see ADR-007; a `local` transport delivers
-between tenants on the same node), reconciliation of inbound TI/TS with the ASN, the
+Information / Transaction Statement (TI/TS) EPCIS documents, partner exchange (HTTPS; AS2
+sender and receiver in process, see ADR-007; a `local` transport delivers between tenants on
+the same node), reconciliation of inbound TI/TS with the ASN, the
 Verification Router Service (VRS) requester and responder (GS1 Lightweight Messaging), a VRS
 lookup directory, record retention (six years by default, per-tenant overrides), and
 investigations: tracing requests and suspect / illegitimate product investigations.
@@ -17,6 +17,8 @@ investigations: tracing requests and suspect / illegitimate product investigatio
 | GET | `/shipments/{id}` | Get a shipment |
 | POST | `/shipments/{id}/tits` | Build the TI/TS document |
 | POST | `/shipments/{id}/send` | Send TI/TS to the partner |
+| GET, PUT | `/as2/station` | This node's AS2 identity (PUT: admin / integration; `generate` makes a self-signed RSA-2048 certificate; the key is sealed and never returned) |
+| POST | `/as2/receive` | AS2 receive endpoint: messages and asynchronous receipts (public; the sender is authenticated by its pinned certificate) |
 | POST | `/shipments/{id}/reconcile` | Reconcile inbound TI/TS with the ASN |
 | GET, POST | `/vrs/requests` | List / send VRS verification requests |
 | GET, POST | `/vrs/directory` | List / upsert VRS lookup directory entries |
@@ -36,6 +38,43 @@ investigations: tracing requests and suspect / illegitimate product investigatio
 
 Shipment and VRS routes need the admin, ops, compliance or integration role. Investigation
 writes need admin or compliance; viewers read.
+
+### AS2
+
+`transport: "as2"` on a shipment sends the TI/TS (`application/ld+json`) as an AS2 message.
+The pieces:
+
+- **Station**: this node's AS2 identifier, certificate and private key (`as2_station`, key sealed
+  with the tenant key). The AS2 identifier is unique across the node because an inbound message
+  is routed by `AS2-To`.
+- **Partner profile** (`PUT /partners/{id}/as2`, in the partners module): the partner's
+  certificate (sealed), `sign`, `encrypt` (both default to true), `mdn` (`sync` or `async`) and
+  `mdnUrl`. The partner record also needs `endpoints.as2Id` and `endpoints.as2Url`.
+- **Send**: build, sign and encrypt (`pkg/as2`), record an `as2_message` row, POST, then verify the
+  receipt: a signed MDN from the partner, for this Message-ID, with the message integrity check we
+  computed and a `processed` disposition. Anything else fails the shipment (`send_failed`, alert).
+  With an async profile the shipment stays `sent` and the row `mdn_pending` until the receipt
+  arrives at `/as2/receive`; an error receipt then fails the shipment and raises the alert.
+- **Receive**: route by `AS2-To` to the tenant, find the partner by `AS2-From`, decrypt, verify the
+  signature against the pinned certificate and enforce the connection's `sign` / `encrypt`. The
+  Message-ID is claimed (`as2_message` unique key) before processing; a repeat gets the stored
+  receipt and is not processed again. The payload goes through the normal inbound TI/TS path
+  (`Receive`), the purchase order number being read from the document. A signed MDN is returned
+  inline (sync) or queued as job `dscsa.as2.mdn` (async). A message that fails returns an error
+  MDN (`authentication-failed`, `integrity-check-failed`, `decryption-failed`,
+  `insufficient-message-security`, `unexpected-processing-error`); with no receipt requested it is
+  HTTP 400. An unknown sender is HTTP 403 and an unknown `AS2-To` is 404, with no receipt.
+- Async receipts are posted only to the receipt URL configured for the connection (`mdnUrl`, else
+  the partner's AS2 URL); a message whose `Receipt-Delivery-Option` names another URL is refused.
+- Audit actions: `as2.send`, `as2.receive`, `as2.receive.duplicate`, `as2.receive.rejected`,
+  `as2.mdn.receive`, `as2.mdn.send`, `as2.station.set` (and `partner.as2.set` / `.delete`).
+  Alerts: `dscsa.send_failed`, `dscsa.as2_rejected` (one per sender and reason),
+  `dscsa.as2_mdn_failed`.
+- A failed TI/TS of any transport can be re-sent with `POST /messages/{id}/retry` (link module):
+  it runs the same outbound path again (`Module.Resend`), once at a time per shipment.
+
+Algorithm profile, trust model and open questions: `pkg/as2/README.md` and
+`docs/OPEN_QUESTIONS.md`.
 
 ### Investigations
 
@@ -80,13 +119,18 @@ answer is assembled. Invalid transitions return 409.
 
 `shipment`, `vrs_directory`, `vrs_request`, `retention_policy` (migration
 `00004_partners_dscsa.sql`); `investigation`, `investigation_event`, `investigation_policy`
-(migration `00013_investigations.sql`). Outbound and inbound TI/TS are captured into the EPCIS repository.
+(migration `00013_investigations.sql`); `as2_station`, `as2_message` and `partner_as2`, plus
+`shipment.send_attempts` (migration `00023_as2.sql`). Outbound and inbound TI/TS are captured into
+the EPCIS repository.
 
 ## Depends on
 
-`core/*`, `epcis`, `masterdata`, `partners`, `trace`, `pkg/epcis`, `pkg/gs1`.
+`core/*`, `epcis`, `masterdata`, `partners`, `trace`, `pkg/as2`, `pkg/epcis`, `pkg/gs1`.
 
 ## Spec gaps
+
+- AS2: algorithm profile, payload shape, trust and revocation, inbound ASN, unsigned-message MIC
+  (`TODO(spec)` in `pkg/as2` and `as2.go`; all in `docs/OPEN_QUESTIONS.md`).
 
 - TI/TS header: "align header vocabulary attribute URIs exactly with the current GS1 US
   Healthcare 'Applying GS1 Standards for DSCSA' guideline before production use."

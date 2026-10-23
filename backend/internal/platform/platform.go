@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/openspoor/openspoor/internal/core/httpx"
 	"github.com/openspoor/openspoor/internal/core/ids"
 	"github.com/openspoor/openspoor/internal/core/kernel"
+	"github.com/openspoor/openspoor/internal/core/mail"
 )
 
 // Module is the platform bounded context.
@@ -27,10 +29,20 @@ type Module struct {
 	kernel.Deps
 	// HostTenant resolves a tenant slug from the request host (SaaS subdomains, custom domains).
 	HostTenant func(ctx context.Context, host string) (string, bool)
+	// Mail sends password-recovery and account-change notices; nil without an SMTP relay (OPENSPOOR_SMTP_URL).
+	Mail mail.Sender
 }
 
 // New creates the module.
-func New(d kernel.Deps) *Module { return &Module{Deps: d} }
+func New(d kernel.Deps) *Module {
+	m := &Module{Deps: d}
+	if s, err := mail.New(d.Cfg.SMTPURL, d.Cfg.MailFrom); err != nil {
+		slog.Warn("mail disabled", "err", err)
+	} else {
+		m.Mail = s
+	}
+	return m
+}
 
 // Name implements kernel.Module.
 func (m *Module) Name() string { return "platform" }
@@ -136,9 +148,17 @@ func (m *Module) TenantBySlug(ctx context.Context, slugOrDomain string) (Tenant,
 	return t, err
 }
 
-// Login checks a local password and returns a principal. Wrong password, unknown user and unknown
-// tenant give the same answer after the same work, and repeated failures are throttled (loginguard.go).
+// Login checks a local password (and, for an account with a second factor, ErrMFARequired is returned)
+// and returns a principal. See LoginMFA.
 func (m *Module) Login(ctx context.Context, tenantSlug, email, password string) (auth.Principal, error) {
+	return m.LoginMFA(ctx, tenantSlug, email, password, "")
+}
+
+// LoginMFA checks a local password and, when the account has a second factor, the authenticator or
+// recovery code. Wrong password, unknown user and unknown tenant give the same answer after the same
+// work, and repeated failures (including wrong codes) are throttled (loginguard.go). The second factor
+// is only asked for after the password is right, so the prompt reveals nothing about other accounts.
+func (m *Module) LoginMFA(ctx context.Context, tenantSlug, email, password, code string) (auth.Principal, error) {
 	t, err := m.TenantBySlug(ctx, tenantSlug)
 	if err != nil {
 		g := m.keysFor(ctx, "unknown:"+strings.ToLower(strings.TrimSpace(tenantSlug)), normEmail(email))
@@ -152,28 +172,66 @@ func (m *Module) Login(ctx context.Context, tenantSlug, email, password string) 
 	if t.Status != "active" {
 		return auth.Principal{}, httpx.Forbidden("tenant is " + t.Status)
 	}
-	return m.checkPassword(ctx, t.ID, email, password)
+	p, u, g, err := m.verifyPassword(ctx, t.ID, email, password)
+	if err != nil {
+		return auth.Principal{}, err
+	}
+	switch {
+	case u.mfaEnabled && code == "":
+		return auth.Principal{}, ErrMFARequired
+	case u.mfaEnabled:
+		if err := m.verifySecondFactor(ctx, t.ID, p.UserID, u, code); err != nil {
+			var he *httpx.Error
+			if errors.As(err, &he) {
+				m.loginFailed(ctx, g, t.ID, p.UserID)
+			}
+			return auth.Principal{}, err
+		}
+		p.MFA = true
+	}
+	m.loginSucceeded(ctx, g)
+	return p, nil
 }
 
 func normEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
 
-// checkPassword verifies a user's password inside the throttle. Every failure path (no such user,
-// no local password, inactive user, wrong password) compares against a hash and answers the same.
+// checkPassword verifies a user's password inside the throttle and forgets the failures on success
+// (re-authentication for e-signatures and account-deletion confirmation).
 func (m *Module) checkPassword(ctx context.Context, tenant uuid.UUID, email, password string) (auth.Principal, error) {
+	p, _, g, err := m.verifyPassword(ctx, tenant, email, password)
+	if err != nil {
+		return auth.Principal{}, err
+	}
+	m.loginSucceeded(ctx, g)
+	return p, nil
+}
+
+// verifyPassword verifies a user's password inside the throttle. Every failure path (no such user,
+// no local password, inactive user, wrong password) compares against a hash and answers the same.
+// On success the failure counter is left alone: the caller resets it once any second factor also
+// passed, so guessing the code cannot be interleaved with correct passwords to avoid the lockout.
+func (m *Module) verifyPassword(ctx context.Context, tenant uuid.UUID, email, password string) (auth.Principal, userSec, guardKeys, error) {
 	email = normEmail(email)
 	g := m.keysFor(ctx, tenant.String(), email)
 	if err := m.guardCheck(ctx, g); err != nil {
-		return auth.Principal{}, err
+		return auth.Principal{}, userSec{}, g, err
 	}
 	var p auth.Principal
 	var hash *string
 	var status string
+	var u userSec
+	var requireMFAAdmin bool
 	err := m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `select id, email, name, roles, password_hash, status, operator from app_user where email=$1`, email).
-			Scan(&p.UserID, &p.Email, &p.Name, &p.Roles, &hash, &status, &p.Operator)
+		if err := tx.QueryRow(ctx, `select id, email, name, roles, password_hash, status, operator, token_version, mfa_enabled, mfa_secret, mfa_last_step from app_user where email=$1`, email).
+			Scan(&p.UserID, &p.Email, &p.Name, &p.Roles, &hash, &status, &p.Operator, &p.TokenVersion, &u.mfaEnabled, &u.secret, &u.lastStep); err != nil {
+			return err
+		}
+		var err error
+		requireMFAAdmin, err = requireMFA(ctx, tx)
+		return err
 	})
 	if err != nil && !errors.Is(err, db.ErrNotFound) && !errors.Is(err, pgx.ErrNoRows) {
-		return auth.Principal{}, err
+		return auth.Principal{}, userSec{}, g, err
 	}
 	ok := false
 	if err == nil && hash != nil {
@@ -183,11 +241,11 @@ func (m *Module) checkPassword(ctx context.Context, tenant uuid.UUID, email, pas
 	}
 	if !ok || status != "active" {
 		m.loginFailed(ctx, g, tenant, p.UserID)
-		return auth.Principal{}, httpx.Unauthorized("invalid credentials")
+		return auth.Principal{}, userSec{}, g, httpx.Unauthorized("invalid credentials")
 	}
-	m.loginSucceeded(ctx, g)
 	p.TenantID, p.Kind = tenant, "user"
-	return p, nil
+	p.MFASetupRequired = requireMFAAdmin && !u.mfaEnabled && slices.Contains(p.Roles, auth.RoleAdmin)
+	return p, u, g, nil
 }
 
 // ResolveAPIKey implements auth.APIKeyResolver.
@@ -227,17 +285,36 @@ func (m *Module) MembershipsFor(ctx context.Context, email string) ([]Tenant, er
 	return out, err
 }
 
-// PrincipalFor builds a user principal in another tenant (tenant switch).
+// PrincipalFor builds a user principal in another tenant (tenant switch) for a session that did not
+// pass a second factor; see PrincipalForSession.
 func (m *Module) PrincipalFor(ctx context.Context, tenant uuid.UUID, email string) (auth.Principal, error) {
+	return m.PrincipalForSession(ctx, tenant, email, false)
+}
+
+// PrincipalForSession builds a user principal in another tenant (tenant switch). No password is asked
+// for, so a user whose account there has a second factor can switch only from a session that passed one;
+// otherwise they sign in to that tenant directly.
+func (m *Module) PrincipalForSession(ctx context.Context, tenant uuid.UUID, email string, mfa bool) (auth.Principal, error) {
 	p := auth.Principal{TenantID: tenant, Kind: "user"}
 	var status string
+	var enabled, require bool
 	err := m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `select id, email, name, roles, status, operator from app_user where email=$1`, strings.ToLower(email)).
-			Scan(&p.UserID, &p.Email, &p.Name, &p.Roles, &status, &p.Operator)
+		if err := tx.QueryRow(ctx, `select id, email, name, roles, status, operator, token_version, mfa_enabled from app_user where email=$1`, strings.ToLower(email)).
+			Scan(&p.UserID, &p.Email, &p.Name, &p.Roles, &status, &p.Operator, &p.TokenVersion, &enabled); err != nil {
+			return err
+		}
+		var err error
+		require, err = requireMFA(ctx, tx)
+		return err
 	})
 	if err != nil || status != "active" {
 		return p, httpx.Forbidden("no membership in that tenant")
 	}
+	if enabled && !mfa {
+		return p, httpx.Forbidden("that tenant requires a second factor: sign in to it directly")
+	}
+	p.MFA = enabled && mfa
+	p.MFASetupRequired = require && !enabled && slices.Contains(p.Roles, auth.RoleAdmin)
 	return p, nil
 }
 

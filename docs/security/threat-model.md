@@ -27,7 +27,7 @@ Reachable by: the public internet, no authentication.
 
 | Threat | Mitigation | Residual risk |
 |---|---|---|
-| Enumeration of serial numbers, scraping | per-address rate limit (5 requests/s, burst 30); answers are limited to the verification result and product facts | distributed scraping; behind a proxy every client shares one budget unless the limiter uses the forwarded address (gap) |
+| Enumeration of serial numbers, scraping | per-address rate limit (5 requests/s, burst 30); answers are limited to the verification result and product facts | distributed scraping; the limiter is per node and in memory; behind a proxy the budget is per forwarded client address only when `OPENSPOOR_TRUSTED_PROXIES` is set correctly |
 | Denial of service through expensive conversions (playground) | per-address rate limit; request size caps | a modest botnet is not stopped in-process; use the edge (CDN, WAF) |
 | Abuse of the recall-alert subscription (mail bombing, address harvesting) | opt-in with unsubscribe; mail off unless SMTP is configured | no CAPTCHA or double opt-in confirmation is claimed |
 | Fake or flooding consumer reports | reports take a fixed reason list, details up to 1000 characters, no personal data stored, and go to the brand owner for review; per-address rate limit | volume from many addresses |

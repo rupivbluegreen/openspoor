@@ -22,6 +22,10 @@ export interface Principal {
   kind: 'user' | 'apikey' | 'system' | string;
   operator?: boolean;
   keyId?: string;
+  /** The session passed a second factor. */
+  mfa?: boolean;
+  /** The tenant requires a second factor for administrators and this user has none yet: only set-up is allowed. */
+  mfaSetupRequired?: boolean;
 }
 
 export interface TokenResponse {

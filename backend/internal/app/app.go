@@ -69,6 +69,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		return nil, err
 	}
 	deps.Auth = a
+	a.SetSessionChecker(plat)
 	audit.SetPseudonymizer(deps.Keys.Pseudonym)
 	plat.Deps = deps
 	app := &App{Deps: deps, Platform: plat}
@@ -162,6 +163,28 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// noStore keeps authenticated responses, which hold tenant data and credentials, out of browser and
+// proxy caches (ASVS 8.1.4). A handler that serves something deliberately cacheable may override it.
+func noStore(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Cache-Control", "no-store")
+		h.Set("Pragma", "no-cache")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// noStoreAuth applies noStore to the public sign-in and recovery routes, which return tokens.
+func noStoreAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {
+			noStore(next).ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (a *App) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(otelhttp.NewMiddleware("http"), middleware.RequestID, middleware.Recoverer, securityHeaders, logRequests, metrics, a.cors)
@@ -202,11 +225,11 @@ func (a *App) routes() http.Handler {
 		}
 		for _, m := range a.Modules {
 			if p, ok := m.(kernel.PublicRoutes); ok {
-				p.Public(r)
+				p.Public(r.With(noStoreAuth))
 			}
 		}
 		r.Group(func(r chi.Router) {
-			r.Use(a.Deps.Auth.Middleware)
+			r.Use(noStore, a.Deps.Auth.Middleware)
 			r.Get("/search", httpx.Handler(a.search))
 			mcpServer := a.mcpServer()
 			r.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, &mcp.StreamableHTTPOptions{Stateless: true}))

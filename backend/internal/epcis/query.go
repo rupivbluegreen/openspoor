@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	"github.com/openspoor/openspoor/internal/core/httpx"
 	"github.com/openspoor/openspoor/internal/core/ids"
 	"github.com/openspoor/openspoor/internal/core/jobs"
+	"github.com/openspoor/openspoor/internal/core/kernel"
 	lib "github.com/openspoor/openspoor/pkg/epcis"
 )
 
@@ -378,9 +380,16 @@ func (m *Module) createSub(w http.ResponseWriter, r *http.Request) error {
 	if in.Secret == "" {
 		in.Secret = ids.Secret(24)
 	}
+	// The signing secret is sealed with the tenant's data key; only the sealed form is stored, and
+	// the clear value is shown once, in this response.
+	id := ids.New()
+	sealed, err := m.Keys.Seal(r.Context(), kernel.TenantOf(r.Context()), []byte(in.Secret), subscriptionAAD(id))
+	if err != nil {
+		return err
+	}
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		s, err := db.One[subscription](r.Context(), tx, `insert into epcis_subscription (id, tenant_id, query_name, query, dest, secret) values ($1, app_tenant(), $2,$3,$4,$5)
-			returning `+subCols, ids.New(), in.QueryName, in.Query, in.Dest, in.Secret)
+		s, err := db.One[subscription](r.Context(), tx, `insert into epcis_subscription (id, tenant_id, query_name, query, dest, secret_sealed) values ($1, app_tenant(), $2,$3,$4,$5)
+			returning `+subCols, id, in.QueryName, in.Query, in.Dest, sealed)
 		if err != nil {
 			return err
 		}
@@ -468,6 +477,7 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 	}
 	var s subscription
 	var secret string
+	var legacyClear bool
 	var events []lib.Event
 	err := m.DB.Tx(ctx, *j.TenantID, func(tx pgx.Tx) error {
 		var err error
@@ -475,8 +485,20 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 		if err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `select secret from epcis_subscription where id=$1`, p.SubscriptionID).Scan(&secret); err != nil {
+		var sealed []byte
+		var legacy *string
+		if err := tx.QueryRow(ctx, `select secret_sealed, secret from epcis_subscription where id=$1`, p.SubscriptionID).Scan(&sealed, &legacy); err != nil {
 			return err
+		}
+		switch {
+		case len(sealed) > 0:
+			b, err := m.Keys.Open(ctx, *j.TenantID, sealed, subscriptionAAD(p.SubscriptionID))
+			if err != nil {
+				return jobs.Permanent{Err: fmt.Errorf("unseal webhook secret: %w", err)}
+			}
+			secret = string(b)
+		case legacy != nil:
+			secret, legacyClear = *legacy, true
 		}
 		q := Query{}
 		if s.QueryName != nil {
@@ -503,6 +525,12 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 	})
 	if errors.Is(err, db.ErrNotFound) {
 		return nil // subscription removed
+	}
+	if legacyClear {
+		// Written before secrets were sealed: seal it now (a failure is logged and retried at the next delivery).
+		if serr := m.sealLegacySecret(ctx, *j.TenantID, p.SubscriptionID, secret); serr != nil {
+			slog.WarnContext(ctx, "cannot seal webhook secret", "subscription", p.SubscriptionID, "err", serr)
+		}
 	}
 	if err != nil || len(events) == 0 {
 		return err
@@ -537,4 +565,56 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 		return fmt.Errorf("%s", msg)
 	}
 	return nil
+}
+
+func subscriptionAAD(id uuid.UUID) []byte { return []byte("epcis-subscription:" + id.String()) }
+
+// sealLegacySecret replaces a clear-text webhook secret by its sealed form and audits the change.
+func (m *Module) sealLegacySecret(ctx context.Context, tenant, id uuid.UUID, secret string) error {
+	sealed, err := m.Keys.Seal(ctx, tenant, []byte(secret), subscriptionAAD(id))
+	if err != nil {
+		return err
+	}
+	return m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
+		ct, err := tx.Exec(ctx, `update epcis_subscription set secret_sealed=$2, secret=null where id=$1 and secret_sealed is null`, id, sealed)
+		if err != nil || ct.RowsAffected() == 0 {
+			return err
+		}
+		_, err = audit.WriteAs(ctx, tx, tenant, "system", audit.Record{Action: "epcis.subscription.secret_sealed", Entity: "epcis_subscription", EntityID: id.String()})
+		return err
+	})
+}
+
+// SealLegacySecrets seals every webhook secret still stored in clear text and returns how many it sealed.
+// Run by `openspoor rotate-keys`; deliveries also seal the secret they read.
+func (m *Module) SealLegacySecrets(ctx context.Context) (int, error) {
+	type row struct {
+		tenant, id uuid.UUID
+		secret     string
+	}
+	var rows []row
+	err := m.DB.OperatorTx(ctx, func(tx pgx.Tx) error {
+		rs, err := tx.Query(ctx, `select tenant_id, id, secret from epcis_subscription where secret_sealed is null and secret is not null`)
+		if err != nil {
+			return err
+		}
+		defer rs.Close()
+		for rs.Next() {
+			var x row
+			if err := rs.Scan(&x.tenant, &x.id, &x.secret); err != nil {
+				return err
+			}
+			rows = append(rows, x)
+		}
+		return rs.Err()
+	})
+	if err != nil {
+		return 0, err
+	}
+	for _, x := range rows {
+		if err := m.sealLegacySecret(ctx, x.tenant, x.id, x.secret); err != nil {
+			return 0, err
+		}
+	}
+	return len(rows), nil
 }

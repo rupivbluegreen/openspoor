@@ -676,6 +676,53 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - apps
+    /api/v1/as2/receive:
+        post:
+            operationId: postAs2Receive
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - as2
+    /api/v1/as2/station:
+        get:
+            operationId: getAs2Station
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - as2
+        put:
+            operationId: putAs2Station
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - as2
     /api/v1/assistant/chat:
         post:
             operationId: postAssistantChat
@@ -796,6 +843,150 @@ paths:
                 default:
                     $ref: '#/components/responses/Problem'
             security: []
+            tags:
+                - auth
+    /api/v1/auth/logout:
+        post:
+            operationId: postAuthLogout
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - auth
+    /api/v1/auth/mfa:
+        get:
+            operationId: getAuthMfa
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - auth
+    /api/v1/auth/mfa/confirm:
+        post:
+            operationId: postAuthMfaConfirm
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - auth
+    /api/v1/auth/mfa/disable:
+        post:
+            operationId: postAuthMfaDisable
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - auth
+    /api/v1/auth/mfa/enrol:
+        post:
+            operationId: postAuthMfaEnrol
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - auth
+    /api/v1/auth/mfa/recovery-codes:
+        post:
+            operationId: postAuthMfaRecoveryCodes
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - auth
+    /api/v1/auth/password:
+        post:
+            operationId: postAuthPassword
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - auth
+    /api/v1/auth/password/forgot:
+        post:
+            operationId: postAuthPasswordForgot
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - auth
+    /api/v1/auth/password/reset:
+        post:
+            operationId: postAuthPasswordReset
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
             tags:
                 - auth
     /api/v1/auth/switch:
@@ -3736,6 +3927,70 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - partners
+    /api/v1/partners/{id}/as2:
+        delete:
+            operationId: deletePartnersIdAs2
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+        get:
+            operationId: getPartnersIdAs2
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+        put:
+            operationId: putPartnersIdAs2
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
     /api/v1/partners/{id}/health:
         post:
             operationId: postPartnersIdHealth
@@ -5179,6 +5434,37 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - tenant
+    /api/v1/tenant/security:
+        get:
+            operationId: getTenantSecurity
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - tenant
+        put:
+            operationId: putTenantSecurity
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - tenant
     /api/v1/tenant/support-access:
         post:
             operationId: postTenantSupportAccess
@@ -5374,6 +5660,28 @@ paths:
     /api/v1/users/{id}:
         patch:
             operationId: patchUsersId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - users
+    /api/v1/users/{id}/mfa/reset:
+        post:
+            operationId: postUsersIdMfaReset
             parameters:
                 - in: path
                   name: id

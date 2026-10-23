@@ -96,7 +96,9 @@ the `supplier_record.scope` column (migration `00016_food_oneup_certificates.sql
 ## Spec gaps
 
 - FSMA 204 export: "align header names and order with FDA's published sortable spreadsheet
-  template."
+  template." The template is not in this repository and could not be verified, so the columns are
+  unchanged; the open points (headers, row granularity, event vocabulary, date format, file
+  format) are listed in `docs/OPEN_QUESTIONS.md`.
 - Traceability plan: `TODO(spec)` confirm the element wording against the current eCFR text, the
   Food Traceability List categories offered as suggestions, and whether plan versions must be kept
   for a set period (all are kept) or reviewed on a schedule (none is asserted).

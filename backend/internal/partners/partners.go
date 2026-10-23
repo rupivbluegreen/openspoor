@@ -21,6 +21,7 @@ import (
 	"github.com/openspoor/openspoor/internal/core/httpx"
 	"github.com/openspoor/openspoor/internal/core/ids"
 	"github.com/openspoor/openspoor/internal/core/kernel"
+	"github.com/openspoor/openspoor/pkg/as2"
 	"github.com/openspoor/openspoor/pkg/gs1"
 )
 
@@ -114,6 +115,9 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/{id}/approve", httpx.Handler(m.approve))
 		r.Post("/{id}/suspend", httpx.Handler(m.suspend))
 		r.Post("/{id}/health", httpx.Handler(m.checkHealthNow))
+		r.Get("/{id}/as2", httpx.Handler(m.getAS2))
+		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Put("/{id}/as2", httpx.Handler(m.putAS2))
+		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Delete("/{id}/as2", httpx.Handler(m.deleteAS2))
 		r.Get("/{id}/onboarding", httpx.Handler(m.getOnboarding))
 		r.Post("/{id}/onboarding", httpx.Handler(m.startOnboarding))
 		r.Patch("/{id}/onboarding/items/{itemId}", httpx.Handler(m.updateItem))
@@ -144,6 +148,9 @@ func (in *partnerInput) validate() error {
 	}
 	if in.Kind == "" {
 		in.Kind = "wholesaler"
+	}
+	if in.Endpoints.AS2ID != "" && !as2.ValidID(in.Endpoints.AS2ID) {
+		return httpx.BadRequest("as2Id must be 1-128 characters of letters, digits and . _ : @ -")
 	}
 	for _, u := range []string{in.Endpoints.EPCISCapture, in.Endpoints.VRS, in.Endpoints.AS2URL, in.Endpoints.Health} {
 		if u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "local:") {

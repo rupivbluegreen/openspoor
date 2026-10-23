@@ -58,6 +58,7 @@ func buildModules(d kernel.Deps, plat *platform.Module) ([]kernel.Module, error)
 	fd := food.New(d, ep)
 	fd.Certs = supplierCertificates{}
 	lk := link.New(d, ep)
+	lk.RetryShipment = ds.Resend
 	co.StoreEDI = func(ctx context.Context, tx pgx.Tx, doc edi.Document) (string, error) {
 		stored, err := link.StoreDoc(ctx, tx, "inbound", nil, nil, doc)
 		return stored.ID.String(), err

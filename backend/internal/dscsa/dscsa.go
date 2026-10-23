@@ -1,6 +1,6 @@
 // Package dscsa implements US DSCSA interoperability: Transaction Information and
 // Transaction Statement (TI/TS) EPCIS documents built from shipping data, partner exchange
-// over HTTPS (AS2 behind an interface, ADR-007), reconciliation of inbound TI/TS with the ASN,
+// over HTTPS and AS2 (in process, ADR-007), reconciliation of inbound TI/TS with the ASN,
 // Verification Router Service (VRS) requester and responder (GS1 Lightweight Messaging),
 // a VRS lookup directory and the six-year retention policy.
 package dscsa
@@ -49,7 +49,7 @@ type Module struct {
 // New creates the module.
 func New(d kernel.Deps, ep *epcis.Module) *Module {
 	m := &Module{Deps: d, EPCIS: ep, Client: &http.Client{Timeout: 10 * time.Second}}
-	m.Transports = map[string]Transport{"https": &HTTPSTransport{Client: m.Client}, "as2": AS2Transport{}, "local": &localTransport{m: m}}
+	m.Transports = map[string]Transport{"https": &HTTPSTransport{Client: m.Client}, "as2": AS2Transport{M: m}, "local": &localTransport{m: m}}
 	return m
 }
 
@@ -76,14 +76,21 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/directory", httpx.Handler(m.putDirectory))
 		r.Delete("/directory/{id}", httpx.Handler(m.deleteDirectory))
 	})
+	r.Route("/as2", func(r chi.Router) {
+		r.Use(auth.Require(auth.RoleAdmin, auth.RoleOps, auth.RoleCompliance, auth.RoleIntegration))
+		r.Get("/station", httpx.Handler(m.getStation))
+		r.With(auth.Require(auth.RoleAdmin, auth.RoleIntegration)).Put("/station", httpx.Handler(m.putStation))
+	})
 	r.Route("/investigations", m.investigationRoutes)
 	r.Get("/retention", httpx.Handler(m.listRetention))
 	r.With(auth.Require(auth.RoleAdmin, auth.RoleCompliance)).Put("/retention/{class}", httpx.Handler(m.putRetention))
 }
 
-// Public mounts the VRS responder (API-key authenticated inside the handler).
+// Public mounts the VRS responder (API-key authenticated inside the handler) and the AS2
+// receive endpoint (the sender is authenticated by its pinned certificate).
 func (m *Module) Public(r chi.Router) {
 	r.Post("/vrs/verify", httpx.Handler(m.vrsRespond))
+	r.Post("/as2/receive", m.as2Receive)
 }
 
 // Schedules implements kernel.Scheduled.
@@ -194,7 +201,7 @@ func (m *Module) createShipment(w http.ResponseWriter, r *http.Request) error {
 		in.Transport = "https"
 	}
 	if _, ok := m.Transports[in.Transport]; !ok {
-		return httpx.BadRequest("transport must be https or as2")
+		return httpx.BadRequest("transport must be https, as2 or local")
 	}
 	var shipDate *time.Time
 	if in.ShipDate != nil && *in.ShipDate != "" {
@@ -477,15 +484,6 @@ func (t *HTTPSTransport) Send(ctx context.Context, _ uuid.UUID, p partners.Partn
 	return out, nil
 }
 
-// AS2Transport is the AS2 (RFC 4130) channel. Go AS2 libraries are immature (ADR-007), so the
-// transport is an interface boundary: production installs plug in an AS2 gateway.
-type AS2Transport struct{}
-
-// Send implements Transport.
-func (AS2Transport) Send(context.Context, uuid.UUID, partners.Partner, Shipment, []byte) (map[string]any, error) {
-	return nil, httpx.Conflict("AS2 transport is not configured on this installation; use https or plug in an AS2 gateway (see ADR-007)")
-}
-
 // localTransport delivers to a partner tenant on the same Open Spoor node.
 type localTransport struct{ m *Module }
 
@@ -508,12 +506,35 @@ func (m *Module) send(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	ctx := r.Context()
+	status, resp, err := m.sendShipment(r.Context(), id, false)
+	if err != nil {
+		return err
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"status": status, "response": resp})
+	return nil
+}
+
+// retryClaimTTL is how long a retry may hold a shipment in "sending" before another retry may
+// take over (the first one is assumed to have crashed).
+const retryClaimTTL = 5 * time.Minute
+
+// Resend sends a shipment whose delivery failed again, through the same outbound path as
+// POST /shipments/{id}/send (same transport, audit, alert and capture handling). It returns the
+// shipment's new status ("sent" or "send_failed") and the transport response. A shipment that
+// is not in the failed state is a conflict; so is one another retry is sending right now.
+func (m *Module) Resend(ctx context.Context, id uuid.UUID) (string, map[string]any, error) {
+	return m.sendShipment(ctx, id, true)
+}
+
+// sendShipment delivers the TI/TS of an outbound shipment. With retry set, the shipment must be
+// in send_failed and is claimed first, so two concurrent retries cannot both send.
+func (m *Module) sendShipment(ctx context.Context, id uuid.UUID, retry bool) (string, map[string]any, error) {
 	me := auth.MustFrom(ctx)
 	var s Shipment
 	var p partners.Partner
 	var doc []byte
-	err = m.Tx(ctx, func(tx pgx.Tx) error {
+	err := m.Tx(ctx, func(tx pgx.Tx) error {
+		var err error
 		s, err = db.One[Shipment](ctx, tx, `select `+shipCols+` from shipment where id=$1 and direction='outbound'`, id)
 		if err != nil {
 			return err
@@ -524,6 +545,16 @@ func (m *Module) send(w http.ResponseWriter, r *http.Request) error {
 		}
 		if p.Status != "active" {
 			return httpx.Conflict("partner connection is " + p.Status)
+		}
+		if retry {
+			ct, err := tx.Exec(ctx, `update shipment set status='sending', send_attempts = send_attempts + 1, response = jsonb_build_object('claimedAt', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+				where id=$1 and (status='send_failed' or (status='sending' and (response->>'claimedAt')::timestamptz < now() - $2::interval))`, id, fmt.Sprintf("%d seconds", int(retryClaimTTL.Seconds())))
+			if err != nil {
+				return err
+			}
+			if ct.RowsAffected() == 0 {
+				return httpx.Conflict("only a failed TI/TS delivery can be retried, and not while another retry is sending it")
+			}
 		}
 		if len(s.TITS) == 0 {
 			buyer := party{Name: p.Name}
@@ -540,7 +571,7 @@ func (m *Module) send(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return "", nil, err
 	}
 	transport := s.Transport
 	if strings.HasPrefix(p.Endpoints.EPCISCapture, "local:") && transport == "https" {
@@ -555,8 +586,12 @@ func (m *Module) send(w http.ResponseWriter, r *http.Request) error {
 		}
 		resp["error"] = sendErr.Error()
 	}
+	attempt := 1
+	if retry {
+		attempt = 0 // counted when the retry was claimed
+	}
 	err = m.Tx(ctx, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `update shipment set status=$2, tits=$3, response=$4, sent_at=case when $2='sent' then now() else sent_at end where id=$1`, id, status, doc, resp); err != nil {
+		if _, err := tx.Exec(ctx, `update shipment set status=$2, tits=$3, response=$4, send_attempts = send_attempts + $5, sent_at=case when $2='sent' then now() else sent_at end where id=$1`, id, status, doc, resp, attempt); err != nil {
 			return err
 		}
 		if sendErr != nil {
@@ -565,11 +600,11 @@ func (m *Module) send(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 		}
-		_, err := audit.Write(ctx, tx, audit.Record{Action: "shipment.send", Entity: "shipment", EntityID: id.String(), After: map[string]any{"status": status, "transport": transport, "response": resp}})
+		_, err := audit.Write(ctx, tx, audit.Record{Action: "shipment.send", Entity: "shipment", EntityID: id.String(), After: map[string]any{"status": status, "transport": transport, "response": resp, "retry": retry}})
 		return err
 	})
 	if err != nil {
-		return err
+		return "", nil, err
 	}
 	if sendErr == nil {
 		// Record our own shipping events (in_transit) in the repository.
@@ -579,8 +614,7 @@ func (m *Module) send(w http.ResponseWriter, r *http.Request) error {
 			_, _ = m.EPCIS.Capture(ctx, "application/ld+json", b, "dscsa-outbound")
 		}
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{"status": status, "response": resp})
-	return nil
+	return status, resp, nil
 }
 
 // --- inbound ---

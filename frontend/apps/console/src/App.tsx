@@ -5,6 +5,7 @@ import { SessionProvider, useSession } from './lib/session';
 import { NAV } from './nav';
 import { Shell } from './layout/Shell';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import NotFound from './pages/NotFound';
 
 function Loading() {
@@ -16,9 +17,11 @@ function Loading() {
 }
 
 function RequireAuth() {
-  const { token } = useSession();
+  const { token, principal } = useSession();
   const loc = useLocation();
   if (!token) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  // A session that must still enrol a second factor may only use the security page.
+  if (principal?.mfaSetupRequired && loc.pathname !== '/settings/security') return <Navigate to="/settings/security" replace />;
   return (
     <Shell>
       <Suspense fallback={<Loading />}>
@@ -48,6 +51,7 @@ const router = createBrowserRouter([
     Component: Root,
     children: [
       { path: '/login', Component: Login },
+      { path: '/reset-password', Component: ResetPassword },
       {
         Component: RequireAuth,
         children: [{ path: '/', element: <Navigate to="/trace/dashboard" replace /> }, ...pageRoutes, { path: '*', Component: NotFound }],

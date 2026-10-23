@@ -193,7 +193,7 @@ func TestShipmentValidationRolesAndTransports(t *testing.T) {
 	for _, c := range []struct{ partner, po, transport, wantErr string }{
 		{pBad, "PO-BAD", "", "502"},
 		{pNone, "PO-NONE", "", "no EPCIS capture endpoint"},
-		{pOK, "PO-AS2", "as2", "AS2 transport is not configured"},
+		{pOK, "PO-AS2", "as2", "partner has no AS2 URL and AS2 identifier"},
 	} {
 		id := mk(c.partner, c.po, c.transport, epcs[2:3])
 		e.Must(http.StatusOK, e.Do("POST", "/api/v1/shipments/"+id+"/send", nil), &sent)
@@ -595,7 +595,7 @@ func TestRetentionPolicyAndEnforcement(t *testing.T) {
 func TestTransportsDirect(t *testing.T) {
 	var as2 dscsa.AS2Transport
 	if _, err := as2.Send(context.Background(), [16]byte{}, partnersPartner(""), dscsa.Shipment{}, nil); err == nil {
-		t.Fatal("AS2 must refuse without a gateway")
+		t.Fatal("AS2 must refuse without a module")
 	}
 	tr := &dscsa.HTTPSTransport{Client: http.DefaultClient}
 	if _, err := tr.Send(context.Background(), [16]byte{}, partnersPartner("http://[::1"), dscsa.Shipment{}, nil); err == nil {

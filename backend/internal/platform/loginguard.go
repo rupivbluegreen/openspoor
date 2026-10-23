@@ -8,7 +8,6 @@ import (
 	"errors"
 	"log/slog"
 	"math"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -60,37 +59,9 @@ func clientIPFrom(ctx context.Context) string {
 	return ip
 }
 
-// ClientIP is the address of the request's client. trustedProxies is how many reverse proxies in
-// front of this server append to X-Forwarded-For; with 0 the TCP peer is used and the header is ignored,
-// because anyone could forge it. With n proxies the n-th entry from the right is the client.
-func ClientIP(r *http.Request, trustedProxies int) string {
-	peer, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		peer = r.RemoteAddr
-	}
-	if trustedProxies <= 0 {
-		return peer
-	}
-	var hops []string
-	for _, h := range r.Header.Values("X-Forwarded-For") {
-		for _, p := range strings.Split(h, ",") {
-			if p = strings.TrimSpace(p); p != "" {
-				hops = append(hops, p)
-			}
-		}
-	}
-	if len(hops) == 0 {
-		return peer
-	}
-	i := len(hops) - trustedProxies
-	if i < 0 {
-		i = 0
-	}
-	if ip := net.ParseIP(hops[i]); ip != nil {
-		return ip.String()
-	}
-	return peer
-}
+// ClientIP is the address of the request's client; see httpx.ClientIP. The implementation lives in
+// httpx so that public endpoints in other modules share it without depending on this package.
+func ClientIP(r *http.Request, trustedProxies int) string { return httpx.ClientIP(r, trustedProxies) }
 
 // lockedError is the refusal while an account or address is locked out.
 type lockedError struct {

@@ -5,6 +5,7 @@ const nl: Messages = {
   pillar: { trace: 'Traceren', link: 'Verbinden', act: 'Handelen', comply: 'Naleven', food: 'Voedsel', settings: 'Instellingen', ecosystem: 'Ecosysteem' },
   nav: {
     investigations: 'Onderzoeken',
+    security: 'Beveiliging',
     dashboard: 'Dashboard', serialization: 'Serialisatie', epcisInbox: 'EPCIS-inbox', serialLookup: 'Serienummer opzoeken',
     eventQuery: 'Gebeurtenissen zoeken', subscriptions: 'Abonnementen', partners: 'Partners', shipments: 'Zendingen',
     b2bDocuments: 'B2B-documenten', supplierCompliance: 'Leveranciersnaleving', federation: 'Federatiepeers',
@@ -148,6 +149,25 @@ const nl: Messages = {
   auth: {
     title: 'Inloggen bij Open Spoor', subtitle: 'Traceren · Verbinden · Handelen · Naleven', tenantSlug: 'Tenant',
     operatorTitle: 'Inloggen als beheerder', operatorOnly: 'Dit account is geen beheerder.', sessionExpired: 'Uw sessie is verlopen.',
+  },
+  security: {
+    title: 'Beveiliging', passwordTitle: 'Wachtwoord wijzigen', currentPassword: 'Huidig wachtwoord', newPassword: 'Nieuw wachtwoord',
+    confirmPassword: 'Herhaal het nieuwe wachtwoord', passwordMismatch: 'De wachtwoorden komen niet overeen',
+    passwordChanged: 'Wachtwoord gewijzigd. Uw andere sessies zijn afgemeld.',
+    mfaTitle: 'Tweestapsverificatie', mfaOn: 'Aan', mfaOff: 'Uit', mfaPending: 'Instellen niet afgerond',
+    mfaIntro: 'Vraag bij elke aanmelding om een code uit een authenticator-app.', mfaSetup: 'Instellen',
+    mfaScan: 'Voeg deze sleutel toe aan een authenticator-app (tijdgebonden, 6 cijfers) en voer de code in die de app toont.',
+    mfaSecret: 'Installatiesleutel', mfaUri: 'Installatielink', mfaCode: 'Verificatiecode', mfaConfirm: 'Bevestigen en inschakelen',
+    mfaEnabled: 'Tweestapsverificatie staat aan.', recoveryTitle: 'Herstelcodes',
+    recoveryHint: 'Elke code werkt één keer. Bewaar ze veilig: ze worden niet opnieuw getoond.', recoveryLeft: 'Nog {{n}} herstelcodes',
+    mfaDisable: 'Uitschakelen', mfaDisableHint: 'Voer uw wachtwoord en een actuele code of een herstelcode in.', codeOrRecovery: 'Code of herstelcode',
+    regenerate: 'Nieuwe herstelcodes', policyTitle: 'Tenantbeleid', requireAdminMfa: 'Tweestapsverificatie verplicht stellen voor beheerders',
+    policyHint: 'Beheerders zonder tweestapsverificatie kunnen alleen die instellen totdat ze het hebben.',
+    setupRequired: 'Uw organisatie vereist tweestapsverificatie voor beheerders. Stel het in om verder te gaan.',
+    signInCode: 'Verificatiecode of herstelcode', forgot: 'Wachtwoord vergeten?',
+    forgotIntro: 'Voer uw tenant en e-mailadres in. Bestaat het account, dan sturen wij een link die 30 minuten en één keer werkt.',
+    forgotSent: 'Bestaat het account, dan is er een e-mail onderweg.', sendLink: 'Link versturen', resetTitle: 'Kies een nieuw wachtwoord',
+    resetDone: 'Wachtwoord gewijzigd. U kunt nu inloggen.', backToSignIn: 'Terug naar inloggen',
   },
   esig: {
     title: 'Elektronische handtekening', intro: 'Voer uw wachtwoord opnieuw in om te ondertekenen. Uw handtekening wordt aan de audittrail gekoppeld.',

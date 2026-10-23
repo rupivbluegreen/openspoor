@@ -12,7 +12,9 @@ The authoritative, machine-readable spec is `GET /api/v1/openapi.yaml`.
 | Method | Path | Notes |
 |---|---|---|
 | GET | /meta | `{name, version, mode, modules[], devAuth, oidc}` |
-| POST | /auth/login | `{tenant, email, password}` → `{token, expiresAt, principal}` |
+| POST | /auth/login | `{tenant, email, password, mfaCode?}` → `{token, expiresAt, principal}`; 401 with `errors.mfaRequired: true` when the account has a second factor and no code was sent |
+| POST | /auth/password/forgot | `{tenant, email}` → always 202; e-mails a single-use link (30 minutes) when the account exists; 429 + `Retry-After` when throttled |
+| POST | /auth/password/reset | `{token, newPassword}` → 204; ends all sessions of the user |
 | POST | /saas/signup | SaaS mode only: `{companyName, slug, email, password, verticals[]}` → token |
 | GET | /saas/branding?host= | tenant brand for login page `{name, slug, brand:{primaryColor, logoUrl}}` |
 | POST | /verify/scan | pharmacy/consumer scan: `{code}` (DataMatrix text, HRI or Digital Link) → `{verified, status, product, pack, message}` |
@@ -26,6 +28,15 @@ The authoritative, machine-readable spec is `GET /api/v1/openapi.yaml`.
 | GET | /me | principal |
 | GET | /me/tenants | tenants for tenant switcher |
 | POST | /auth/switch | `{tenantId}` → new token |
+| POST | /auth/password | `{currentPassword, newPassword}` → fresh token; ends the user's other sessions |
+| POST | /auth/logout | 204; ends every session (token) of the user |
+| GET | /auth/mfa | `{enabled, pending, recoveryCodesRemaining, requiredByPolicy}` |
+| POST | /auth/mfa/enrol | → `{secret, otpauthUri}` (pending until confirmed) |
+| POST | /auth/mfa/confirm | `{code}` → fresh token + `recoveryCodes[]` (shown once) |
+| POST | /auth/mfa/disable | `{password, code}` (authenticator or recovery code) → fresh token |
+| POST | /auth/mfa/recovery-codes | `{password, code}` → new `recoveryCodes[]` (the old ones stop working) |
+| GET/PUT | /tenant/security | `{requireMfaForAdmin}` (Admin; turning it on needs your own second factor) |
+| POST | /users/{id}/mfa/reset | Admin: remove a user's second factor, `{reason?}` → 204 |
 | GET | /tenant | current tenant (name, plan, verticals, brand) |
 | GET/POST | /orgs, PUT /orgs/{id} | `{name, kind, companyPrefix, country}` kinds: manufacturer, cmo, 3pl, wholesaler, pharmacy, hospital, regulator, grower, processor, distributor, retailer, restaurant, importer |
 | GET/POST | /sites, PUT /sites/{id} | `{orgId, gln, name, kind, country, address}` |
@@ -65,7 +76,9 @@ The authoritative, machine-readable spec is `GET /api/v1/openapi.yaml`.
 ## DSCSA (M4)
 | GET/POST | /shipments | outbound/inbound shipments `{direction, partnerId, poNumber, shipDate, items[], status}` |
 | POST | /shipments/{id}/tits | build TI/TS EPCIS document from shipping events |
-| POST | /shipments/{id}/send | send via HTTPS/AS2 to partner endpoint |
+| POST | /shipments/{id}/send | send via HTTPS, AS2 or the local transport to the partner |
+| GET/PUT | /as2/station | this node's AS2 identity `{as2Id, certPem, keyPem | generate}` (PUT: admin / integration; the key is never returned) |
+| POST | /as2/receive | public AS2 endpoint: messages and async receipts, authenticated by the sender's pinned certificate |
 | POST | /shipments/inbound | receive TI/TS (EPCIS doc + ASN) |
 | POST | /shipments/{id}/reconcile | compare inbound TI/TS to ASN → `{matched, missing[], unexpected[]}` |
 | GET/POST | /vrs/requests | VRS requester console `{gtin, serial, lot, expiry, requestorGln, context}` → `{verified, responder, latencyMs}` |
@@ -84,6 +97,9 @@ The authoritative, machine-readable spec is `GET /api/v1/openapi.yaml`.
 | GET/POST | /partners | connections `{name, gln, status, endpoints:{}, health}` |
 | POST | /partners/invitations | `{email, name}` → invitation code; POST /partners/invitations/accept `{code}` |
 | POST | /partners/{id}/approve | |
+| GET/PUT/DELETE | /partners/{id}/as2 | AS2 profile `{certPem, sign, encrypt, mdn: sync|async, mdnUrl}` (certificate sealed at rest) |
+| GET | /messages | one log over B2B documents, federation messages, TI/TS and AS2 (`kind`: b2b, federation, tits, as2) |
+| POST | /messages/{id}/retry | retry a dead delivery, or re-send a failed TI/TS through the outbound path |
 | GET/POST | /b2b/documents | orders, asn, invoice, inventory, return, chargeback; `{type, partnerId, payload}`; GET /b2b/documents/{id}/edi?format=x12|edifact|idoc |
 | GET/POST | /suppliers/certificates | supplier compliance hub, expiry alerts |
 | GET | /federation/peers, POST /federation/peers | node-to-node peers |

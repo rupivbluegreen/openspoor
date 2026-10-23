@@ -1,7 +1,7 @@
 import { Button, Divider, Tooltip } from 'antd';
 import { LoginOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Navigate, useNavigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { api, LoginCard, type Meta } from '@openspoor/ui/pro';
 import { useSession } from '../lib/session';
@@ -24,7 +24,11 @@ export default function Login() {
         nav(next, { replace: true });
       }}
       extra={
-        meta.data?.oidc ? (
+        <>
+          <div style={{ textAlign: 'center', marginTop: 12 }}>
+            <Link to="/reset-password">{t('security.forgot')}</Link>
+          </div>
+          {meta.data?.oidc ? (
           <>
             <Divider plain>SSO</Divider>
             {/* Placeholder: the OIDC redirect flow is not part of the v1 API contract yet. */}
@@ -34,7 +38,8 @@ export default function Login() {
               </Button>
             </Tooltip>
           </>
-        ) : null
+          ) : null}
+        </>
       }
     />
   );

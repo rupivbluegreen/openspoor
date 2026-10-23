@@ -624,7 +624,8 @@ func (m *Module) opImpersonate(w http.ResponseWriter, r *http.Request) error {
 	if level == "admin" {
 		roles = []string{auth.RoleAdmin}
 	}
-	p := auth.Principal{TenantID: id, UserID: op.UserID, Email: "support+" + op.Email, Name: "Support (" + op.Email + ")", Roles: roles, Kind: "user"}
+	p := auth.Principal{TenantID: id, UserID: op.UserID, Email: "support+" + op.Email, Name: "Support (" + op.Email + ")", Roles: roles, Kind: "user",
+		Unbound: true} // not a stored session of this tenant: bounded by the support grant (below) and audited
 	tok, exp, err := m.Auth.Issue(p)
 	if err != nil {
 		return err

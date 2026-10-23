@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -28,6 +29,7 @@ Commands:
   all        api + worker in one process (development, single-node installs)
   migrate    apply database migrations
   bootstrap  create the first tenant and admin (--slug --name --email --password)
+  rotate-keys re-seal the data keys and node key under OPENSPOOR_NEW_MASTER_KEY (--dry-run to check only)
   seed       load the demo data set (3 fictional companies, --packs N serialized packs)
   openapi    print the OpenAPI 3.1 document generated from the router
   version    print the version
@@ -104,6 +106,15 @@ func main() {
 			fatal(err)
 		}
 		fmt.Printf("tenant %s (%s) created, admin %s\n", t.Slug, t.ID, u.Email)
+	case "rotate-keys":
+		fs := flag.NewFlagSet("rotate-keys", flag.ExitOnError)
+		dry := fs.Bool("dry-run", false, "open every sealed key with the current master key and the replacement, change nothing")
+		_ = fs.Parse(os.Args[2:])
+		a := mustApp(ctx, cfg)
+		defer a.Close()
+		if err := runRotateKeys(ctx, a, cfg, *dry, os.Stdout); err != nil {
+			fatal(err)
+		}
 	case "seed":
 		fs := flag.NewFlagSet("seed", flag.ExitOnError)
 		packs := fs.Int("packs", 10000, "serialized packs to create")
@@ -118,6 +129,26 @@ func main() {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
+}
+
+// runRotateKeys re-seals the master-key-sealed material under cfg.NewMasterKey and reports it on out.
+func runRotateKeys(ctx context.Context, a *app.App, cfg config.Config, dryRun bool, out io.Writer) error {
+	if len(cfg.NewMasterKey) == 0 {
+		return errors.New("set OPENSPOOR_NEW_MASTER_KEY (plain, file:/path or vault: reference) to the replacement master key")
+	}
+	rep, err := a.RotateKeys(ctx, cfg.NewMasterKey, dryRun)
+	if err != nil {
+		return err
+	}
+	verb := "re-sealed"
+	if rep.DryRun {
+		verb = "would re-seal (dry run, nothing changed)"
+	}
+	fmt.Fprintf(out, "%s: %d tenant data keys, %d federation node key; %d clear-text webhook secrets sealed\n", verb, rep.TenantKeys, rep.NodeKeys, rep.WebhookSecretsSealed)
+	if !rep.DryRun {
+		fmt.Fprintln(out, "Next: set OPENSPOOR_MASTER_KEY to the new key, unset OPENSPOOR_NEW_MASTER_KEY and restart every api and worker process.")
+	}
+	return nil
 }
 
 func migrateURL(cfg config.Config) string {

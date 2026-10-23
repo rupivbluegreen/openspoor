@@ -8,7 +8,7 @@ import {
   RobotOutlined, RollbackOutlined, SafetyCertificateOutlined, SafetyOutlined, SearchOutlined,
   SettingOutlined, ShopOutlined, SolutionOutlined, TagsOutlined, TeamOutlined, ThunderboltOutlined,
   TruckOutlined, UserOutlined, AimOutlined, ControlOutlined, SwapOutlined,
-  AppstoreAddOutlined, AppstoreOutlined, BarChartOutlined, ProfileOutlined, CodeOutlined, FieldTimeOutlined, MedicineBoxOutlined, ReadOutlined,
+  LockOutlined, AppstoreAddOutlined, AppstoreOutlined, BarChartOutlined, ProfileOutlined, CodeOutlined, FieldTimeOutlined, MedicineBoxOutlined, ReadOutlined,
 } from '@ant-design/icons';
 
 type Page = LazyExoticComponent<ComponentType>;
@@ -136,6 +136,7 @@ export const NAV: NavGroup[] = [
       { path: '/settings/licenses', label: 'licenses', icon: <IdcardOutlined />, page: p(() => import('./pages/settings/Licenses')) },
       { path: '/settings/network-profile', label: 'networkProfile', icon: <GlobalOutlined />, page: p(() => import('./pages/settings/NetworkProfile')) },
       { path: '/settings/users', label: 'users', icon: <UserOutlined />, page: p(() => import('./pages/settings/Users')) },
+      { path: '/settings/security', label: 'security', icon: <LockOutlined />, page: p(() => import('./pages/settings/Security')) },
       { path: '/settings/api-keys', label: 'apiKeys', icon: <KeyOutlined />, page: p(() => import('./pages/settings/ApiKeys')) },
       { path: '/settings/branding', label: 'branding', icon: <BgColorsOutlined />, page: p(() => import('./pages/settings/Branding')) },
       { path: '/settings/usage', label: 'usage', icon: <LineChartOutlined />, page: p(() => import('./pages/settings/Usage')) },

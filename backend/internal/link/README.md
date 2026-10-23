@@ -33,8 +33,14 @@ the registry type: header fields, `status`, `note`, `dates.<key>`, `parties.<key
 `amounts.<key>`, and line fields (`lines.gtin`... for item lines, `lines.ref|refType|amount|status`
 for reference lines, `lines.dates.<key>`).
 
-Message tracking: `/messages` is one log over B2B documents, federation messages and TI/TS
-deliveries (read from the `dscsa` shipment table). Attempts, last error and the dead-letter state
+Message tracking: `/messages` is one log over B2B documents, federation messages, TI/TS
+deliveries (read from the `dscsa` shipment table; attempts count every send, a delivery whose
+AS2 receipt was verified shows as `acknowledged`) and AS2 messages (`kind=as2`, read from
+`as2_message`). TI/TS rows are retryable when the delivery failed: the retry is synchronous, runs
+the dscsa outbound path again (wired as `Module.RetryShipment`; link does not import dscsa), is
+audited as `message.retry` and resolves the shipment's `dscsa.send_failed` alerts on success.
+A retry holds the shipment in `sending`; a claim older than five minutes counts as crashed and
+can be taken over. Attempts, last error and the dead-letter state
 come from the job queue: a delivery job that exhausted its retries (or was rejected) shows as
 `dead`, raises a `link.message_dead` alert, and can be put back with "retry now". Outbound B2B
 documents are acknowledged by local delivery, by the peer accepting a federation message, or by
@@ -77,7 +83,7 @@ verified (did:web resolution, proof, validity, revocation) and the result is sto
 | POST | `/api/v1/b2b/mappings/suggest` | Propose field mappings from column names |
 | POST | `/api/v1/b2b/documents/{id}/ack` | Record a functional acknowledgement |
 | GET | `/api/v1/messages` | Message log (filters: kind, direction, status, partnerId, q) with counts per status |
-| POST | `/api/v1/messages/{id}/retry` | Retry a dead or backing-off delivery now |
+| POST | `/api/v1/messages/{id}/retry` | Retry a dead or backing-off delivery now; for a failed outbound TI/TS (`kind=tits`) re-send it through the dscsa outbound path (200 with the new status) |
 | GET | `/api/v1/messages/slas` | Partner SLAs |
 | PUT, DELETE | `/api/v1/messages/slas/{partnerId}` | Set / remove a partner's SLA |
 | POST | `/api/v1/onboarding/tests` | Run the onboarding test harness for a partner |

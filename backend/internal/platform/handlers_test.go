@@ -237,13 +237,13 @@ func TestUsersAndRoles(t *testing.T) {
 		t.Fatalf("user.update audit: %+v", aud)
 	}
 
-	// Disabling a user blocks login and e-signatures with their credentials.
+	// Disabling a user blocks login, and ends the sessions they already hold (the token is revoked).
 	e.Must(http.StatusOK, e.Do("PATCH", "/api/v1/users/"+u.ID, map[string]any{"status": "disabled", "reason": "left"}), &u)
 	if u.Status != "disabled" {
 		t.Fatalf("disable: %+v", u)
 	}
 	problem(t, e.Call("", "POST", "/api/v1/auth/login", map[string]string{"tenant": "acme", "email": "ops@acme.test", "password": testkit.Password}), 401, "invalid credentials")
-	problem(t, e.Call(tok.Token, "POST", "/api/v1/esignatures", map[string]any{"password": testkit.Password, "meaning": "Approved", "reason": "r", "entity": "x", "entityId": "1"}), 401, "re-authentication failed")
+	problem(t, e.Call(tok.Token, "POST", "/api/v1/esignatures", map[string]any{"password": testkit.Password, "meaning": "Approved", "reason": "r", "entity": "x", "entityId": "1"}), 401, "authentication required")
 }
 
 func TestAPIKeys(t *testing.T) {

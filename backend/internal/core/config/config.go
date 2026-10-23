@@ -56,6 +56,9 @@ type Config struct {
 	CORSOrigins       []string
 	LogLevel          string
 	MasterKey         []byte
+	// NewMasterKey is the replacement master key for `openspoor rotate-keys` (OPENSPOOR_NEW_MASTER_KEY; same
+	// file:/vault: references as the master key). Empty during normal operation.
+	NewMasterKey []byte
 
 	// MigrateDatabaseURL is the role used by `migrate` (OPENSPOOR_MIGRATE_DATABASE_URL); empty means DatabaseURL.
 	MigrateDatabaseURL string
@@ -175,7 +178,7 @@ func (c *Config) resolveSecrets(ctx context.Context, res *secretsrc.Resolver) er
 			return fmt.Errorf("OPENSPOOR_DATABASE_PASSWORD: %w", err)
 		}
 	}
-	jwt, master, mig := os.Getenv("OPENSPOOR_JWT_SECRET"), os.Getenv("OPENSPOOR_MASTER_KEY"), os.Getenv("OPENSPOOR_MIGRATE_DATABASE_URL")
+	jwt, master, mig, newMaster := os.Getenv("OPENSPOOR_JWT_SECRET"), os.Getenv("OPENSPOOR_MASTER_KEY"), os.Getenv("OPENSPOOR_MIGRATE_DATABASE_URL"), os.Getenv("OPENSPOOR_NEW_MASTER_KEY")
 	for _, s := range []struct {
 		name string
 		src  string
@@ -184,6 +187,11 @@ func (c *Config) resolveSecrets(ctx context.Context, res *secretsrc.Resolver) er
 		{"OPENSPOOR_JWT_SECRET", jwt, func(v string) { c.JWTSecret = []byte(v) }},
 		{"OPENSPOOR_MASTER_KEY", master, func(v string) { c.MasterKey = []byte(v) }},
 		{"OPENSPOOR_MIGRATE_DATABASE_URL", mig, func(v string) { c.MigrateDatabaseURL = v }},
+		{"OPENSPOOR_NEW_MASTER_KEY", newMaster, func(v string) {
+			if v != "" {
+				c.NewMasterKey = []byte(v)
+			}
+		}},
 	} {
 		v := s.src
 		if err := one(s.name, &v); err != nil {

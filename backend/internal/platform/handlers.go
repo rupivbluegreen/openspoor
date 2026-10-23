@@ -2,6 +2,7 @@ package platform
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -99,6 +100,8 @@ func (u userRow) user() User {
 // Public mounts unauthenticated routes.
 func (m *Module) Public(r chi.Router) {
 	r.Post("/auth/login", httpx.Handler(m.login))
+	r.Post("/auth/password/forgot", httpx.Handler(m.forgotPassword))
+	r.Post("/auth/password/reset", httpx.Handler(m.resetPassword))
 }
 
 // Routes mounts tenant routes.
@@ -107,6 +110,7 @@ func (m *Module) Routes(r chi.Router) {
 	r.Get("/me/tenants", httpx.Handler(m.myTenants))
 	r.Post("/auth/switch", httpx.Handler(m.switchTenant))
 	r.Get("/tenant", httpx.Handler(m.getTenant))
+	m.accountRoutes(r)
 
 	r.Route("/orgs", func(r chi.Router) {
 		r.Use(auth.Require(auth.RoleAdmin))
@@ -130,6 +134,7 @@ func (m *Module) Routes(r chi.Router) {
 		r.Get("/", httpx.Handler(m.listUsers))
 		r.Post("/", httpx.Handler(m.createUser))
 		r.Patch("/{id}", httpx.Handler(m.updateUser))
+		r.Post("/{id}/mfa/reset", httpx.Handler(m.resetUserMFA))
 	})
 	r.Route("/api-keys", func(r chi.Router) {
 		r.Use(auth.Require(auth.RoleAdmin, auth.RoleIntegration))
@@ -163,7 +168,12 @@ func (m *Module) issue(w http.ResponseWriter, p auth.Principal) error {
 }
 
 func (m *Module) login(w http.ResponseWriter, r *http.Request) error {
-	var in struct{ Tenant, Email, Password string }
+	var in struct {
+		Tenant   string `json:"tenant"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		MFACode  string `json:"mfaCode"`
+	}
 	if err := httpx.Decode(r, &in); err != nil {
 		return err
 	}
@@ -172,7 +182,7 @@ func (m *Module) login(w http.ResponseWriter, r *http.Request) error {
 			in.Tenant = slug
 		}
 	}
-	p, err := m.Login(WithClientIP(r.Context(), ClientIP(r, m.Cfg.TrustedProxies)), in.Tenant, in.Email, in.Password)
+	p, err := m.LoginMFA(WithClientIP(r.Context(), ClientIP(r, m.Cfg.TrustedProxies)), in.Tenant, in.Email, in.Password, in.MFACode)
 	if err != nil {
 		if secs, ok := RetryAfter(err); ok {
 			w.Header().Set("Retry-After", strconv.Itoa(secs))
@@ -211,7 +221,7 @@ func (m *Module) switchTenant(w http.ResponseWriter, r *http.Request) error {
 	if cur.Kind != "user" {
 		return httpx.Forbidden("users only")
 	}
-	p, err := m.PrincipalFor(r.Context(), in.TenantID, cur.Email)
+	p, err := m.PrincipalForSession(r.Context(), in.TenantID, cur.Email, cur.MFA)
 	if err != nil {
 		return err
 	}
@@ -536,8 +546,13 @@ func (m *Module) updateUser(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		u, err := db.One[userRow](r.Context(), tx, `update app_user set name=coalesce($2,name), roles=coalesce($3,roles), status=coalesce($4,status), locale=coalesce($5,locale)
-			where id=$1 returning `+userCols, id, in.Name, in.Roles, in.Status, in.Locale)
+		// A change of roles or status ends the user's existing sessions: tokens carry the roles they were issued with.
+		bump := 0
+		if (in.Roles != nil && !slices.Equal(in.Roles, before.Roles)) || (in.Status != nil && *in.Status != before.Status) {
+			bump = 1
+		}
+		u, err := db.One[userRow](r.Context(), tx, `update app_user set name=coalesce($2,name), roles=coalesce($3,roles), status=coalesce($4,status), locale=coalesce($5,locale), token_version=token_version+$6
+			where id=$1 returning `+userCols, id, in.Name, in.Roles, in.Status, in.Locale, bump)
 		if err != nil {
 			return err
 		}

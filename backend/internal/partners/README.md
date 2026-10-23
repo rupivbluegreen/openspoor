@@ -8,7 +8,8 @@ for connection requests; verification marks set by operators) and partner onboar
 (checklists from templates, test runs recorded by the link test harness, readiness score 0-100
 = share of checklist items satisfied; a test item counts when the latest run on its channel passed).
 Other modules read partners through `Get` and `ByGLN` inside the caller's tenant transaction
-(used by `dscsa` and `link`).
+(used by `dscsa` and `link`); `LoadAS2` and `ByAS2ID` give `dscsa` the AS2 profile and the
+partner behind an AS2 identifier.
 
 ## Endpoints (`/api/v1/partners`, roles admin / ops / integration / compliance)
 
@@ -23,6 +24,7 @@ Other modules read partners through `Get` and `ByGLN` inside the caller's tenant
 | POST | `/partners/{id}/approve` | Approve a connection |
 | POST | `/partners/{id}/suspend` | Suspend a connection |
 | POST | `/partners/{id}/health` | Run a health check now |
+| GET, PUT, DELETE | `/partners/{id}/as2` | AS2 profile of the connection: the partner's certificate (sealed with the tenant key), `sign`, `encrypt`, `mdn` (`sync`/`async`), `mdnUrl`. PUT / DELETE: admin or integration; needs `endpoints.as2Id`. Audited (`partner.as2.set`, `partner.as2.delete`), the audit entry names the certificate by fingerprint |
 | GET | `/partners/directory/requests` | Incoming connection requests |
 | POST | `/partners/directory/{tenantId}/connect` | Ask a published tenant to connect (alert in their inbox) |
 | GET | `/partners/onboarding/templates` | Onboarding templates |
@@ -37,7 +39,7 @@ Other modules read partners through `Get` and `ByGLN` inside the caller's tenant
 
 ## Data
 
-`partner`, `partner_invitation`, `directory_listing` (migration `00004_partners_dscsa.sql`);
+`partner`, `partner_invitation`, `directory_listing` (migration `00004_partners_dscsa.sql`); `partner_as2` (migration `00023_as2.sql`);
 profile columns, `directory_connection_request`, `partner_onboarding`, `partner_onboarding_item`,
 `partner_test_run` (migration `00015_link_network.sql`).
 

@@ -40,7 +40,11 @@ type Module struct {
 	DeliveryAttempts int
 	// InsecureDIDWeb resolves did:web identifiers over http instead of https (tests and local development only).
 	InsecureDIDWeb bool
-	node           *nodeIdentity
+	// RetryShipment re-sends an outbound TI/TS whose delivery failed through the dscsa outbound
+	// path (wired by the app; link does not import dscsa). It returns the shipment's new status
+	// ("sent" or "send_failed") and the transport response.
+	RetryShipment func(ctx context.Context, id uuid.UUID) (string, map[string]any, error)
+	node          *nodeIdentity
 }
 
 // New creates the module.

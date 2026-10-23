@@ -91,7 +91,7 @@ func (m *Module) deleteTenant(w http.ResponseWriter, r *http.Request) error {
 	if err != nil || t.ID != p.TenantID {
 		return httpx.BadRequest("confirmSlug must match this tenant")
 	}
-	if _, err := m.Platform.Login(r.Context(), t.Slug, p.Email, in.Password); err != nil {
+	if err := m.Platform.VerifyPassword(r.Context(), t.ID, p.Email, in.Password); err != nil {
 		return httpx.Unauthorized("re-authentication failed")
 	}
 	if in.Reason == "" {

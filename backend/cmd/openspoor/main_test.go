@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -14,10 +16,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/openspoor/openspoor/internal/core/config"
+	"github.com/openspoor/openspoor/internal/testkit"
 )
 
 func TestMigrateURL(t *testing.T) {
@@ -94,5 +98,37 @@ func TestNewServerServesTLS13(t *testing.T) {
 func TestNewServerBadKeyPair(t *testing.T) {
 	if _, err := newServer(http.NotFoundHandler(), config.Config{TLS: config.TLS{Cert: "/nonexistent", Key: "/nonexistent"}}); err == nil {
 		t.Fatal("expected an error")
+	}
+}
+
+func TestRunRotateKeys(t *testing.T) {
+	e := testkit.New(t)
+	var out bytes.Buffer
+	if _, err := e.App.Deps.Keys.For(context.Background(), e.Tenant.ID); err != nil { // creates the tenant's data key
+		t.Fatal(err)
+	}
+	cfg := e.App.Deps.Cfg
+	if err := runRotateKeys(context.Background(), e.App, cfg, false, &out); err == nil || !strings.Contains(err.Error(), "OPENSPOOR_NEW_MASTER_KEY") {
+		t.Fatalf("without a new key: %v", err)
+	}
+	cfg.NewMasterKey = []byte("a-brand-new-master-key-0123456789")
+	if err := runRotateKeys(context.Background(), e.App, cfg, true, &out); err != nil || !strings.Contains(out.String(), "would re-seal (dry run, nothing changed)") || strings.Contains(out.String(), "Next:") {
+		t.Fatalf("dry run: %v %q", err, out.String())
+	}
+	out.Reset()
+	if err := runRotateKeys(context.Background(), e.App, cfg, false, &out); err != nil || !strings.Contains(out.String(), "re-sealed:") || !strings.Contains(out.String(), "Next: set OPENSPOOR_MASTER_KEY") {
+		t.Fatalf("rotate: %v %q", err, out.String())
+	}
+	if err := runRotateKeys(context.Background(), e.App, cfg, false, &out); err == nil {
+		t.Fatal("the process still holds the old key: a second rotation must fail")
+	}
+}
+
+func TestNewMasterKeyFromEnvironment(t *testing.T) {
+	t.Setenv("OPENSPOOR_DEV_AUTH", "true")
+	t.Setenv("OPENSPOOR_NEW_MASTER_KEY", "replacement-master-key-0123456789")
+	c, err := config.Load()
+	if err != nil || string(c.NewMasterKey) != "replacement-master-key-0123456789" {
+		t.Fatalf("%v %q", err, c.NewMasterKey)
 	}
 }

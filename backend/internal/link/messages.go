@@ -17,14 +17,15 @@ import (
 	"github.com/openspoor/openspoor/internal/partners"
 )
 
-// Message tracking: one log over B2B documents, federation messages and TI/TS deliveries.
+// Message tracking: one log over B2B documents, federation messages, TI/TS deliveries and AS2
+// messages (each AS2 transmission is also a row of its own, with its receipt state).
 // Attempts, last error and the dead-letter state of queued deliveries come from the job
 // queue (job.status = 'failed' means retries are exhausted); nothing is copied.
 
 // LogEntry is one tracked message.
 type LogEntry struct {
 	ID          uuid.UUID  `json:"id" db:"id"`
-	Kind        string     `json:"kind" db:"kind"` // b2b | federation | tits
+	Kind        string     `json:"kind" db:"kind"` // b2b | federation | tits | as2
 	Direction   string     `json:"direction" db:"direction"`
 	Type        string     `json:"type" db:"type"`
 	PartnerID   *uuid.UUID `json:"partnerId,omitempty" db:"partner_id"`
@@ -42,8 +43,8 @@ type LogEntry struct {
 	UpdatedAt time.Time  `json:"updatedAt" db:"updated_at"`
 }
 
-// messageLog is the union behind /messages. TI/TS rows are read from the dscsa shipment table
-// (read-only; link does not import dscsa).
+// messageLog is the union behind /messages. TI/TS and AS2 rows are read from the dscsa shipment
+// and as2_message tables (read-only; link does not import dscsa).
 const messageLog = `with fed as (
 	select fm.id, fm.direction, fm.type, fm.msg_id, fm.status as fm_status, fm.detail, fm.created_at, fm.peer_id,
 		j.status as job_status, j.attempts, j.last_error, j.updated_at as job_updated
@@ -82,12 +83,23 @@ const messageLog = `with fed as (
 	where d.status <> 'draft'
 	union all
 	select s.id, 'tits', s.direction, 'tits', s.partner_id, coalesce(p.name, ''), coalesce(nullif(s.asn_number, ''), nullif(s.po_number, ''), s.id::text), s.transport,
-		case when s.direction = 'inbound' then 'received' when s.status = 'send_failed' then 'failed' else 'sent' end,
-		case when s.direction = 'inbound' then 0 else 1 end,
-		coalesce(s.response->>'error', ''), false,
+		case when s.direction = 'inbound' then 'received' when s.status = 'send_failed' then 'failed' when s.status = 'sending' then 'retrying'
+		     when s.response->>'mdn' = 'processed' then 'acknowledged' else 'sent' end,
+		case when s.direction = 'inbound' then 0 else greatest(s.send_attempts, 1) end,
+		coalesce(s.response->>'error', ''),
+		-- A failed delivery can be re-sent; so can one whose retry claim went stale (the retry crashed).
+		s.direction = 'outbound' and (s.status = 'send_failed' or (s.status = 'sending' and coalesce((s.response->>'claimedAt')::timestamptz, s.created_at) < now() - interval '5 minutes')),
 		s.created_at, s.sent_at, null::timestamptz, coalesce(s.sent_at, s.received_at, s.created_at)
 	from shipment s left join partner p on p.id = s.partner_id
-	where s.direction = 'inbound' or s.status in ('sent', 'send_failed')
+	where s.direction = 'inbound' or s.status in ('sent', 'send_failed', 'sending')
+	union all
+	select a.id, 'as2', a.direction, 'as2', a.partner_id, coalesce(p.name, ''), a.message_id, 'as2',
+		case a.status when 'processing' then 'queued' when 'received' then 'received' when 'sent' then 'sent' when 'mdn_pending' then 'sent'
+		              when 'delivered' then 'acknowledged' else 'failed' end,
+		case when a.direction = 'inbound' then 0 else 1 end,
+		a.error, false,
+		a.created_at, case when a.direction = 'outbound' then a.created_at end, case when a.status = 'delivered' then a.updated_at end, a.updated_at
+	from as2_message a left join partner p on p.id = a.partner_id
 )
 select id, kind, direction, type, partner_id, partner_name, reference, channel, status, attempts, last_error, retryable, created_at, sent_at, acked_at, updated_at from msg`
 
@@ -131,6 +143,15 @@ func (m *Module) retryMessage(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ctx := r.Context()
+	var isShipment bool
+	if err := m.Tx(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `select exists (select 1 from shipment where id = $1 and direction = 'outbound')`, id).Scan(&isShipment)
+	}); err != nil {
+		return err
+	}
+	if isShipment {
+		return m.retryShipment(w, r, id)
+	}
 	return m.Tx(ctx, func(tx pgx.Tx) error {
 		var fmID uuid.UUID
 		var jobID *int64
@@ -173,6 +194,33 @@ func (m *Module) retryMessage(w http.ResponseWriter, r *http.Request) error {
 		httpx.JSON(w, http.StatusAccepted, map[string]any{"id": id, "status": "queued"})
 		return nil
 	})
+}
+
+// retryShipment re-sends a failed outbound TI/TS through the dscsa outbound path. The send is
+// synchronous (the partner's answer is the outcome), so unlike a queued delivery the response
+// carries the new status.
+func (m *Module) retryShipment(w http.ResponseWriter, r *http.Request, id uuid.UUID) error {
+	ctx := r.Context()
+	if m.RetryShipment == nil {
+		return httpx.Conflict("TI/TS retry is not available on this installation")
+	}
+	status, resp, err := m.RetryShipment(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := m.Tx(ctx, func(tx pgx.Tx) error {
+		if status == "sent" {
+			if _, err := tx.Exec(ctx, `update alert set status = 'resolved', resolved_at = now() where entity = 'shipment' and entity_id = $1 and status = 'open' and kind = 'dscsa.send_failed'`, id.String()); err != nil {
+				return err
+			}
+		}
+		_, err := audit.Write(ctx, tx, audit.Record{Action: "message.retry", Entity: "shipment", EntityID: id.String(), After: map[string]any{"status": status}})
+		return err
+	}); err != nil {
+		return err
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"id": id, "status": status, "response": resp})
+	return nil
 }
 
 // ackDoc records a functional acknowledgement (e.g. X12 997 / EDIFACT CONTRL received through

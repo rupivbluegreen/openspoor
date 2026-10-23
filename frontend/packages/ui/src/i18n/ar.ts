@@ -5,6 +5,7 @@ const ar: Messages = {
   pillar: { trace: 'التتبع', link: 'الربط', act: 'التنفيذ', comply: 'الامتثال', food: 'الأغذية', settings: 'الإعدادات', ecosystem: 'المنظومة' },
   nav: {
     investigations: 'التحقيقات',
+    security: 'الأمان',
     dashboard: 'لوحة المعلومات', serialization: 'الترقيم التسلسلي', epcisInbox: 'صندوق وارد EPCIS', serialLookup: 'البحث عن رقم تسلسلي',
     eventQuery: 'استعلام الأحداث', subscriptions: 'الاشتراكات', partners: 'الشركاء', shipments: 'الشحنات',
     b2bDocuments: 'مستندات B2B', supplierCompliance: 'امتثال الموردين', federation: 'نظراء الاتحاد',
@@ -148,6 +149,25 @@ const ar: Messages = {
   auth: {
     title: 'تسجيل الدخول إلى أوبن سبور', subtitle: 'التتبع · الربط · التنفيذ · الامتثال', tenantSlug: 'المستأجر',
     operatorTitle: 'تسجيل دخول المشغّل', operatorOnly: 'هذا الحساب ليس حساب مشغّل.', sessionExpired: 'انتهت صلاحية جلستك.',
+  },
+  security: {
+    title: 'الأمان', passwordTitle: 'تغيير كلمة المرور', currentPassword: 'كلمة المرور الحالية', newPassword: 'كلمة المرور الجديدة',
+    confirmPassword: 'أعد إدخال كلمة المرور الجديدة', passwordMismatch: 'كلمتا المرور غير متطابقتين',
+    passwordChanged: 'تم تغيير كلمة المرور. تم إنهاء جلساتك الأخرى.',
+    mfaTitle: 'المصادقة الثنائية', mfaOn: 'مفعّلة', mfaOff: 'غير مفعّلة', mfaPending: 'الإعداد غير مكتمل',
+    mfaIntro: 'اطلب رمزاً من تطبيق مصادقة عند كل تسجيل دخول.', mfaSetup: 'إعداد',
+    mfaScan: 'أضف هذا المفتاح إلى تطبيق مصادقة (قائم على الوقت، 6 أرقام) ثم أدخل الرمز الذي يعرضه التطبيق.',
+    mfaSecret: 'مفتاح الإعداد', mfaUri: 'رابط الإعداد', mfaCode: 'رمز التحقق', mfaConfirm: 'تأكيد وتفعيل',
+    mfaEnabled: 'المصادقة الثنائية مفعّلة.', recoveryTitle: 'رموز الاسترداد',
+    recoveryHint: 'يعمل كل رمز مرة واحدة. احتفظ بها في مكان آمن لأنها لن تظهر مرة أخرى.', recoveryLeft: 'تبقّى {{n}} من رموز الاسترداد',
+    mfaDisable: 'إيقاف', mfaDisableHint: 'أدخل كلمة المرور ورمزاً حالياً أو رمز استرداد.', codeOrRecovery: 'رمز أو رمز استرداد',
+    regenerate: 'رموز استرداد جديدة', policyTitle: 'سياسة المستأجر', requireAdminMfa: 'فرض المصادقة الثنائية على المسؤولين',
+    policyHint: 'المسؤولون الذين لا يملكونها لا يستطيعون سوى إعدادها إلى أن يفعّلوها.',
+    setupRequired: 'تفرض مؤسستك المصادقة الثنائية على المسؤولين. أعدّها للمتابعة.',
+    signInCode: 'رمز التحقق أو رمز الاسترداد', forgot: 'هل نسيت كلمة المرور؟',
+    forgotIntro: 'أدخل المستأجر والبريد الإلكتروني. إن كان الحساب موجوداً نرسل رابطاً يعمل مرة واحدة لمدة 30 دقيقة.',
+    forgotSent: 'إن كان الحساب موجوداً فهناك رسالة بريد في الطريق.', sendLink: 'إرسال الرابط', resetTitle: 'اختر كلمة مرور جديدة',
+    resetDone: 'تم تغيير كلمة المرور. يمكنك تسجيل الدخول الآن.', backToSignIn: 'العودة إلى تسجيل الدخول',
   },
   esig: {
     title: 'التوقيع الإلكتروني', intro: 'أعد إدخال كلمة المرور للتوقيع. يرتبط توقيعك بسجل التدقيق.',
