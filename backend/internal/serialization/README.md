@@ -36,9 +36,7 @@ and publishes the same bus event.
 
 ## Spec gaps
 
-- DataMatrix image: "GS1 DataMatrix requires FNC1 in the first codeword; the encoder used here
-  emits a plain ECC200 symbol of the element string." Images are for previews and test labels;
-  print-ready symbols should come from the line's Level 2 printer.
+- DataMatrix image: GS1 DataMatrix encoding (FNC1 start codeword, FNC1 separators); verify with a scanner before printing.
 
 ## Tests
 

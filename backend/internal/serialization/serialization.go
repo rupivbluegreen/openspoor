@@ -498,10 +498,7 @@ func (m *Module) describe(ctx context.Context, p gs1.Pack, withImage bool) (Code
 		cr.URN, _ = gs1.SGTINURN(p.GTIN, p.Serial, cpLen)
 	}
 	if withImage {
-		// TODO(spec): GS1 DataMatrix requires FNC1 in the first codeword; the encoder used here
-		// emits a plain ECC200 symbol of the element string. Print-ready GS1 symbols should come
-		// from the line's Level 2 printer; this image is for previews and test labels.
-		code, err := datamatrix.Encode(gs1.ElementString(p.AIs()))
+		code, err := datamatrix.Encode(GS1DataMatrixContent(p))
 		if err != nil {
 			return cr, httpx.BadRequest("cannot encode DataMatrix: " + err.Error())
 		}
@@ -514,9 +511,17 @@ func (m *Module) describe(ctx context.Context, p gs1.Pack, withImage bool) (Code
 			return cr, err
 		}
 		cr.Image = "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
-		cr.ImageNote = "preview symbol without FNC1; not for production printing"
+		cr.ImageNote = "GS1 DataMatrix (ECC200, FNC1 start and separators per the GS1 DataMatrix Guideline). Verify with a scanner before printing; production labels normally come from the line's printer."
 	}
 	return cr, nil
+}
+
+// GS1DataMatrixContent returns the data fed to the Data Matrix encoder for a GS1 symbol: an
+// FNC1 codeword first (what marks the symbol as GS1 rather than plain Data Matrix) and FNC1
+// in place of the ASCII group separator between a variable-length element and the next one.
+func GS1DataMatrixContent(p gs1.Pack) string {
+	fnc1 := string([]byte{datamatrix.FNC1})
+	return fnc1 + strings.ReplaceAll(gs1.ElementString(p.AIs()), gs1.GS, fnc1)
 }
 
 func (m *Module) encode(w http.ResponseWriter, r *http.Request) error {

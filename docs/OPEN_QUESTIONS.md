@@ -31,7 +31,7 @@ distributed only to onboarded parties, or we could not verify the current versio
 | Area | Question | Where |
 |---|---|---|
 | EPCIS | Event hash IDs follow the structure of the CBV 2.0 event hash but are not yet byte-identical to the GS1 canonical algorithm, so they are tagged `ver=openspoor1`. | pkg/epcis/hash.go |
-| Serialization | DataMatrix preview images lack FNC1 in the first position (an encoder limitation). Production printing comes from Level 2 line systems. | internal/serialization |
+| Serialization | Preview symbols now use the GS1 DataMatrix encoding (FNC1 first, FNC1 as separator; the unit test reproduces the GS1 DataMatrix Guideline example). They have not been read with a scanner or verified with a print-quality grader, so label printing still belongs to the line's printer. | internal/serialization |
 
 ## Architecture and operations
 
