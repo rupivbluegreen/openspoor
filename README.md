@@ -67,7 +67,7 @@ Decisions are recorded in [`docs/adr/`](docs/adr).
 
 ## Deployment modes
 
-The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, host-based tenant routing), `single`, or `hub`. Kubernetes: [`deploy/helm/openspoor`](deploy/helm/openspoor). Backup and restore: [`docs/runbooks/backup-restore.md`](docs/runbooks/backup-restore.md).
+The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, host-based tenant routing), `single`, or `hub`. Kubernetes: [`deploy/helm/openspoor`](deploy/helm/openspoor). Backup and restore: [`docs/runbooks/backup-restore.md`](docs/runbooks/backup-restore.md). Air-gapped sites: `scripts/airgap-bundle.sh` builds one tarball with every container image, the compose file, the Helm chart and an installer; `install.sh` on the target host needs only Docker.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -77,7 +77,7 @@ The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, h
 | `OPENSPOOR_MODE` | `single` | `saas`, `single` or `hub` |
 | `OPENSPOOR_JWT_SECRET` | — | Session signing key (at least 16 bytes) |
 | `OPENSPOOR_MASTER_KEY` | — | Wraps per-tenant data keys and the federation key |
-| `OPENSPOOR_OIDC_ISSUER`, `OPENSPOOR_OIDC_AUDIENCE` | — | External SSO |
+| `OPENSPOOR_OIDC_ISSUER`, `OPENSPOOR_OIDC_AUDIENCE` | — | External SSO over OIDC; SAML identity providers connect through Keycloak ([runbook](docs/runbooks/sso.md)) |
 | `OPENSPOOR_PUBLIC_URL`, `OPENSPOOR_BASE_DOMAIN` | localhost | Links, `did:web` identity, SaaS host routing |
 | `OPENSPOOR_WEB_ROOT` | — | Directory with the built `console`, `verify` and `operator` apps |
 | `OPENSPOOR_KAFKA_BROKERS` | — | Mirror the event bus to Redpanda |

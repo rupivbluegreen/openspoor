@@ -54,10 +54,14 @@ services:
 
   openspoor:
     profiles: [app]
+    image: ${OPENSPOOR_IMAGE:-openspoor/openspoor:dev}
     build: { context: .., dockerfile: deploy/Dockerfile }
     environment:
-      OPENSPOOR_MODE: single
-      OPENSPOOR_DEV_AUTH: "true"
+      # Defaults suit local development; the offline installer overrides them from openspoor.env.
+      OPENSPOOR_MODE: ${OPENSPOOR_MODE:-single}
+      OPENSPOOR_DEV_AUTH: ${OPENSPOOR_DEV_AUTH:-true}
+      OPENSPOOR_JWT_SECRET: ${OPENSPOOR_JWT_SECRET:-}
+      OPENSPOOR_MASTER_KEY: ${OPENSPOOR_MASTER_KEY:-}
       OPENSPOOR_MIGRATE_ON_START: "true"
       OPENSPOOR_DATABASE_URL: postgres://openspoor:openspoor@postgres:5432/openspoor?sslmode=disable
       OPENSPOOR_KAFKA_BROKERS: redpanda:9092
