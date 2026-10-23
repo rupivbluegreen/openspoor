@@ -32,19 +32,19 @@ func (l *localLLM) Answer(ctx context.Context, system string, msgs []ChatMessage
 	}{Model: l.model, Temperature: 0, MaxTokens: 1024, Messages: []message{{Role: "system", Content: system}}}
 	for _, m := range msgs {
 		if m.Role == "user" || m.Role == "assistant" {
-			body.Messages = append(body.Messages, message{Role: m.Role, Content: m.Content})
+			body.Messages = append(body.Messages, message(m))
 		}
 	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.url, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.url, bytes.NewReader(b)) //nolint:gosec // G704: URL is operator configuration (OPENSPOOR_LOCAL_LLM_URL), not user input
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	res, err := l.client.Do(req)
+	res, err := l.client.Do(req) //nolint:gosec // G704: see above
 	if err != nil {
 		return "", fmt.Errorf("local model: %w", err)
 	}
