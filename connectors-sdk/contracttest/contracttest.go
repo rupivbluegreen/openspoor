@@ -34,6 +34,9 @@ func Run(t *testing.T, c connector.Connector, cfg connector.Config, cases []Case
 		}
 	}
 	ctx := context.Background()
+	if bm, ok := c.(connector.BatchMapper); ok {
+		t.Run("batch mapping", func(t *testing.T) { checkBatch(t, bm, cases) })
+	}
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
 			p1, err := c.Map(ctx, tc.Event)
@@ -99,5 +102,33 @@ func Run(t *testing.T, c connector.Connector, cfg connector.Config, cases []Case
 				}
 			}
 		})
+	}
+}
+
+// checkBatch verifies MapBatch over every case's event: deterministic, with kind, unique keys
+// and JSON bodies.
+func checkBatch(t *testing.T, bm connector.BatchMapper, cases []Case) {
+	t.Helper()
+	events := make([]connector.Event, 0, len(cases))
+	for _, tc := range cases {
+		events = append(events, tc.Event)
+	}
+	ctx := context.Background()
+	p1, err := bm.MapBatch(ctx, events)
+	if err != nil {
+		t.Fatalf("MapBatch: %v", err)
+	}
+	p2, _ := bm.MapBatch(ctx, events)
+	a, _ := json.Marshal(p1)
+	b, _ := json.Marshal(p2)
+	if string(a) != string(b) {
+		t.Fatal("MapBatch must be deterministic")
+	}
+	seen := map[string]bool{}
+	for _, p := range p1 {
+		if p.Key == "" || p.Kind == "" || !json.Valid(p.Body) || seen[p.Key] {
+			t.Fatalf("batch payload needs kind, a unique key and a JSON body: %+v", p)
+		}
+		seen[p.Key] = true
 	}
 }

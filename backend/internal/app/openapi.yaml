@@ -898,6 +898,72 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - connectors
+    /api/v1/connectors/instances/{id}/files:
+        get:
+            operationId: getConnectorsInstancesIdFiles
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - connectors
+    /api/v1/connectors/instances/{id}/sftp/poll:
+        post:
+            operationId: postConnectorsInstancesIdSftpPoll
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - connectors
+    /api/v1/connectors/instances/{id}/sftp/test:
+        post:
+            operationId: postConnectorsInstancesIdSftpTest
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - connectors
     /api/v1/connectors/instances/{id}/submit:
         post:
             operationId: postConnectorsInstancesIdSubmit
@@ -907,6 +973,22 @@ paths:
                   required: true
                   schema:
                     type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - connectors
+    /api/v1/connectors/sftp/host-key:
+        post:
+            operationId: postConnectorsSftpHostKey
             responses:
                 2XX:
                     content:

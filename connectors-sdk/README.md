@@ -15,6 +15,12 @@ type Connector interface {
 The host owns retries with exponential backoff, idempotency, the audit trail, the
 regulatory alert inbox and one-click resubmission. Your connector stays small.
 
+Optional:
+- `BatchMapper.MapBatch(ctx, []Event)` — one payload per capture instead of per event (file drops).
+- `Info.Triggers = ["*"]` (`AllBizSteps`) — receive every event, including those without packs.
+- `Event.Parent` carries an aggregation's parent; `Event.Raw` the event as captured (EPCIS 2.0
+  JSON-LD) for integration connectors that forward it unchanged.
+
 ## Contract tests
 ```go
 func TestContract(t *testing.T) {

@@ -102,7 +102,7 @@ func TestSARSDDispatchWithContainersAndRoles(t *testing.T) {
 		Items []struct{ ID, Market string }
 	}
 	e.Must(http.StatusOK, e.Call(viewer, "GET", "/api/v1/connectors", nil), &cat)
-	if len(cat.Items) != 2 || cat.Items[0].ID != "eu-fmd-emvs" || cat.Items[1].ID != "sa-rsd" {
+	if len(cat.Items) != 5 || cat.Items[0].ID != "ae-tatmeen" || cat.Items[1].ID != "eg-eda" || cat.Items[2].ID != "eu-fmd-emvs" || cat.Items[3].ID != "sa-rsd" || cat.Items[4].ID != "sftp" {
 		t.Fatalf("catalog: %+v", cat.Items)
 	}
 	e.Must(http.StatusForbidden, e.Call(viewer, "POST", "/api/v1/connectors/instances", map[string]any{"connector": "sa-rsd"}), nil)

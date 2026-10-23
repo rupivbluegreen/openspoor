@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -19,11 +20,14 @@ type Check struct {
 	Value any    `yaml:"value" json:"value"`
 }
 
-// Rule is one requirement with its public source.
+// Rule is one requirement with its public source. A rule that cannot yet be attributed to
+// a public source has an empty Source and a Todo starting with "TODO(spec)"; such rules are
+// informational and never evaluated.
 type Rule struct {
 	ID          string `yaml:"id" json:"id"`
 	Description string `yaml:"description" json:"description"`
 	Source      string `yaml:"source" json:"source"`
+	Todo        string `yaml:"todo" json:"todo,omitempty"`
 	AppliesTo   string `yaml:"appliesTo" json:"appliesTo"`
 	Check       *Check `yaml:"check" json:"check,omitempty"`
 	Severity    string `yaml:"severity" json:"severity"`
@@ -69,8 +73,8 @@ func Load() ([]Pack, error) {
 			return nil, fmt.Errorf("%s: %w", e.Name(), err)
 		}
 		for _, r := range p.Rules {
-			if r.Source == "" {
-				return nil, fmt.Errorf("%s: rule %s has no source", e.Name(), r.ID)
+			if err := r.validate(); err != nil {
+				return nil, fmt.Errorf("%s: %w", e.Name(), err)
 			}
 		}
 		out = append(out, p)
@@ -78,6 +82,19 @@ func Load() ([]Pack, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
 }
+
+func (r Rule) validate() error {
+	switch {
+	case r.Source == "" && !strings.HasPrefix(r.Todo, "TODO(spec)"):
+		return fmt.Errorf("rule %s has no source (mark it todo: \"TODO(spec): ...\" if none is public yet)", r.ID)
+	case r.Source == "" && r.Check != nil:
+		return fmt.Errorf("rule %s has a check but no source: unattributed rules are never enforced", r.ID)
+	}
+	return nil
+}
+
+// Enforced reports whether the rule may be evaluated (it cites a public source).
+func (r Rule) Enforced() bool { return r.Source != "" }
 
 // Eval applies a check to facts; it returns pass and whether the check applied.
 func Eval(c *Check, facts map[string]any) (bool, bool) {

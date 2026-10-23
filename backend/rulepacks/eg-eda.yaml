@@ -1,0 +1,49 @@
+# Egypt — Egyptian Drug Authority (EDA) pharmaceutical track and trace.
+# Community-editable. A rule carries a check only when it can be attributed to a public source.
+# Obligations we could not verify against a public text are listed with `todo: TODO(spec)` and
+# an empty source; they are informational and never evaluated.
+id: eg-eda
+name: Egypt EDA drug track and trace
+version: "2026.1"
+market: EG
+vertical: pharma
+sources:
+  - title: Egyptian Drug Authority
+    url: https://www.edaegypt.gov.eg
+    note: "TODO(spec): cite the EDA decrees on unified product coding and track and trace (secondary sources refer to Decrees 161/2025 and 475/2025; not yet verified against the official texts) and the EDA interface specification (distributed at onboarding)."
+  - title: GS1 General Specifications
+    url: https://www.gs1.org/standards/barcodes-epcglobal-tag-data/gs1-general-specifications
+rules:
+  - id: serial-max-20
+    description: The serial number in GS1 Application Identifier (21) is at most 20 alphanumeric characters.
+    source: "GS1 General Specifications, AI (21)"
+    appliesTo: serial_pool
+    check: { field: total_length, op: lte, value: 20 }
+    severity: error
+  - id: carrier-content
+    description: Which data elements the pack's 2D code must carry (GTIN, serial, batch, expiry) and on which packaging levels.
+    todo: "TODO(spec): confirm against the EDA decree text; secondary summaries are not cited."
+    source: ""
+    appliesTo: info
+    severity: info
+  - id: timelines
+    description: Implementation milestones for imported and locally manufactured products.
+    todo: "TODO(spec): confirm against the EDA decree text."
+    source: ""
+    appliesTo: info
+    severity: info
+  - id: reportable-events
+    description: Which events must be reported to EDA, the message types and the deadlines.
+    todo: "TODO(spec): defined in the EDA onboarding specification."
+    source: ""
+    appliesTo: info
+    severity: info
+  - id: aggregation-reporting
+    description: Whether parent/child aggregation must be reported and at which packaging levels.
+    todo: "TODO(spec): defined in the EDA onboarding specification."
+    source: ""
+    appliesTo: info
+    severity: info
+reporting:
+  connector: eg-eda
+  triggers: [commissioning, packing, unpacking, shipping, receiving, decommissioning, destroying, dispensing]

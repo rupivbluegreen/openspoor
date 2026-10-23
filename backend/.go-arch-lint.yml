@@ -22,6 +22,7 @@ components:
   trace:         { in: internal/trace }
   dscsa:         { in: internal/dscsa }
   connectors:    { in: internal/connectors }
+  hubjson:       { in: internal/connectors/hubjson }
   adapters:      { in: internal/connectors/* }
   partners:      { in: internal/partners }
   saas:          { in: internal/saas }
@@ -45,6 +46,8 @@ deps:
   epcis:         { mayDependOn: [masterdata, serialization] }
   dscsa:         { mayDependOn: [masterdata, epcis, trace, partners] }
   connectors:    { mayDependOn: [adapters, masterdata, trace, rulepacks] }
+  # Connectors for hubs with onboarding-only specs share the placeholder JSON engine.
+  adapters:      { mayDependOn: [hubjson] }
   saas:          { mayDependOn: [platform] }
   food:          { mayDependOn: [epcis] }
   link:          { mayDependOn: [epcis, partners] }

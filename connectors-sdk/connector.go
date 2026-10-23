@@ -73,10 +73,14 @@ type Event struct {
 	EventTime   time.Time          `json:"eventTime"`
 	Packs       []Pack             `json:"packs"`
 	Containers  []string           `json:"containers,omitempty"`
+	Parent      string             `json:"parent,omitempty"` // parentID of aggregation events (SSCC or SGTIN URI)
 	Location    string             `json:"location,omitempty"` // GLN
 	Source      string             `json:"source,omitempty"`   // GLN of owning party
 	Destination string             `json:"destination,omitempty"`
 	Products    map[string]Product `json:"products"` // by GTIN
+	// Raw is the event as captured (EPCIS 2.0 JSON-LD), for integration connectors that
+	// forward events unchanged. Regulatory connectors should map from the fields above.
+	Raw json.RawMessage `json:"raw,omitempty"`
 }
 
 // Payload is one report to submit.
@@ -126,6 +130,18 @@ type Alert struct {
 	Packs        []Pack `json:"packs,omitempty"`
 	Retryable    bool   `json:"retryable"`
 }
+
+// BatchMapper is optionally implemented by connectors that send one payload per capture
+// (for example a file drop holding every event of a capture) instead of one per event.
+// The host calls MapBatch with the capture's triggered events in event-time order; it must
+// be deterministic and do no I/O, like Map.
+type BatchMapper interface {
+	MapBatch(ctx context.Context, events []Event) ([]Payload, error)
+}
+
+// AllBizSteps in Info.Triggers means every event is offered to the connector, whatever its
+// business step, including events without serialized packs.
+const AllBizSteps = "*"
 
 // Connector is implemented by every country connector.
 type Connector interface {

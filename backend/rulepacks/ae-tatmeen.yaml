@@ -1,0 +1,55 @@
+# United Arab Emirates — Tatmeen, the national pharmaceutical track and trace platform.
+# Community-editable. A rule carries a check only when it can be attributed to a public source.
+# Obligations we could not verify against a public text are listed with `todo: TODO(spec)` and
+# an empty source; they are informational and never evaluated.
+id: ae-tatmeen
+name: UAE Tatmeen drug track and trace
+version: "2026.1"
+market: AE
+vertical: pharma
+sources:
+  - title: "MOHAP: UAE health authorities officially launch national drug tracking system Tatmeen"
+    url: https://mohap.gov.ae/en/w/uae-health-authorities-officially-launch-national-drug-tracking-system-tatmeen-
+    note: "Public launch notice (2023). TODO(spec): cite the governing ministerial decree text and the Tatmeen interface specification (distributed at onboarding)."
+  - title: GS1 General Specifications
+    url: https://www.gs1.org/standards/barcodes-epcglobal-tag-data/gs1-general-specifications
+rules:
+  - id: serial-max-20
+    description: The serial number in GS1 Application Identifier (21) is at most 20 alphanumeric characters.
+    source: "GS1 General Specifications, AI (21)"
+    appliesTo: serial_pool
+    check: { field: total_length, op: lte, value: 20 }
+    severity: error
+  - id: carrier-content
+    description: Which data elements the pack's 2D code must carry (GTIN, serial, batch, expiry) and on which packaging levels.
+    todo: "TODO(spec): confirm against the UAE decree text; secondary summaries are not cited."
+    source: ""
+    appliesTo: info
+    severity: info
+  - id: party-identification
+    description: How supply chain actors are identified to Tatmeen (GLN or another identifier) and where it is registered.
+    todo: "TODO(spec): confirm in the decree text and the onboarding specification."
+    source: ""
+    appliesTo: info
+    severity: info
+  - id: master-data
+    description: Where and when product master data must be registered before reporting.
+    todo: "TODO(spec): confirm in the decree text and the onboarding specification."
+    source: ""
+    appliesTo: info
+    severity: info
+  - id: reportable-events
+    description: Which events (commissioning, aggregation, dispatch, receipt, dispensing, decommissioning) must be reported, and the deadlines.
+    todo: "TODO(spec): the reportable events, message types and deadlines are in the onboarding specification."
+    source: ""
+    appliesTo: info
+    severity: info
+  - id: aggregation-reporting
+    description: Whether parent/child aggregation must be reported and at which packaging levels.
+    todo: "TODO(spec): aggregation reporting is defined in the onboarding specification."
+    source: ""
+    appliesTo: info
+    severity: info
+reporting:
+  connector: ae-tatmeen
+  triggers: [commissioning, packing, unpacking, shipping, receiving, decommissioning, destroying, dispensing]

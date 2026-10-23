@@ -1,5 +1,6 @@
-// Package mockhub provides in-memory mock regulatory hubs (EU Hub/EMVS and SFDA RSD) built
-// from the public rules those systems enforce, for development, demos and contract tests.
+// Package mockhub provides in-memory mock regulatory hubs (EU Hub/EMVS, SFDA RSD, and
+// placeholder-shape hubs for UAE Tatmeen and Egypt EDA) for development, demos and contract
+// tests, plus an in-process SFTP server for integration tests.
 // They are reachable through an in-process http.RoundTripper at http://<name>.mock.local,
 // so no network or extra containers are needed. Error codes are prefixed MOCK- on purpose.
 package mockhub
@@ -40,9 +41,10 @@ const (
 	SAHost = "sa-rsd.mock.local"
 )
 
-// NewTransport returns a transport with both mock hubs.
+// NewTransport returns a transport with every mock hub.
 func NewTransport() *Transport {
-	return &Transport{Handlers: map[string]http.Handler{EUHost: NewEUHub(), SAHost: NewSAHub()}}
+	return &Transport{Handlers: map[string]http.Handler{EUHost: NewEUHub(), SAHost: NewSAHub(),
+		AEHost: NewJSONHub("TTM"), EGHost: NewJSONHub("EDA")}}
 }
 
 type txn struct {

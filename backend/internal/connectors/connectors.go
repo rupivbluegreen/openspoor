@@ -18,9 +18,12 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	connector "github.com/openspoor/connectors-sdk"
+	"github.com/openspoor/openspoor/internal/connectors/aetatmeen"
+	"github.com/openspoor/openspoor/internal/connectors/egeda"
 	"github.com/openspoor/openspoor/internal/connectors/eufmd"
 	"github.com/openspoor/openspoor/internal/connectors/mockhub"
 	"github.com/openspoor/openspoor/internal/connectors/sarsd"
+	"github.com/openspoor/openspoor/internal/connectors/sftpdrop"
 	"github.com/openspoor/openspoor/internal/core/audit"
 	"github.com/openspoor/openspoor/internal/core/auth"
 	"github.com/openspoor/openspoor/internal/core/db"
@@ -44,7 +47,11 @@ const (
 // Module is the connectors bounded context.
 type Module struct {
 	kernel.Deps
-	Mocks    *mockhub.Transport
+	Mocks *mockhub.Transport
+	// Capture is the EPCIS capture path used for inbound SFTP files (wired by the application).
+	Capture CaptureFunc
+	// StoreEDI stores inbound EDI documents (wired by the application).
+	StoreEDI EDIFunc
 	registry map[string]connector.Connector
 	packs    []rulepacks.Pack
 }
@@ -54,14 +61,14 @@ type Module struct {
 func New(d kernel.Deps) (*Module, error) {
 	mt := mockhub.NewTransport()
 	client := &http.Client{Timeout: 15 * time.Second, Transport: mt}
-	eu, sa := eufmd.New(), sarsd.New()
-	eu.Client, sa.Client = client, client
+	eu, sa, ae, eg := eufmd.New(), sarsd.New(), aetatmeen.New(), egeda.New()
+	eu.Client, sa.Client, ae.Client, eg.Client = client, client, client, client
 	packs, err := rulepacks.Load()
 	if err != nil {
 		return nil, err
 	}
 	m := &Module{Deps: d, Mocks: mt, packs: packs, registry: map[string]connector.Connector{}}
-	for _, c := range []connector.Connector{eu, sa} {
+	for _, c := range []connector.Connector{eu, sa, ae, eg, sftpdrop.New()} {
 		m.registry[c.Info().ID] = c
 	}
 	return m, nil
@@ -79,6 +86,10 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/connectors/instances", httpx.Handler(m.createInstance))
 		r.Put("/connectors/instances/{id}", httpx.Handler(m.updateInstance))
 		r.Post("/connectors/instances/{id}/submit", httpx.Handler(m.manualSubmit))
+		r.Get("/connectors/instances/{id}/files", httpx.Handler(m.listFiles))
+		r.Post("/connectors/instances/{id}/sftp/poll", httpx.Handler(m.pollNow))
+		r.Post("/connectors/instances/{id}/sftp/test", httpx.Handler(m.sftpTest))
+		r.Post("/connectors/sftp/host-key", httpx.Handler(m.hostKey))
 		r.Get("/reports", httpx.Handler(m.listReports))
 		r.Get("/reports/{id}", httpx.Handler(m.getReport))
 		r.Post("/reports/{id}/resubmit", httpx.Handler(m.resubmit))
@@ -150,6 +161,19 @@ func (m *Module) secretKeys(ctx context.Context, in Instance) map[string]bool {
 	return out
 }
 
+// configValidator is implemented by connectors that check an instance configuration on save.
+type configValidator interface {
+	Validate(cfg connector.Config) error
+}
+
+// outboundGate is implemented by connectors whose outbound flow can be switched off per instance.
+type outboundGate interface {
+	Outbound(cfg connector.Config) bool
+}
+
+// mockHosts maps connectors to their in-process mock hub for baseUrl "local-mock".
+var mockHosts = map[string]string{"eu-fmd-emvs": mockhub.EUHost, "sa-rsd": mockhub.SAHost, aetatmeen.ID: mockhub.AEHost, egeda.ID: mockhub.EGHost}
+
 type instanceInput struct {
 	Connector string            `json:"connector"`
 	Name      string            `json:"name"`
@@ -190,6 +214,18 @@ func (m *Module) split(ctx context.Context, c connector.Connector, id uuid.UUID,
 		}
 		if f.Required && plain[f.Key] == "" && secret[f.Key] == "" {
 			return nil, nil, httpx.BadRequest("config " + f.Key + " is required")
+		}
+	}
+	if v, ok := c.(configValidator); ok {
+		merged := connector.Config{}
+		for k, x := range plain {
+			merged[k] = x
+		}
+		for k, x := range secret {
+			merged[k] = x
+		}
+		if err := v.Validate(merged); err != nil {
+			return nil, nil, httpx.BadRequest(err.Error())
 		}
 	}
 	var sealed []byte
@@ -295,9 +331,9 @@ func (m *Module) effectiveConfig(ctx context.Context, in Instance) connector.Con
 		}
 	}
 	if cfg["baseUrl"] == "local-mock" {
-		host := mockhub.EUHost
-		if in.Connector == "sa-rsd" {
-			host = mockhub.SAHost
+		host := mockHosts[in.Connector]
+		if host == "" {
+			host = mockhub.EUHost
 		}
 		cfg["baseUrl"] = "http://" + host
 	}
@@ -305,6 +341,48 @@ func (m *Module) effectiveConfig(ctx context.Context, in Instance) connector.Con
 }
 
 // --- dispatch: captured events -> reports ---
+
+type mapped struct {
+	event    connector.Event
+	payloads []connector.Payload
+	err      error
+}
+
+// wanted reports whether an instance takes an event: regulatory connectors take their
+// trigger steps for serialized packs of their market; connectors with the AllBizSteps
+// trigger take every event, optionally narrowed by the instance's "bizSteps" setting.
+func wanted(ctx context.Context, tx pgx.Tx, info connector.Info, inst Instance, e connector.Event) bool {
+	if slices.Contains(info.Triggers, connector.AllBizSteps) {
+		steps := strings.FieldsFunc(inst.Config["bizSteps"], func(r rune) bool { return r == ',' || r == ' ' })
+		return len(steps) == 0 || slices.Contains(steps, e.BizStep)
+	}
+	return slices.Contains(info.Triggers, e.BizStep) && len(e.Packs) > 0 && targets(ctx, tx, info.Market, e)
+}
+
+// mapEvents maps a capture's events for one instance: per event, or as one batch for
+// connectors implementing connector.BatchMapper.
+func mapEvents(ctx context.Context, tx pgx.Tx, c connector.Connector, inst Instance, events []connector.Event) []mapped {
+	info := c.Info()
+	var take []connector.Event
+	for _, e := range events {
+		if wanted(ctx, tx, info, inst, e) {
+			take = append(take, e)
+		}
+	}
+	if len(take) == 0 {
+		return nil
+	}
+	if bm, ok := c.(connector.BatchMapper); ok {
+		pl, err := bm.MapBatch(ctx, take)
+		return []mapped{{event: take[0], payloads: pl, err: err}}
+	}
+	out := make([]mapped, 0, len(take))
+	for _, e := range take {
+		pl, err := c.Map(ctx, e)
+		out = append(out, mapped{event: e, payloads: pl, err: err})
+	}
+	return out
+}
 
 type capturePayload struct {
 	CaptureID  uuid.UUID  `json:"captureId"`
@@ -330,6 +408,7 @@ func toEvents(ctx context.Context, tx pgx.Tx, captureID uuid.UUID) ([]connector.
 		return nil, err
 	}
 	var evs []lib.Event
+	var raws []json.RawMessage
 	for rows.Next() {
 		var b []byte
 		if err := rows.Scan(&b); err != nil {
@@ -342,12 +421,14 @@ func toEvents(ctx context.Context, tx pgx.Tx, captureID uuid.UUID) ([]connector.
 			return nil, err
 		}
 		evs = append(evs, e)
+		raws = append(raws, b)
 	}
 	rows.Close()
 	products := map[string]connector.Product{}
 	var out []connector.Event
-	for _, e := range evs {
-		ce := connector.Event{EventID: e.EventID, Type: e.Type, Action: e.Action, BizStep: e.BizStep, Disposition: e.Disposition, EventTime: e.EventTime, Products: map[string]connector.Product{}}
+	for i, e := range evs {
+		ce := connector.Event{EventID: e.EventID, Type: e.Type, Action: e.Action, BizStep: e.BizStep, Disposition: e.Disposition, EventTime: e.EventTime,
+			Products: map[string]connector.Product{}, Parent: lib.Canonical(e.ParentID), Raw: raws[i]}
 		if e.BizLocation != nil {
 			ce.Location = glnOf(e.BizLocation.ID)
 		} else if e.ReadPoint != nil {
@@ -489,16 +570,15 @@ func (m *Module) dispatchJob(ctx context.Context, j jobs.Job) error {
 			if c == nil {
 				continue
 			}
-			info := c.Info()
-			for _, e := range events {
-				if !slices.Contains(info.Triggers, e.BizStep) || len(e.Packs) == 0 || !targets(ctx, tx, info.Market, e) {
-					continue
+			if g, ok := c.(outboundGate); ok && !g.Outbound(inst.Config) {
+				continue
+			}
+			for _, item := range mapEvents(ctx, tx, c, inst, events) {
+				if item.err != nil {
+					return jobs.Permanent{Err: item.err}
 				}
-				payloads, err := c.Map(ctx, e)
-				if err != nil {
-					return jobs.Permanent{Err: err}
-				}
-				for _, pl := range payloads {
+				e := item.event
+				for _, pl := range item.payloads {
 					rid := ids.New()
 					ct, err := tx.Exec(ctx, `insert into regulatory_report (id, tenant_id, instance_id, connector, kind, idem_key, payload, packs, capture_id, event_id)
 						values ($1, app_tenant(), $2,$3,$4,$5,$6,$7,$8,$9) on conflict (tenant_id, instance_id, idem_key) do nothing`,
@@ -820,7 +900,7 @@ func (m *Module) evaluate(w http.ResponseWriter, r *http.Request) error {
 				}
 				facts := map[string]any{"has_ndc": p.hasNDC, "has_name_form_strength_packsize": p.hasDetail}
 				for _, rule := range pk.Rules {
-					if rule.AppliesTo != "product" {
+					if !rule.Enforced() || rule.AppliesTo != "product" {
 						continue
 					}
 					if ok, applied := rulepacks.Eval(rule.Check, facts); applied && !ok {
@@ -846,7 +926,7 @@ func (m *Module) evaluate(w http.ResponseWriter, r *http.Request) error {
 				}
 				facts := map[string]any{"mode": mode, "total_length": total, "capacity_per_issued": float64(capacity) / float64(issued)}
 				for _, rule := range pk.Rules {
-					if rule.AppliesTo != "serial_pool" {
+					if !rule.Enforced() || rule.AppliesTo != "serial_pool" {
 						continue
 					}
 					if ok, applied := rulepacks.Eval(rule.Check, facts); applied && !ok {
