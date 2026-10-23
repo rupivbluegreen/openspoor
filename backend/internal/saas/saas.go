@@ -106,6 +106,7 @@ func (m *Module) Routes(r chi.Router) {
 		r.Get("/tenants", httpx.Handler(m.opTenants))
 		r.Patch("/tenants/{id}", httpx.Handler(m.opUpdate))
 		r.Post("/tenants/{id}/impersonate", httpx.Handler(m.opImpersonate))
+		r.Get("/hub/analytics", httpx.Handler(m.hubAnalytics))
 	})
 }
 
