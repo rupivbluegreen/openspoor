@@ -920,6 +920,75 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - connectors
+    /api/v1/consumer-info:
+        get:
+            operationId: getConsumerInfo
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - consumer-info
+    /api/v1/consumer-info/{gtin}/{lang}:
+        delete:
+            operationId: deleteConsumerInfoGtinLang
+            parameters:
+                - in: path
+                  name: gtin
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: lang
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - consumer-info
+        put:
+            operationId: putConsumerInfoGtinLang
+            parameters:
+                - in: path
+                  name: gtin
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: lang
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - consumer-info
     /api/v1/control-tower:
         get:
             operationId: getControlTower
@@ -3691,6 +3760,70 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - users
+    /api/v1/verify/recall-alerts:
+        post:
+            operationId: postVerifyRecallAlerts
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - verify
+    /api/v1/verify/recall-alerts/unsubscribe:
+        post:
+            operationId: postVerifyRecallAlertsUnsubscribe
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - verify
+    /api/v1/verify/report:
+        post:
+            operationId: postVerifyReport
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - verify
+    /api/v1/verify/reports:
+        get:
+            operationId: getVerifyReports
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - verify
     /api/v1/verify/scan:
         post:
             operationId: postVerifyScan
@@ -3717,6 +3850,22 @@ paths:
                 default:
                     $ref: '#/components/responses/Problem'
             security: []
+            tags:
+                - verify
+    /api/v1/verify/stats:
+        get:
+            operationId: getVerifyStats
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
             tags:
                 - verify
     /api/v1/vrs/directory:

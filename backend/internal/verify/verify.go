@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"sort"
@@ -19,9 +20,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/time/rate"
 
+	"github.com/openspoor/openspoor/internal/core/auth"
 	"github.com/openspoor/openspoor/internal/core/httpx"
 	"github.com/openspoor/openspoor/internal/core/ids"
 	"github.com/openspoor/openspoor/internal/core/kernel"
+	"github.com/openspoor/openspoor/internal/core/mail"
 	"github.com/openspoor/openspoor/internal/masterdata"
 	"github.com/openspoor/openspoor/internal/serialization"
 	"github.com/openspoor/openspoor/internal/trace"
@@ -34,22 +37,44 @@ type Module struct {
 	kernel.Deps
 	mu       sync.Mutex
 	limiters map[string]*rate.Limiter
+	// Mail sends opt-in recall notices; nil when no SMTP relay is configured.
+	Mail mail.Sender
 }
 
 // New creates the module.
-func New(d kernel.Deps) *Module { return &Module{Deps: d, limiters: map[string]*rate.Limiter{}} }
+func New(d kernel.Deps) *Module {
+	m := &Module{Deps: d, limiters: map[string]*rate.Limiter{}}
+	if s, err := mail.New(d.Cfg.SMTPURL, d.Cfg.MailFrom); err != nil {
+		slog.Warn("mail disabled", "err", err)
+	} else {
+		m.Mail = s
+	}
+	return m
+}
 
 // Name implements kernel.Module.
 func (m *Module) Name() string { return "verify" }
 
-// Routes implements kernel.Module (no authenticated routes).
-func (m *Module) Routes(chi.Router) {}
+// Routes implements kernel.Module: the brand owner's consumer information and scan statistics.
+func (m *Module) Routes(r chi.Router) {
+	r.Group(func(r chi.Router) {
+		r.Use(auth.Require(auth.RoleAdmin, auth.RoleCompliance))
+		r.Get("/consumer-info", httpx.Handler(m.listInfo))
+		r.Put("/consumer-info/{gtin}/{lang}", httpx.Handler(m.putInfo))
+		r.Delete("/consumer-info/{gtin}/{lang}", httpx.Handler(m.deleteInfo))
+		r.Get("/verify/stats", httpx.Handler(m.stats))
+		r.Get("/verify/reports", httpx.Handler(m.listReports))
+	})
+}
 
 // Public implements kernel.PublicRoutes.
 func (m *Module) Public(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(m.limit)
 		r.Post("/verify/scan", httpx.Handler(m.scan))
+		r.Post("/verify/report", httpx.Handler(m.report))
+		r.Post("/verify/recall-alerts", httpx.Handler(m.subscribe))
+		r.Post("/verify/recall-alerts/unsubscribe", httpx.Handler(m.unsubscribe))
 		r.Post("/playground/validate", httpx.Handler(m.validate))
 		r.Post("/playground/convert", httpx.Handler(m.convert))
 		r.Post("/playground/visualize", httpx.Handler(m.visualize))
@@ -88,11 +113,18 @@ type ScanResult struct {
 	Product  map[string]any `json:"product,omitempty"`
 	Pack     gs1.Pack       `json:"pack"`
 	Checked  time.Time      `json:"checkedAt"`
+	// Info is the brand owner's consumer information in the reader's language, when published.
+	Info *ConsumerInfo `json:"info,omitempty"`
+	// ExpiryDate (YYYY-MM-DD) from the manufacturer's record, for an expiry reminder.
+	ExpiryDate string `json:"expiryDate,omitempty"`
+	// RecallAlerts says whether the reader may opt in to recall notices for this pack's lot.
+	RecallAlerts bool `json:"recallAlerts"`
 }
 
 func (m *Module) scan(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
 		Code string `json:"code"`
+		Lang string `json:"lang"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		return err
@@ -101,7 +133,7 @@ func (m *Module) scan(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return httpx.BadRequest("could not read the code: " + err.Error())
 	}
-	res, err := m.Scan(r.Context(), pack)
+	res, err := m.ScanFor(r.Context(), pack, readerLang(in.Lang, r.Header.Get("Accept-Language")))
 	if err != nil {
 		return err
 	}
@@ -111,6 +143,21 @@ func (m *Module) scan(w http.ResponseWriter, r *http.Request) error {
 
 // Scan verifies one pack against the manufacturer's repository on this node.
 func (m *Module) Scan(ctx context.Context, pack gs1.Pack) (ScanResult, error) {
+	return m.ScanFor(ctx, pack, "en")
+}
+
+// ScanFor is Scan with consumer information in the reader's language (ISO 639-1); each call
+// adds one anonymous count to the brand owner's scan statistics.
+func (m *Module) ScanFor(ctx context.Context, pack gs1.Pack, lang string) (ScanResult, error) {
+	res, tenant, err := m.check(ctx, pack, lang)
+	if err == nil && tenant != uuid.Nil {
+		err = m.count(ctx, tenant, pack.GTIN, res.Status)
+	}
+	return res, err
+}
+
+// check verifies a pack without counting it; tenant is uuid.Nil for an unknown product.
+func (m *Module) check(ctx context.Context, pack gs1.Pack, lang string) (ScanResult, uuid.UUID, error) {
 	res := ScanResult{Pack: pack, Checked: time.Now().UTC()}
 	// Find the brand owner: the tenant that serializes this GTIN (has a pool), else any with the product.
 	var tenant uuid.UUID
@@ -120,7 +167,7 @@ func (m *Module) Scan(ctx context.Context, pack gs1.Pack) (ScanResult, error) {
 	})
 	if err != nil {
 		res.Status, res.Message = "unknown_product", "This product is not registered on this network. Do not dispense; check with the supplier."
-		return res, nil
+		return res, uuid.Nil, nil
 	}
 	err = m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
 		p, err := masterdata.ByGTIN(ctx, tx, pack.GTIN)
@@ -151,12 +198,22 @@ func (m *Module) Scan(ctx context.Context, pack gs1.Pack) (ScanResult, error) {
 		default:
 			res.Verified, res.Status, res.Message = true, "verified", "Genuine pack, verified with the manufacturer's record."
 		}
+		if res.Pack.Lot == "" && st.Lot != nil {
+			res.Pack.Lot = *st.Lot
+		}
+		if st.Expiry != nil {
+			res.ExpiryDate = st.Expiry.Format(time.DateOnly)
+		}
+		res.RecallAlerts = res.Verified && res.Pack.Lot != "" && m.Mail != nil
+		if res.Info, err = infoFor(ctx, tx, pack.GTIN, lang); err != nil {
+			return err
+		}
 		if !res.Verified {
 			return raise(ctx, tx, res)
 		}
 		return nil
 	})
-	return res, err
+	return res, tenant, err
 }
 
 func sameExpiry(yymmdd string, d time.Time) bool {
