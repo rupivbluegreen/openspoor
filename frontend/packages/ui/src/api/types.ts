@@ -1131,3 +1131,169 @@ export interface AgentEvals {
   minScoreIsDefault: boolean;
   note: string;
 }
+
+/** Reconciliation and checkpoint settings of a tenant (`/trace/balance/settings`). */
+export interface TraceSettings {
+  toleranceUnits: number;
+  tolerancePercent: number;
+  proposeCase: boolean;
+  balanceAuto: boolean;
+  checkpointHours: number;
+  isDefault: boolean;
+}
+
+export interface BalanceAnomaly {
+  epc: string;
+  in: number;
+  out: number;
+  units: number;
+  issue: string;
+}
+
+/** Mass balance of one lot: counts are data from stored events, the rest is derived. */
+export interface LotBalance {
+  gtin: string;
+  lot: string;
+  serials: number;
+  commissioned: number;
+  shipped: number;
+  received: number;
+  decommissioned: number;
+  destroyed: number;
+  viaAggregation: number;
+  inflow: number;
+  outflow: number;
+  expectedOnHand: number;
+  discrepancy: number;
+  allowed: number;
+  closed: boolean;
+  anomalies: BalanceAnomaly[];
+}
+
+export interface BalanceAnalysis {
+  gtin: string;
+  settings: TraceSettings;
+  lots: LotBalance[];
+  truncated: boolean;
+  notes: string[];
+}
+
+export interface CustodyGap {
+  epc: string;
+  lot: string;
+  kind: string;
+  severity: 'low' | 'medium' | 'high';
+  from?: string;
+  to?: string;
+  at: string;
+  eventId: string;
+  detail: string;
+}
+
+export interface CustodyGaps {
+  gtin: string;
+  lots: { lot: string; serials: number; summary: { high: number; medium: number; low: number }; gaps: CustodyGap[]; notListed?: number }[];
+  truncated: boolean;
+  notes: string[];
+}
+
+export interface BalanceReportRow {
+  id: string;
+  gtin: string;
+  lot: string;
+  status: 'balanced' | 'discrepancy';
+  discrepancy: number;
+  allowed: number;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface RecallHolderRow {
+  id: string;
+  holderId: string;
+  gln: string;
+  name: string;
+  partnerOnNetwork: boolean;
+  packs: number;
+  sampleSerials: string[];
+  channel: string;
+  status: 'pending' | 'sent' | 'acknowledged';
+  note: string;
+  sentAt?: string;
+  acknowledgedAt?: string;
+}
+
+/** A pharma lot recall with its holders and notification status. */
+export interface LotRecallRow {
+  id: string;
+  gtin: string;
+  lot: string;
+  title: string;
+  reason: string;
+  classification: string;
+  status: 'open' | 'closed';
+  scope: { asOf: string; packs: number; ownStock: number; atHolders: number; noDestination: number; noCustodyRecord: number; ended: Record<string, number> };
+  createdBy: string;
+  createdAt: string;
+  closedAt?: string;
+  holders: RecallHolderRow[];
+}
+
+export type ResolverAudience = 'consumer' | 'authority' | 'trading_partner';
+
+export interface ResolverLinkRow {
+  id: string;
+  gtin: string;
+  lot: string;
+  linkType: string;
+  audiences: ResolverAudience[];
+  mimeType: string;
+  lang: string;
+  href: string;
+  title: string;
+  isDefault: boolean;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResolverLinkType {
+  id: string;
+  title: string;
+  iri: string;
+  vocabulary: 'gs1' | 'local';
+  note?: string;
+}
+
+export interface IntegrityCheckpoint {
+  seq: number;
+  createdAt: string;
+  auditSeq: number;
+  auditHash: string;
+  eventsFrom?: string;
+  eventsTo: string;
+  eventCount: number;
+  eventRoot: string;
+  docHash: string;
+  keyId: string;
+}
+
+export interface IntegrityCheck {
+  name: string;
+  ok: boolean;
+  detail?: string;
+}
+
+export interface IntegrityReport {
+  ok: boolean;
+  auditChain: { checked: number; brokenAt: number; ok: boolean };
+  checkpoints: { seq: number; ok: boolean; checks: IntegrityCheck[] }[];
+  notes: string[];
+}
+
+export interface IntegrityNode {
+  keyId: string;
+  publicKey: string;
+  algorithm: string;
+  use: string;
+}

@@ -40,7 +40,7 @@ func runVerifyCheckpoint(args []string, stdout, stderr io.Writer) int {
 	if *pub != "" {
 		s := *pub
 		if strings.HasPrefix(s, "@") {
-			b, err := os.ReadFile(s[1:])
+			b, err := os.ReadFile(s[1:]) //nolint:gosec // the operator names the key file
 			if err != nil {
 				fmt.Fprintln(stderr, "verify-checkpoint:", err)
 				return 2
@@ -56,7 +56,7 @@ func runVerifyCheckpoint(args []string, stdout, stderr io.Writer) int {
 	}
 	var bundles []checkpoint.Bundle
 	for _, name := range fs.Args() {
-		b, err := os.ReadFile(name)
+		b, err := os.ReadFile(name) //nolint:gosec // the operator names the checkpoint files to verify
 		if err != nil {
 			fmt.Fprintln(stderr, "verify-checkpoint:", err)
 			return 2

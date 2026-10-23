@@ -201,3 +201,57 @@ export interface TransactionTypeList {
   total: number;
   categories: { key: string; count: number }[];
 }
+
+/** AS2 certificate overview (`GET /as2/certificates`). */
+export interface As2CertView {
+  subject: string;
+  notBefore: string;
+  notAfter: string;
+  fingerprint: string;
+  daysLeft: number;
+  /** ok, 60d, 30d, 7d or expired */
+  stage: string;
+}
+
+export interface As2Warning {
+  code: string;
+  severity: 'info' | 'warning' | 'error';
+  message: string;
+}
+
+export interface As2Options {
+  signatureAlgorithm: string;
+  mdnSignatureAlgorithm: string;
+  encryption: string;
+  compress: boolean;
+  legacy: boolean;
+}
+
+export interface As2PartnerCerts {
+  partnerId: string;
+  name: string;
+  as2Id: string;
+  current: As2CertView;
+  next?: As2CertView;
+  switchAt?: string;
+  active: 'current' | 'next';
+  options: As2Options;
+  warnings: As2Warning[];
+}
+
+export interface As2StationCerts {
+  as2Id: string;
+  receiveUrl: string;
+  current: As2CertView;
+  next?: As2CertView;
+  switchAt?: string;
+  active: 'current' | 'next';
+  warnings: As2Warning[];
+}
+
+export interface As2Overview {
+  station: As2StationCerts | null;
+  partners: As2PartnerCerts[];
+  summary: { partners: number; expired: number; expiring: number; legacy: number; rotations: number };
+  thresholdsDays: number[];
+}

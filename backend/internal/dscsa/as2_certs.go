@@ -3,6 +3,8 @@ package dscsa
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/x509"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -50,7 +52,7 @@ func (m *Module) putStationNext(w http.ResponseWriter, r *http.Request) error {
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
 		old, err := db.One[AS2Station](r.Context(), tx, `select `+stationCols+` from as2_station where tenant_id = app_tenant()`)
 		if err != nil {
-			if err == db.ErrNotFound {
+			if errors.Is(err, db.ErrNotFound) {
 				return httpx.Conflict("set this node's AS2 station first")
 			}
 			return err
@@ -66,7 +68,7 @@ func (m *Module) putStationNext(w http.ResponseWriter, r *http.Request) error {
 		var key *rsa.PrivateKey
 		var certPEM string
 		var next as2.CertInfo
-		var nextCert = cur
+		var nextCert *x509.Certificate
 		if in.Generate {
 			c, k, err := as2.GenerateStation(old.AS2ID, as2CertValidity, now)
 			if err != nil {
@@ -272,7 +274,7 @@ func (m *Module) certOverview(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, 
 			sc.Warnings = append(sc.Warnings, partners.CertWarnings(nv, "next node certificate")...)
 		}
 		ov.Station = sc
-	case err != db.ErrNotFound:
+	case !errors.Is(err, db.ErrNotFound):
 		return ov, err
 	}
 	if ov.Partners, err = partners.AS2Overview(ctx, tx, m.Keys, tenant, now); err != nil {

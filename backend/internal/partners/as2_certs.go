@@ -174,10 +174,10 @@ func RaiseCertAlert(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, scope, sub
 		what = "Next AS2 certificate of " + subjectName
 	}
 	severity, title := "warning", fmt.Sprintf("%s expires in %d days (%s)", what, days, notAfter.UTC().Format("2006-01-02"))
-	switch {
-	case stage == as2.ExpiryExpired:
+	switch stage {
+	case as2.ExpiryExpired:
 		severity, title = "error", fmt.Sprintf("%s expired on %s", what, notAfter.UTC().Format("2006-01-02"))
-	case stage == "7d":
+	case "7d":
 		severity = "error"
 	}
 	entity, entityID := "partner", subjectID

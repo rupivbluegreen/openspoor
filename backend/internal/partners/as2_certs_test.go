@@ -43,8 +43,10 @@ func actionCount(t *testing.T, e *testkit.Env, action string) int {
 
 func alertCount(t *testing.T, e *testkit.Env, kind, status string) int {
 	t.Helper()
-	var l struct{ Items []struct{ Kind, Status string } }
-	e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?limit=500", nil), &l)
+	var l struct {
+		Items []struct{ Kind, Status string }
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?status=all", nil), &l)
 	n := 0
 	for _, a := range l.Items {
 		if a.Kind == kind && (status == "" || a.Status == status) {
@@ -201,7 +203,9 @@ func TestAS2RotationFlow(t *testing.T) {
 	if actionCount(t, e, "partner.as2.next.set") != 1 {
 		t.Fatal("next certificate not audited")
 	}
-	var audit struct{ Items []struct{ After map[string]any } }
+	var audit struct {
+		Items []struct{ After map[string]any }
+	}
 	e.Must(http.StatusOK, e.Do("GET", "/api/v1/audit?action=partner.as2.next.set", nil), &audit)
 	if b, _ := e.Do("GET", "/api/v1/audit?action=partner.as2.next.set", nil).Body, 0; strings.Contains(string(b), "BEGIN CERTIFICATE") {
 		t.Fatal("audit entry carries the certificate")
@@ -237,12 +241,14 @@ func TestAS2RotationFlow(t *testing.T) {
 
 	// Cancel, then set again for "now" (no switchAt): active immediately, promoted by the job.
 	e.Must(http.StatusNoContent, e.Do("DELETE", url, nil), nil)
-	e.Must(http.StatusOK, e.Do("GET", "/api/v1/partners/"+id+"/as2", nil), &prof)
-	if prof.Next != nil || actionCount(t, e, "partner.as2.next.cancel") != 1 {
-		t.Fatalf("cancel: %+v", prof)
+	var after partners.AS2Profile
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/partners/"+id+"/as2", nil), &after)
+	if after.Next != nil || actionCount(t, e, "partner.as2.next.cancel") != 1 {
+		t.Fatalf("cancel: %+v", after)
 	}
+	prof = partners.AS2Profile{}
 	e.Must(http.StatusOK, e.Do("PUT", url, map[string]any{"certPem": nextPEM}), &prof)
-	if prof.Next == nil || time.Since(prof.Next.SwitchAt) > time.Minute || !prof.SwitchDue(time.Now().Add(time.Second)) {
+	if prof.Next == nil || time.Since(prof.Next.SwitchAt) > time.Minute || prof.Next.SwitchAt.After(time.Now().Add(time.Second)) {
 		t.Fatalf("immediate switch: %+v", prof.Next)
 	}
 	problem(t, e.Do("PUT", url, map[string]any{"certPem": nextPEM2}), 409, "already due")
@@ -253,9 +259,10 @@ func TestAS2RotationFlow(t *testing.T) {
 	if err := module(e).Schedules()[1].Run(ctx); err != nil {
 		t.Fatal(err)
 	}
-	e.Must(http.StatusOK, e.Do("GET", "/api/v1/partners/"+id+"/as2", nil), &prof)
-	if prof.Fingerprint != nextFP || prof.Next != nil || prof.CertPEM != nextPEM {
-		t.Fatalf("promotion: %+v", prof)
+	var promoted partners.AS2Profile
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/partners/"+id+"/as2", nil), &promoted)
+	if promoted.Fingerprint != nextFP || promoted.Next != nil || promoted.CertPEM != nextPEM {
+		t.Fatalf("promotion: %+v", promoted)
 	}
 	if actionCount(t, e, "partner.as2.next.promote") != 1 {
 		t.Fatal("promotion not audited")
@@ -310,15 +317,14 @@ func TestAS2ExpiryAlerts(t *testing.T) {
 				Detail                        map[string]any
 			}
 		}
-		e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?limit=500", nil), &l)
+		e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?status=all", nil), &l)
 		if count() != i+1 {
 			t.Fatalf("stage %s: %d alerts", tc.stage, count())
 		}
 		got := false
 		for _, a := range l.Items {
 			if a.Kind == "dscsa.as2_cert_expiring" && a.Detail["stage"] == tc.stage {
-				got = a.Severity == tc.severity && a.Detail["fingerprint"] == fp && a.Detail["subjectId"] == id && strings.Contains(a.Title, "EXP-PEER") == false
-				got = got || (a.Severity == tc.severity && a.Detail["fingerprint"] == fp)
+				got = a.Severity == tc.severity && a.Detail["fingerprint"] == fp && a.Detail["subjectId"] == id && a.Title != ""
 			}
 		}
 		if !got {
@@ -330,8 +336,10 @@ func TestAS2ExpiryAlerts(t *testing.T) {
 	}
 
 	// A resolved alert is not raised again by the next run.
-	var l struct{ Items []struct{ ID, Kind, Status string } }
-	e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?limit=500", nil), &l)
+	var l struct {
+		Items []struct{ ID, Kind, Status string }
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?status=all", nil), &l)
 	for _, a := range l.Items {
 		if a.Kind == "dscsa.as2_cert_expiring" && a.Status == "open" {
 			e.Must(http.StatusOK, e.Do("POST", "/api/v1/alerts/"+a.ID+"/resolve", nil), nil)
@@ -356,8 +364,13 @@ func TestAS2ExpiryAlerts(t *testing.T) {
 	nextPEM, nextFP := newCert(t, "EXP-PEER", 20*24*time.Hour, time.Now())
 	e.Must(http.StatusOK, e.Do("PUT", "/api/v1/partners/"+id+"/as2/next", map[string]any{"certPem": nextPEM, "switchAt": time.Now().Add(24 * time.Hour)}), nil)
 	run()
-	var nl struct{ Items []struct{ Kind, Status string; Detail map[string]any } }
-	e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?limit=500", nil), &nl)
+	var nl struct {
+		Items []struct {
+			Kind, Status string
+			Detail       map[string]any
+		}
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?status=all", nil), &nl)
 	seen := false
 	for _, a := range nl.Items {
 		if a.Kind == "dscsa.as2_cert_expiring" && a.Detail["fingerprint"] == nextFP && a.Status == "open" && a.Detail["scope"] == partners.ScopePartnerNext {
@@ -369,8 +382,10 @@ func TestAS2ExpiryAlerts(t *testing.T) {
 	}
 	e.Must(http.StatusNoContent, e.Do("DELETE", "/api/v1/partners/"+id+"/as2/next", nil), nil)
 	for _, a := range func() []struct{ Kind, Status string } {
-		var x struct{ Items []struct{ Kind, Status string } }
-		e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?limit=500", nil), &x)
+		var x struct {
+			Items []struct{ Kind, Status string }
+		}
+		e.Must(http.StatusOK, e.Do("GET", "/api/v1/alerts?status=all", nil), &x)
 		return x.Items
 	}() {
 		if a.Kind == "dscsa.as2_cert_expiring" && a.Status == "open" {

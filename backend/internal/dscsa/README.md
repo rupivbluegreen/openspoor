@@ -17,7 +17,9 @@ investigations: tracing requests and suspect / illegitimate product investigatio
 | GET | `/shipments/{id}` | Get a shipment |
 | POST | `/shipments/{id}/tits` | Build the TI/TS document |
 | POST | `/shipments/{id}/send` | Send TI/TS to the partner |
-| GET, PUT | `/as2/station` | This node's AS2 identity (PUT: admin / integration; `generate` makes a self-signed RSA-2048 certificate; the key is sealed and never returned) |
+| GET, PUT | `/as2/station` | This node's AS2 identity (PUT: admin / integration; `generate` makes a self-signed RSA-2048 certificate; the key is sealed and never returned). The response carries subject, notBefore, notAfter, fingerprint and, during a rotation, `next` and `active` |
+| PUT, DELETE | `/as2/station/next` | Hold a next station certificate and key (`certPem` + `keyPem`, or `generate`) with `switchAt` (absent = now; past dates refused). Until then the current certificate signs and both decrypt. DELETE cancels (admin / integration) |
+| GET | `/as2/certificates` | Certificate overview: the node's and every partner's current and next certificate (subject, validity, days left, stage), options, warnings (expiring, expired, rotation pending, legacy) and a summary. Viewer reads |
 | POST | `/as2/receive` | AS2 receive endpoint: messages and asynchronous receipts (public; the sender is authenticated by its pinned certificate) |
 | POST | `/shipments/{id}/reconcile` | Reconcile inbound TI/TS with the ASN |
 | GET, POST | `/vrs/requests` | List / send VRS verification requests |
@@ -48,8 +50,13 @@ The pieces:
   with the tenant key). The AS2 identifier is unique across the node because an inbound message
   is routed by `AS2-To`.
 - **Partner profile** (`PUT /partners/{id}/as2`, in the partners module): the partner's
-  certificate (sealed), `sign`, `encrypt` (both default to true), `mdn` (`sync` or `async`) and
-  `mdnUrl`. The partner record also needs `endpoints.as2Id` and `endpoints.as2Url`.
+  certificate (sealed), `sign`, `encrypt` (both default to true), `mdn` (`sync` or `async`),
+  `mdnUrl` and the algorithm options: `signatureAlgorithm` (sha-256 default, sha-384, sha-512,
+  sha-1 only with `legacy`), `mdnSignatureAlgorithm`, `encryption` (aes-256-cbc default,
+  aes-128-cbc), `compress` (off) and `legacy`. Outbound messages use them; inbound messages must
+  be at least as strong (a legacy partner may use any digest, compression only when enabled).
+  The message-log row remembers the digest of the integrity check (`as2_message.mic_alg`) so an
+  asynchronous receipt is checked against it. The partner record also needs `endpoints.as2Id` and `endpoints.as2Url`.
 - **Send**: build, sign and encrypt (`pkg/as2`), record an `as2_message` row, POST, then verify the
   receipt: a signed MDN from the partner, for this Message-ID, with the message integrity check we
   computed and a `processed` disposition. Anything else fails the shipment (`send_failed`, alert).
@@ -66,10 +73,19 @@ The pieces:
   HTTP 400. An unknown sender is HTTP 403 and an unknown `AS2-To` is 404, with no receipt.
 - Async receipts are posted only to the receipt URL configured for the connection (`mdnUrl`, else
   the partner's AS2 URL); a message whose `Receipt-Delivery-Option` names another URL is refused.
-- Audit actions: `as2.send`, `as2.receive`, `as2.receive.duplicate`, `as2.receive.rejected`,
-  `as2.mdn.receive`, `as2.mdn.send`, `as2.station.set` (and `partner.as2.set` / `.delete`).
-  Alerts: `dscsa.send_failed`, `dscsa.as2_rejected` (one per sender and reason),
-  `dscsa.as2_mdn_failed`.
+- Certificate lifecycle: subject, notBefore, notAfter and fingerprint are stored with the node's
+  and each partner's certificate. A rotation holds a current and a next certificate: both verify
+  a partner's signatures and both decrypt for the node; signing (node) and encryption (partner)
+  switch to the next one at `switchAt`, and the schedule `dscsa.as2_station_certs` (and
+  `partners.as2_certs`, every 30 minutes) promotes it. The schedules also raise one alert
+  `dscsa.as2_cert_expiring` per certificate and stage (60, 30, 7 days, expired); a resolved alert
+  is not raised again, and replacing or cancelling a certificate closes its open alerts.
+- Audit actions: `as2.send` (digest, cipher, compression, legacy), `as2.receive`,
+  `as2.receive.duplicate`, `as2.receive.rejected`, `as2.mdn.receive`, `as2.mdn.send`,
+  `as2.station.set`, `as2.station.next.set` / `.cancel` / `.promote`, `as2.cert.expiry_alert`
+  (and `partner.as2.set` / `.delete` / `.options.set` / `.legacy.set` / `.next.set` / `.next.cancel` /
+  `.next.promote`). Alerts: `dscsa.send_failed`, `dscsa.as2_rejected` (one per sender and
+  reason), `dscsa.as2_mdn_failed`, `dscsa.as2_cert_expiring`, `dscsa.as2_legacy`.
 - A failed TI/TS of any transport can be re-sent with `POST /messages/{id}/retry` (link module):
   it runs the same outbound path again (`Module.Resend`), once at a time per shipment.
 
@@ -114,13 +130,15 @@ answer is assembled. Invalid transitions return 409.
   each tenant's retention period (never less than six years).
 - Schedule `dscsa.investigations_overdue` (hourly): raises one `dscsa.investigation_overdue`
   alert per open investigation past its due date (deduplicated while the alert is open).
+- Schedule `dscsa.as2_station_certs` (every 30 minutes): promotes the node's next AS2 certificate
+  once its switch date passed and raises certificate expiry alerts.
 
 ## Data
 
 `shipment`, `vrs_directory`, `vrs_request`, `retention_policy` (migration
 `00004_partners_dscsa.sql`); `investigation`, `investigation_event`, `investigation_policy`
 (migration `00013_investigations.sql`); `as2_station`, `as2_message` and `partner_as2`, plus
-`shipment.send_attempts` (migration `00023_as2.sql`). Outbound and inbound TI/TS are captured into
+`shipment.send_attempts` (migration `00023_as2.sql`); the certificate and option columns, `as2_cert_alert` and `as2_message.mic_alg` (migration `00029_as2_certs_options.sql`). Outbound and inbound TI/TS are captured into
 the EPCIS repository.
 
 ## Depends on

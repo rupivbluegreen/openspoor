@@ -210,6 +210,16 @@ func attributeEvents(serials []string, fetch func(epcs []string) ([]evRow, error
 			handled[f] = true
 		}
 		sort.SliceStable(rows, func(i, j int) bool { return rows[i].Time.Before(rows[j].Time) })
+		// Unpacking a parent without listing children ends every containment in it at that time.
+		for _, e := range rows {
+			if e.Type == lib.AggregationEvent && e.Action == lib.ActionDelete && e.Parent != "" && len(e.EPCs) <= 1 && inFrontier[e.Parent] {
+				for i := range contain[e.Parent] {
+					if c := &contain[e.Parent][i]; c.serial != e.Parent && !c.from.After(e.Time) && c.to.After(e.Time) {
+						c.to = e.Time
+					}
+				}
+			}
+		}
 		type edge struct{ child, parent string }
 		open := map[edge]time.Time{}
 		closed := map[edge][][2]time.Time{}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/openspoor/openspoor/internal/core/kernel"
 	"github.com/openspoor/openspoor/internal/testkit"
+	"github.com/openspoor/openspoor/internal/trace"
 	lib "github.com/openspoor/openspoor/pkg/epcis"
 	"github.com/openspoor/openspoor/pkg/gs1"
 )
@@ -311,4 +312,71 @@ func runSchedule(t *testing.T, e *testkit.Env, name string) {
 		}
 	}
 	t.Fatalf("no schedule %s", name)
+}
+
+// shipTo ships the packs to a destination (none when dest is empty).
+func shipTo(at time.Time, dest string, epcs ...string) lib.Event {
+	ev := obj(at.UTC(), "shipping", "in_transit", "", epcs...)
+	if dest != "" {
+		ev.DestinationList = []lib.Destination{{Type: "owning_party", Destination: dest}}
+	}
+	return ev
+}
+
+func TestSerialTreeStatsAndState(t *testing.T) {
+	e := testkit.New(t)
+	u := scenario(t, e)
+	viewer := userToken(t, e, "acme", "viewer@acme.test", "Viewer")
+	sscc := gs1.WithCheckDigit("09506000" + "00000001" + "")
+	sscc = gs1.WithCheckDigit(sscc[:17])
+	pallet, err := gs1.SSCCURN(sscc, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agg := lib.Event{Type: lib.AggregationEvent, Action: "ADD", BizStep: "packing", EventTime: time.Now().Add(-time.Hour).UTC(), EventTimeZoneOffset: "+00:00", ParentID: pallet, ChildEPCs: []string{u[3], u[5]}}
+	capture(t, e, agg)
+
+	var s struct {
+		Epc   string
+		State struct {
+			Status    string
+			Lot       string
+			ParentEpc string
+		}
+		Ancestors []struct{ Epc string }
+		History   []map[string]any
+	}
+	e.Must(http.StatusOK, e.Call(viewer, "GET", "/api/v1/trace/serials/"+u[3], nil), &s)
+	if s.State.Lot != "L1" || len(s.Ancestors) != 1 || len(s.History) < 2 || s.State.ParentEpc == "" {
+		t.Fatalf("serial: %+v", s)
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/trace/serials/x?id="+u[5], nil), &s)
+	e.Must(http.StatusNotFound, e.Do("GET", "/api/v1/trace/serials/urn:epc:id:sgtin:9506000.013435.NOPE", nil), nil)
+
+	var tree struct {
+		Epc      string
+		Children []struct{ Epc string }
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/trace/tree/x?id="+pallet, nil), &tree)
+	if len(tree.Children) != 2 {
+		t.Fatalf("tree: %+v", tree)
+	}
+	e.Must(http.StatusNotFound, e.Do("GET", "/api/v1/trace/tree/x?id=urn:epc:id:sscc:9506000.0999999999", nil), nil)
+
+	var st struct {
+		Events, Serials int
+		ByStatus        map[string]int
+	}
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/trace/stats", nil), &st)
+	if st.Events != 8 || st.Serials < 6 {
+		t.Fatalf("stats: %+v", st)
+	}
+	var list struct{ Items []struct{ Lot string } }
+	e.Must(http.StatusOK, e.Do("GET", "/api/v1/trace/state?gtin="+gtin+"&lot=L1&limit=3", nil), &list)
+	if len(list.Items) != 3 {
+		t.Fatalf("state: %+v", list)
+	}
+	if (&trace.Module{}).Name() != "trace" {
+		t.Fatal("name")
+	}
 }

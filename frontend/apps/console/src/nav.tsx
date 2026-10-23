@@ -59,6 +59,7 @@ export const NAV: NavGroup[] = [
       { path: '/link/federation', label: 'federation', icon: <DeploymentUnitOutlined />, page: p(() => import('./pages/link/Federation')) },
       { path: '/link/mapping', label: 'mappingStudio', icon: <SwapOutlined />, page: p(() => import('./pages/link/MappingStudio')) },
       { path: '/link/messages', label: 'messages', icon: <InboxOutlined />, page: p(() => import('./pages/link/Messages')) },
+      { path: '/link/as2-certificates', label: 'as2Certificates', icon: <SafetyCertificateOutlined />, page: p(() => import('./pages/link/As2Certificates')) },
     ],
   },
   {

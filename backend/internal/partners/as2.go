@@ -305,7 +305,7 @@ func (m *Module) putAS2(w http.ResponseWriter, r *http.Request) error {
 		if oldErr == nil {
 			base = old.options()
 		}
-		opts, err := in.as2OptionsInput.apply(base)
+		opts, err := in.apply(base)
 		if err != nil {
 			return err
 		}

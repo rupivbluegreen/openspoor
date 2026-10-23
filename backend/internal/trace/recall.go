@@ -133,8 +133,10 @@ func Forward(scope []scopeSerial, events map[string][]evRow, ownGLN map[string]b
 				if len(e.Dest) > 0 {
 					holder = lib.Canonical(e.Dest[0])
 				}
-			case cat == CatDecommissioning || cat == CatDestroying:
-				ended = cat
+			case cat == CatDecommissioning:
+				ended = "decommissioned"
+			case cat == CatDestroying:
+				ended = "destroyed"
 			case isDispensed(e):
 				ended = "dispensed"
 			}
