@@ -44,6 +44,9 @@ after each capture.
 `epcis_capture`, `epcis_event` (monthly partitions created on demand, plus a default partition),
 `epcis_named_query`, `epcis_subscription` (migration `00003_epcis.sql`).
 
+`trace` reads `epcis_event` for the mass balance, the recall trace-forward and the signed checkpoints
+(`openspoor verify-checkpoint`); this module's tables are not changed for them.
+
 ## Depends on
 
 `core/*` (including `core/objstore`), `masterdata`, `serialization`, `pkg/epcis`, `pkg/gs1`.

@@ -46,6 +46,8 @@ export const NAV: NavGroup[] = [
       { path: '/trace/lookup', label: 'serialLookup', icon: <SearchOutlined />, page: p(() => import('./pages/trace/SerialLookup')) },
       { path: '/trace/events', label: 'eventQuery', icon: <FileSearchOutlined />, page: p(() => import('./pages/trace/EventQuery')) },
       { path: '/trace/subscriptions', label: 'subscriptions', icon: <NotificationOutlined />, page: p(() => import('./pages/trace/Subscriptions')) },
+      { path: '/trace/mass-balance', label: 'massBalance', icon: <BarChartOutlined />, page: p(() => import('./pages/trace/MassBalance')) },
+      { path: '/trace/lot-recalls', label: 'lotRecalls', icon: <RollbackOutlined />, page: p(() => import('./pages/trace/LotRecalls')) },
     ],
   },
   {
@@ -89,6 +91,8 @@ export const NAV: NavGroup[] = [
       { path: '/comply/audit', label: 'audit', icon: <AuditOutlined />, page: p(() => import('./pages/comply/Audit')) },
       { path: '/comply/esignatures', label: 'esignatures', icon: <SafetyCertificateOutlined />, page: p(() => import('./pages/comply/ESignatures')) },
       { path: '/comply/consumer-info', label: 'consumerInfo', icon: <ProfileOutlined />, page: p(() => import('./pages/comply/ConsumerInfo')) },
+      { path: '/comply/resolver', label: 'resolverLinks', icon: <NodeIndexOutlined />, page: p(() => import('./pages/comply/ResolverLinks')) },
+      { path: '/comply/integrity', label: 'integrity', icon: <LockOutlined />, page: p(() => import('./pages/comply/Integrity')) },
     ],
   },
   {

@@ -12,6 +12,7 @@ import any domain module.
 | `auth` | Authenticates requests (local JWT, OIDC, scoped API keys), carries the `Principal`, role checks (`Require`, `RequireOperator`) |
 | `httpx` | JSON responses, typed HTTP errors, request decoding, handler adapter |
 | `audit` | Append-only, hash-chained audit entries and chain verification |
+| `checkpoint` | Signed tamper-evidence checkpoints (Ed25519 over the audit chain head and a Merkle root of EPCIS events): format, signing, Merkle tree, offline verification used by `openspoor verify-checkpoint` |
 | `jobs` | Durable PostgreSQL job queue with retries, exponential backoff, dedupe and run-at |
 | `bus` | In-process domain events, mirrored to a Kafka-compatible log when `OPENSPOOR_KAFKA_BROKERS` is set |
 | `secrets` | AES-256-GCM sealing under the installation master key; per-tenant data keys (`Keyring`) |
@@ -34,7 +35,7 @@ Nothing outside `core` (`auth` uses `httpx`; `kernel` ties the rest together).
 
 ## Spec gaps
 
-None marked `TODO(spec)`.
+`checkpoint`: an optional RFC 3161 timestamp token over the document hash (`TODO(spec)`).
 
 ## Tests
 
