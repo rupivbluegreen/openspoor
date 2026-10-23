@@ -451,6 +451,23 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - assistant
+    /api/v1/asyncapi.yaml:
+        get:
+            operationId: getAsyncapiyaml
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            security: []
+            tags:
+                - asyncapi.yaml
     /api/v1/audit:
         get:
             operationId: getAudit

@@ -12,7 +12,7 @@ import (
 )
 
 // publicPaths are served without authentication.
-var publicPaths = map[string]bool{"/api/v1/meta": true, "/api/v1/openapi.yaml": true, "/api/v1/auth/login": true, "/api/v1/saas/signup": true,
+var publicPaths = map[string]bool{"/api/v1/meta": true, "/api/v1/openapi.yaml": true, "/api/v1/asyncapi.yaml": true, "/api/v1/auth/login": true, "/api/v1/saas/signup": true,
 	"/api/v1/saas/branding": true, "/api/v1/saas/plans": true, "/api/v1/saas/tls-ask": true, "/api/v1/verify/scan": true, "/api/v1/vrs/verify": true,
 	"/api/v1/playground/validate": true, "/api/v1/playground/convert": true, "/api/v1/playground/visualize": true, "/api/v1/federation/inbox": true,
 	"/api/v1/learn": true, "/api/v1/learn/{slug}": true, "/api/v1/benchmarks/system": true, "/api/v1/marketplace": true}

@@ -32,7 +32,7 @@ import (
 // Version is set at build time with -ldflags.
 var Version = "dev"
 
-//go:embed openapi.yaml
+//go:embed openapi.yaml asyncapi.yaml
 var openapiFS embed.FS
 
 // App is the assembled application.
@@ -190,11 +190,13 @@ func (a *App) routes() http.Handler {
 			httpx.JSON(w, http.StatusOK, map[string]any{"name": "Open Spoor", "version": Version, "mode": a.Deps.Cfg.Mode, "modules": names,
 				"devAuth": a.Deps.Cfg.DevAuth, "oidc": a.Deps.Cfg.OIDCIssuer != ""})
 		})
-		r.Get("/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
-			b, _ := openapiFS.ReadFile("openapi.yaml")
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(b)
-		})
+		for _, spec := range []string{"openapi.yaml", "asyncapi.yaml"} {
+			r.Get("/"+spec, func(w http.ResponseWriter, _ *http.Request) {
+				b, _ := openapiFS.ReadFile(spec)
+				w.Header().Set("Content-Type", "application/yaml")
+				_, _ = w.Write(b)
+			})
+		}
 		for _, m := range a.Modules {
 			if p, ok := m.(kernel.PublicRoutes); ok {
 				p.Public(r)

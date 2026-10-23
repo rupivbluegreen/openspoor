@@ -61,7 +61,7 @@ One Go binary (`openspoor api | worker | all | migrate | bootstrap | seed | open
 - **Redpanda** (Kafka-compatible): the event bus is mirrored there when `OPENSPOOR_KAFKA_BROKERS` is set.
 - **Keycloak** or any OIDC provider for SSO; built-in password login and API keys otherwise.
 - **Frontend**: React 19, Ant Design 6 and pro-components, in English, Dutch and Arabic (RTL). Three apps (console, verify, operator) served by the binary from `OPENSPOOR_WEB_ROOT`.
-- **API**: REST under `/api/v1`, OpenAPI 3.1 generated from the router ([`backend/internal/app/openapi.yaml`](backend/internal/app/openapi.yaml)), with RFC 9457 problem responses.
+- **API**: REST under `/api/v1`, OpenAPI 3.1 generated from the router ([`backend/internal/app/openapi.yaml`](backend/internal/app/openapi.yaml)), with RFC 9457 problem responses. Events (the Redpanda topics and signed subscription webhooks) are described in AsyncAPI 3.0 ([`backend/internal/app/asyncapi.yaml`](backend/internal/app/asyncapi.yaml), served at `/api/v1/asyncapi.yaml`).
 
 Decisions are recorded in [`docs/adr/`](docs/adr).
 

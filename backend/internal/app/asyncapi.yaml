@@ -1,0 +1,130 @@
+asyncapi: 3.0.0
+info:
+  title: Open Spoor events
+  version: 1.0.0
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  description: |
+    Domain events Open Spoor publishes. Every event is delivered in-process to module subscribers and,
+    when `OPENSPOOR_KAFKA_BROKERS` is set, mirrored to a Kafka-compatible log (Redpanda) with acks=all.
+    Kafka topics are the event topic prefixed with `openspoor.`; the record key is `<tenantId>:<key>`.
+    EPCIS query subscriptions are delivered to the subscriber's HTTPS endpoint as signed webhooks.
+defaultContentType: application/json
+servers:
+  log:
+    host: redpanda:9092
+    protocol: kafka
+    description: Kafka-compatible log configured with OPENSPOOR_KAFKA_BROKERS.
+channels:
+  epcisAccepted:
+    address: openspoor.epcis.accepted
+    messages:
+      epcisAccepted:
+        $ref: '#/components/messages/epcisAccepted'
+  epcisCaptured:
+    address: openspoor.epcis.captured
+    messages:
+      epcisCaptured:
+        $ref: '#/components/messages/epcisCaptured'
+  poolLow:
+    address: openspoor.serialization.pool_low
+    messages:
+      poolLow:
+        $ref: '#/components/messages/poolLow'
+  subscriptionWebhook:
+    address: '{destination}'
+    description: The HTTPS endpoint given when the EPCIS query subscription was created.
+    parameters:
+      destination:
+        description: Subscriber endpoint URL.
+    messages:
+      queryResults:
+        $ref: '#/components/messages/queryResults'
+operations:
+  publishEpcisAccepted:
+    action: send
+    channel: { $ref: '#/channels/epcisAccepted' }
+    summary: An EPCIS document passed validation and its events were stored atomically.
+  publishEpcisCaptured:
+    action: send
+    channel: { $ref: '#/channels/epcisCaptured' }
+    summary: The events of a capture were projected into serial state and aggregation trees.
+  publishPoolLow:
+    action: send
+    channel: { $ref: '#/channels/poolLow' }
+    summary: A serial pool fell below its low-watermark percentage.
+  deliverSubscription:
+    action: send
+    channel: { $ref: '#/channels/subscriptionWebhook' }
+    summary: New events matching a subscribed EPCIS query, POSTed to the subscriber.
+components:
+  schemas:
+    envelope:
+      type: object
+      required: [topic, tenantId, data]
+      properties:
+        topic: { type: string, description: 'Event topic without the openspoor. prefix.' }
+        tenantId: { type: string, format: uuid }
+        key: { type: string }
+        data: { type: object }
+  messages:
+    epcisAccepted:
+      name: epcis.accepted
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/envelope'
+          - type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  captureId: { type: string, format: uuid }
+                  events: { type: integer, description: Number of events stored. }
+    epcisCaptured:
+      name: epcis.captured
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/envelope'
+          - type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  captureId: { type: string, format: uuid }
+                  serialsUpdated: { type: integer }
+    poolLow:
+      name: serialization.pool_low
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/envelope'
+          - type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  productId: { type: string, format: uuid }
+                  gtin: { type: string }
+                  market: { type: string }
+                  mode: { type: string, enum: [random, sequential] }
+                  issued: { type: integer }
+                  capacity: { type: integer }
+                  remaining: { type: integer }
+                  lowWatermarkPct: { type: integer }
+                  status: { type: string }
+    queryResults:
+      name: epcis.subscription
+      contentType: application/ld+json
+      headers:
+        type: object
+        properties:
+          X-OpenSpoor-Signature:
+            type: string
+            description: "sha256=<hex>: HMAC-SHA256 of the raw body keyed with the subscription secret."
+          X-OpenSpoor-Subscription:
+            type: string
+            format: uuid
+      payload:
+        type: object
+        description: An EPCIS 2.0 query document whose epcisBody.queryResults carries subscriptionID and the matching events.
