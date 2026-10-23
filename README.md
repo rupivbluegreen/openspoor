@@ -84,6 +84,7 @@ The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, h
 | `OPENSPOOR_BILLING`, `OPENSPOOR_LAGO_URL`, `OPENSPOOR_LAGO_API_KEY` | `none` | Usage metering |
 | `OPENSPOOR_UNLEASH_URL`, `OPENSPOOR_UNLEASH_TOKEN` | — | Feature flags (OpenFeature) |
 | `ANTHROPIC_API_KEY`, `OPENSPOOR_ASSISTANT_MODEL` | — | Model access for the assistant; without both it answers from the gathered data only |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OpenTelemetry traces over OTLP/HTTP (HTTP requests, SQL queries, background jobs); off when unset |
 | `OPENSPOOR_DEV_AUTH` | `false` | Development shortcuts; never in production |
 
 ## Quality and validation

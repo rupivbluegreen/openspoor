@@ -15,6 +15,7 @@ import (
 
 	"github.com/openspoor/openspoor/internal/app"
 	"github.com/openspoor/openspoor/internal/core/config"
+	"github.com/openspoor/openspoor/internal/core/telemetry"
 	"github.com/openspoor/openspoor/internal/platform"
 	"github.com/openspoor/openspoor/migrations"
 )
@@ -66,6 +67,11 @@ func main() {
 		v, _ := migrations.Status(ctx, migrateURL(cfg))
 		slog.Info("migrations applied", "version", v)
 	case "api", "worker", "all":
+		shutdown, err := telemetry.Setup(ctx, "openspoor", app.Version)
+		if err != nil {
+			fatal(err)
+		}
+		defer func() { _ = shutdown(context.WithoutCancel(ctx)) }()
 		if os.Getenv("OPENSPOOR_MIGRATE_ON_START") == "true" {
 			if err := migrations.Up(ctx, migrateURL(cfg)); err != nil {
 				fatal(err)

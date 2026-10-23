@@ -16,6 +16,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/openspoor/openspoor/internal/core/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Job is a unit of background work.
@@ -190,10 +194,17 @@ func (r *Runner) Drain(ctx context.Context) error {
 }
 
 func safeRun(ctx context.Context, h Handler, j Job) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "job "+j.Kind, trace.WithAttributes(
+		attribute.String("job.kind", j.Kind), attribute.Int("job.attempt", j.Attempts)))
 	defer func() {
 		if p := recover(); p != nil {
 			err = Permanent{fmt.Errorf("panic: %v", p)}
 		}
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
 	}()
 	if h == nil {
 		return Permanent{fmt.Errorf("no handler for %s", j.Kind)}

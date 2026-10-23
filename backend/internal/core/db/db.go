@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/exaring/otelpgx"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/openspoor/openspoor/internal/core/telemetry"
 )
 
 // DB is the shared connection pool.
@@ -32,6 +34,9 @@ func Open(ctx context.Context, url string) (*DB, error) {
 	}
 	if cfg.MaxConns < 16 {
 		cfg.MaxConns = 16
+	}
+	if telemetry.Enabled() {
+		cfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

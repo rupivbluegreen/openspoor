@@ -15,6 +15,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/openspoor/openspoor/internal/core/auth"
 	"github.com/openspoor/openspoor/internal/core/bus"
@@ -102,6 +104,7 @@ func metrics(next http.Handler) http.Handler {
 		if route == "" {
 			route = "unmatched"
 		}
+		trace.SpanFromContext(r.Context()).SetName(r.Method + " " + route)
 		httpRequests.WithLabelValues(r.Method, route, strconv.Itoa(ww.Status())).Inc()
 		httpDuration.WithLabelValues(r.Method, route).Observe(time.Since(start).Seconds())
 	})
@@ -158,7 +161,7 @@ func securityHeaders(next http.Handler) http.Handler {
 
 func (a *App) routes() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.Recoverer, securityHeaders, logRequests, metrics, a.cors)
+	r.Use(otelhttp.NewMiddleware("http"), middleware.RequestID, middleware.Recoverer, securityHeaders, logRequests, metrics, a.cors)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
