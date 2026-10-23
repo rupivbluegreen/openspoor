@@ -182,7 +182,7 @@ func (a *Authenticator) Authenticate(r *http.Request) (Principal, error) {
 // Verify validates a bearer token (local HS256 or OIDC RS256).
 func (a *Authenticator) Verify(tok string) (Principal, error) {
 	var c Claims
-	_, err := jwt.ParseWithClaims(tok, &c, func(t *jwt.Token) (any, error) {
+	t, err := jwt.ParseWithClaims(tok, &c, func(t *jwt.Token) (any, error) {
 		switch t.Method.(type) {
 		case *jwt.SigningMethodHMAC:
 			return a.secret, nil
@@ -195,6 +195,16 @@ func (a *Authenticator) Verify(tok string) (Principal, error) {
 	}, jwt.WithValidMethods([]string{"HS256", "RS256", "ES256"}))
 	if err != nil {
 		return Principal{}, err
+	}
+	// Tokens from the identity provider must come from the configured realm and be meant for
+	// this API: any other client in the same realm can obtain validly signed tokens too.
+	if _, local := t.Method.(*jwt.SigningMethodHMAC); !local {
+		if c.Issuer != strings.TrimSuffix(a.issuer, "/") {
+			return Principal{}, errors.New("token issuer is not the configured identity provider")
+		}
+		if a.audience != "" && !slices.Contains(c.Audience, a.audience) {
+			return Principal{}, errors.New("token audience does not include " + a.audience)
+		}
 	}
 	tid, err := uuid.Parse(c.Tenant)
 	if err != nil {
