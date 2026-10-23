@@ -83,6 +83,7 @@ The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, h
 | `OPENSPOOR_KAFKA_BROKERS` | — | Mirror the event bus to Redpanda |
 | `OPENSPOOR_BILLING`, `OPENSPOOR_LAGO_URL`, `OPENSPOOR_LAGO_API_KEY` | `none` | Usage metering |
 | `OPENSPOOR_UNLEASH_URL`, `OPENSPOOR_UNLEASH_TOKEN` | — | Feature flags (OpenFeature) |
+| `OPENSPOOR_LOCAL_LLM_URL`, `OPENSPOOR_LOCAL_LLM_MODEL` | — | Local open-weight model (any OpenAI-compatible chat endpoint, e.g. a vLLM or Ollama server) for air-gapped sites; takes precedence over the hosted model |
 | `ANTHROPIC_API_KEY`, `OPENSPOOR_ASSISTANT_MODEL` | — | Model access for the assistant; without both it answers from the gathered data only |
 | `OPENSPOOR_S3_ENDPOINT`, `OPENSPOOR_S3_BUCKET`, `OPENSPOOR_S3_ACCESS_KEY`, `OPENSPOOR_S3_SECRET_KEY` | — | Archive of old captures as gzipped EPCIS 2.0 files (SeaweedFS or any S3 service; the bucket must exist) |
 | `OPENSPOOR_ARCHIVE_AFTER_DAYS` | `90` | Age at which a capture is archived; events stay queryable in PostgreSQL |

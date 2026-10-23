@@ -37,6 +37,8 @@ type Config struct {
 	S3SecretKey       string
 	ArchiveAfterDays  int // captures older than this are archived to S3
 	SMTPURL           string
+	LocalLLMURL       string // OpenAI-compatible chat endpoint of a local model server (air-gapped hubs)
+	LocalLLMModel     string
 	MailFrom          string
 	BaseDomain        string
 	PublicURL         string
@@ -71,6 +73,8 @@ func Load() (Config, error) {
 		S3SecretKey:       env("OPENSPOOR_S3_SECRET_KEY", ""),
 		ArchiveAfterDays:  envInt("OPENSPOOR_ARCHIVE_AFTER_DAYS", 90),
 		SMTPURL:           env("OPENSPOOR_SMTP_URL", ""),
+		LocalLLMURL:       env("OPENSPOOR_LOCAL_LLM_URL", ""),
+		LocalLLMModel:     env("OPENSPOOR_LOCAL_LLM_MODEL", ""),
 		MailFrom:          env("OPENSPOOR_MAIL_FROM", ""),
 		BaseDomain:        env("OPENSPOOR_BASE_DOMAIN", "localhost"),
 		PublicURL:         env("OPENSPOOR_PUBLIC_URL", "http://localhost:8080"),

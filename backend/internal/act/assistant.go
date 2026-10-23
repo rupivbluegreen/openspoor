@@ -40,6 +40,11 @@ type LLM interface {
 // NewLLM returns the Claude-backed model when ANTHROPIC_API_KEY and OPENSPOOR_ASSISTANT_MODEL
 // are set, else nil (the assistant then answers from the gathered context without a model).
 func NewLLM(cfg config.Config) LLM {
+	// A local open-weight model (air-gapped hubs) takes precedence: no data leaves the site.
+	if cfg.LocalLLMURL != "" && cfg.LocalLLMModel != "" {
+		return &localLLM{url: strings.TrimSuffix(cfg.LocalLLMURL, "/") + "/v1/chat/completions", model: cfg.LocalLLMModel,
+			client: &http.Client{Timeout: 120 * time.Second}}
+	}
 	if cfg.AnthropicKey == "" || cfg.AnthropicModel == "" {
 		return nil
 	}
@@ -269,6 +274,14 @@ func (m *Module) chat(w http.ResponseWriter, r *http.Request) error {
 	}
 	if cites == nil {
 		cites = []Citation{}
+	}
+	// The answer is evidence too: which model produced what, from how many sources.
+	if err := m.Tx(r.Context(), func(tx pgx.Tx) error {
+		_, err := audit.Write(r.Context(), tx, audit.Record{Action: "assistant.answer", Entity: "assistant", EntityID: "chat",
+			After: map[string]any{"model": model, "reply": truncate(reply, 2000), "citations": len(cites)}})
+		return err
+	}); err != nil {
+		return err
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"reply": reply, "citations": cites, "model": model})
 	return nil
