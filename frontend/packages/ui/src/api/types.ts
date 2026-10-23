@@ -154,6 +154,72 @@ export interface Alert {
   resolvedAt?: string;
 }
 
+export type InvestigationKind = 'tracing_request' | 'suspect' | 'illegitimate';
+export type InvestigationStatus = 'open' | 'quarantined' | 'investigating' | 'cleared' | 'confirmed_illegitimate' | 'closed';
+
+export interface InvestigationFinding {
+  id: string;
+  kind: string;
+  summary: string;
+  detail?: Record<string, unknown>;
+  by: string;
+  at: string;
+}
+
+/** DSCSA tracing request or suspect / illegitimate product investigation. */
+export interface Investigation {
+  id: string;
+  kind: InvestigationKind;
+  status: InvestigationStatus;
+  title: string;
+  gtin: string;
+  serials: string[];
+  lots: string[];
+  epcs: string[];
+  notFound: string[];
+  shipmentId?: string;
+  requesterType: '' | 'partner' | 'authority';
+  requesterPartnerId?: string;
+  requesterName: string;
+  requestRef: string;
+  sourceAlertId?: string;
+  dueAt?: string;
+  overdue: boolean;
+  held: boolean;
+  findings: InvestigationFinding[];
+  decision: string;
+  answeredAt?: string;
+  signatureId?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  closedAt?: string;
+}
+
+export interface InvestigationEvent {
+  id: string;
+  kind: string;
+  fromStatus: string;
+  toStatus: string;
+  actor: string;
+  note: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface InvestigationDetail {
+  investigation: Investigation;
+  timeline: InvestigationEvent[];
+  allowedTransitions: InvestigationStatus[];
+}
+
+export interface InvestigationPolicy {
+  kind: InvestigationKind;
+  dueHours: number;
+  basis: string;
+  isDefault: boolean;
+}
+
 export interface Product {
   id: string;
   gtin: string;
@@ -324,8 +390,23 @@ export interface ConnectorDef {
   title?: string;
   description?: string;
   country?: string;
+  market?: string;
+  spec?: string;
+  triggers?: string[];
+  /** Configuration fields published by the connector catalogue (`GET /connectors`). */
+  config?: ConnectorConfigField[];
+  extra?: { category?: string; inbound?: boolean; [k: string]: unknown };
   configSchema?: JsonSchema;
   schema?: JsonSchema;
+}
+
+export interface ConnectorConfigField {
+  key: string;
+  label: string;
+  secret?: boolean;
+  required?: boolean;
+  default?: string;
+  help?: string;
 }
 
 export interface ConnectorInstance {
@@ -333,8 +414,25 @@ export interface ConnectorInstance {
   connector: string;
   name: string;
   config?: Record<string, unknown>;
+  secretsSet?: Record<string, boolean>;
   enabled?: boolean;
   createdAt?: string;
+}
+
+/** A file exchanged by an SFTP connector instance. */
+export interface SftpFile {
+  id: string;
+  instanceId: string;
+  direction: 'inbound' | 'outbound';
+  name: string;
+  size: number;
+  format: string;
+  status: 'processed' | 'failed';
+  captureId?: string;
+  documentId?: string;
+  movedTo: string;
+  error?: string;
+  createdAt: string;
 }
 
 export interface Report {
@@ -470,6 +568,86 @@ export interface FoodLot {
   siteId?: string;
   harvestDate?: string;
   plotIds?: string[];
+}
+
+export type FoodCertStatus = 'valid' | 'expiring' | 'expired' | 'not_yet_valid';
+
+/** A certificate (halal, origin, organic, …) from the supplier compliance hub, as food sees it. */
+export interface FoodCertificate {
+  id: string;
+  kind: string;
+  number: string;
+  issuer: string;
+  scope: string;
+  validFrom?: string;
+  validTo?: string;
+  documentId?: string;
+  partnerId?: string;
+  supplier: string;
+  supplierGln?: string;
+}
+
+export interface FoodCertLink {
+  id: string;
+  certificateId: string;
+  targetType: 'lot' | 'product' | 'site';
+  target: string;
+  createdAt: string;
+}
+
+/** A certificate covering a lot: directly, via its product, a site, or held for its supplier. */
+export interface FoodCertCoverage extends FoodCertificate {
+  status: FoodCertStatus;
+  via: 'lot' | 'product' | 'site' | 'supplier';
+  viaRef: string;
+  linkId?: string;
+}
+
+/** One supplier (one_up) or customer (one_down) link of a lot (Regulation (EC) No 178/2002 Art. 18). */
+export interface OneUpRow {
+  lot: string;
+  direction: 'one_up' | 'one_down';
+  relation: 'received_from' | 'transformation_input' | 'shipped_to' | 'transformation_output';
+  viaLot?: string;
+  counterpartyId: string;
+  counterpartyName: string;
+  eventId: string;
+  eventType: string;
+  eventTime: string;
+  lotCode: string;
+  productDescription: string;
+  quantity: number;
+  uom: string;
+  refDocType: string;
+  refDocNumber: string;
+  certificates: string[];
+}
+
+export interface OneUpReport {
+  generatedAt: string;
+  operator: string;
+  scope: { tlcs?: string[]; productId?: string; gtin?: string; from?: string; to?: string };
+  notes: string[];
+  lots: { tlc: string; description: string; gtin?: string; status: string; certificates: FoodCertCoverage[] }[];
+  rows: OneUpRow[];
+  truncated: boolean;
+}
+
+/** A one-up/one-down report assembled for a competent authority, stored as generated. */
+export interface AuthorityRequest {
+  id: string;
+  authority: string;
+  reference: string;
+  reason: string;
+  tlcs: string[];
+  periodFrom?: string;
+  periodTo?: string;
+  rows: number;
+  sha256: string;
+  createdBy: string;
+  exports: { at: string; actor: string; format: string }[];
+  createdAt: string;
+  report?: OneUpReport;
 }
 
 export interface Cte {

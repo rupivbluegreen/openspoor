@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import { Tag } from 'antd';
+import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ProFormDatePicker, ProFormDigit, ProFormSelect, ProFormText, type FoodLot } from '@openspoor/ui/pro';
 import { CrudPage } from '../../components/CrudPage';
@@ -17,7 +18,7 @@ export default function Lots() {
       path="/food/lots"
       rowKey="tlc"
       columns={[
-        { title: 'TLC', dataIndex: 'tlc', copyable: true },
+        { title: 'TLC', dataIndex: 'tlc', copyable: true, render: (_d, r) => <Link to={`/food/lots/${encodeURIComponent(r.tlc)}`}>{r.tlc}</Link> },
         { title: t('field.product'), dataIndex: 'productId', render: (_d, r) => products.find((p) => p.value === r.productId)?.label ?? r.productId ?? '–' },
         { title: t('field.quantity'), render: (_d, r) => `${r.quantity ?? '–'} ${r.uom ?? ''}` },
         { title: t('field.site'), dataIndex: 'siteId', render: (_d, r) => sites.find((s) => s.value === r.siteId)?.label ?? r.siteId ?? '–' },

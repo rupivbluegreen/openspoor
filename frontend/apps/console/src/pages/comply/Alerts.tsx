@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Popconfirm, Segmented, Select, Space } from 'antd';
-import { CheckOutlined, RedoOutlined } from '@ant-design/icons';
+import { CheckOutlined, RedoOutlined, SecurityScanOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { api, CodeView, PageContainer, prettyJson, QueryTable, StatusTag, type Alert } from '@openspoor/ui/pro';
 import { useAction } from '../../lib/hooks';
@@ -14,6 +15,12 @@ export default function Alerts() {
   const [kind, setKind] = useState<string | undefined>();
   const resolve = useAction((id: string) => api.post(`/alerts/${id}/resolve`), { invalidate: [['/alerts']] });
   const resubmit = useAction((reportId: string) => api.post(`/reports/${reportId}/resubmit`), { invalidate: [['/alerts'], ['/reports']] });
+  const navigate = useNavigate();
+  const investigate = useAction((alertId: string) => api.post<{ id: string }>('/investigations/from-alert', { alertId }), {
+    invalidate: [['/alerts'], ['/investigations']],
+    onSuccess: () => navigate('/comply/investigations'),
+  });
+  const investigable = (r: Row) => r.status === 'open' && (r.kind.startsWith('verify.') || r.kind === 'dscsa.vrs_not_verified');
 
   return (
     <PageContainer
@@ -50,6 +57,13 @@ export default function Alerts() {
             title: t('common.actions'),
             valueType: 'option',
             render: (_d, r) => [
+              investigable(r) ? (
+                <Popconfirm key="investigate" title={`${t('nav.investigations')}?`} description={t('common.audited')} onConfirm={() => investigate.mutateAsync(r.id)}>
+                  <a>
+                    <SecurityScanOutlined /> {t('nav.investigations')}
+                  </a>
+                </Popconfirm>
+              ) : null,
               r.detail?.reportId && r.status === 'open' ? (
                 <a key="resubmit" onClick={() => resubmit.mutate(String(r.detail!.reportId))}>
                   <RedoOutlined /> {t('action.resubmit')}

@@ -4,7 +4,7 @@ import {
   CheckSquareOutlined, ClusterOutlined, CloudDownloadOutlined, CommentOutlined, ContainerOutlined, DashboardOutlined,
   DatabaseOutlined, DeploymentUnitOutlined, EnvironmentOutlined, ExperimentOutlined, FileDoneOutlined, FileProtectOutlined,
   FileSearchOutlined, FileTextOutlined, FormOutlined, GlobalOutlined, IdcardOutlined, InboxOutlined, KeyOutlined,
-  LineChartOutlined, NodeIndexOutlined, NotificationOutlined, RadarChartOutlined,
+  LineChartOutlined, SecurityScanOutlined, NodeIndexOutlined, NotificationOutlined, RadarChartOutlined,
   RobotOutlined, RollbackOutlined, SafetyCertificateOutlined, SafetyOutlined, SearchOutlined,
   SettingOutlined, ShopOutlined, SolutionOutlined, TagsOutlined, TeamOutlined, ThunderboltOutlined,
   TruckOutlined, UserOutlined, AimOutlined, ControlOutlined, SwapOutlined,
@@ -75,6 +75,7 @@ export const NAV: NavGroup[] = [
     icon: <SafetyOutlined />,
     items: [
       { path: '/comply/alerts', label: 'alerts', icon: <AlertOutlined />, page: p(() => import('./pages/comply/Alerts')) },
+      { path: '/comply/investigations', label: 'investigations', icon: <SecurityScanOutlined />, page: p(() => import('./pages/comply/Investigations')) },
       { path: '/comply/reports', label: 'reports', icon: <FileDoneOutlined />, page: p(() => import('./pages/comply/Reports')) },
       { path: '/comply/connectors', label: 'connectors', icon: <ApiOutlined />, page: p(() => import('./pages/comply/Connectors')) },
       { path: '/comply/vrs', label: 'vrs', icon: <CheckSquareOutlined />, page: p(() => import('./pages/comply/Vrs')) },
@@ -89,11 +90,15 @@ export const NAV: NavGroup[] = [
     icon: <ExperimentOutlined />,
     foodOnly: true,
     items: [
-      { path: '/food/lots', label: 'lots', icon: <TagsOutlined />, page: p(() => import('./pages/food/Lots')) },
+      {
+        path: '/food/lots', label: 'lots', icon: <TagsOutlined />, page: p(() => import('./pages/food/Lots')),
+        children: [{ path: '/food/lots/:tlc', page: p(() => import('./pages/food/LotDetail')) }],
+      },
       { path: '/food/ctes', label: 'ctes', icon: <NodeIndexOutlined />, page: p(() => import('./pages/food/Ctes')) },
       { path: '/food/transformations', label: 'transformations', icon: <SwapOutlined />, page: p(() => import('./pages/food/Transformations')) },
       { path: '/food/plots', label: 'plots', icon: <EnvironmentOutlined />, page: p(() => import('./pages/food/Plots')) },
       { path: '/food/fsma', label: 'fsmaExport', icon: <CloudDownloadOutlined />, page: p(() => import('./pages/food/Fsma')) },
+      { path: '/food/one-up-one-down', label: 'oneUpOneDown', icon: <ApartmentOutlined />, page: p(() => import('./pages/food/OneUpOneDown')) },
       { path: '/food/recalls', label: 'recalls', icon: <RollbackOutlined />, page: p(() => import('./pages/food/Recalls')) },
       { path: '/food/eudr', label: 'eudr', icon: <GlobalOutlined />, page: p(() => import('./pages/food/Eudr')) },
       { path: '/food/cold-chain', label: 'coldChain', icon: <FieldTimeOutlined />, page: p(() => import('./pages/food/ColdChain')) },
