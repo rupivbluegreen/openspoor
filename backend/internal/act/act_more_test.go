@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -46,11 +44,8 @@ func login(t *testing.T, e *testkit.Env, email string, roles ...string) string {
 // superExec runs SQL as the database superuser (bypassing RLS) to set up fixtures other modules own.
 func superExec(t *testing.T, e *testkit.Env, sql string, args ...any) {
 	t.Helper()
-	u, _ := url.Parse(os.Getenv("OPENSPOOR_TEST_ADMIN_URL"))
-	app, _ := url.Parse(e.DBURL)
-	u.Path = app.Path
 	ctx := context.Background()
-	c, err := pgx.Connect(ctx, u.String())
+	c, err := pgx.Connect(ctx, e.SuperURL)
 	if err != nil {
 		t.Fatal(err)
 	}

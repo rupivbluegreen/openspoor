@@ -35,8 +35,11 @@ type Env struct {
 	App    *app.App
 	Server *httptest.Server
 	DBURL  string
-	Token  string // admin token for the default tenant "acme"
-	Tenant platform.Tenant
+	// SuperURL connects as the database superuser to this test's database (bypasses RLS), for
+	// fixtures that other modules own. It works with any source of the test database.
+	SuperURL string
+	Token    string // admin token for the default tenant "acme"
+	Tenant   platform.Tenant
 }
 
 // New creates a fresh database, migrates it, starts the API and logs in as admin of tenant "acme".
@@ -85,7 +88,9 @@ func New(t testing.TB, opts ...func(*config.Config)) *Env {
 		t.Fatal(err)
 	}
 	srv := httptest.NewServer(a.Router)
-	e := &Env{T: t, App: a, Server: srv, DBURL: dbURL}
+	su, _ := url.Parse(admin)
+	su.Path = "/" + name
+	e := &Env{T: t, App: a, Server: srv, DBURL: dbURL, SuperURL: su.String()}
 	t.Cleanup(func() {
 		srv.Close()
 		a.Close()
