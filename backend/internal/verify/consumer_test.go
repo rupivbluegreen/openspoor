@@ -97,7 +97,16 @@ func TestConsumerPage(t *testing.T) {
 	// Recall notices: consent and a valid address are required.
 	e.Must(http.StatusBadRequest, e.Call("", "POST", "/api/v1/verify/recall-alerts", map[string]any{"code": link, "email": "pat@example.com"}), nil)
 	e.Must(http.StatusBadRequest, e.Call("", "POST", "/api/v1/verify/recall-alerts", map[string]any{"code": link, "email": "Pat <pat@example.com>", "consent": true}), nil)
-	e.Must(http.StatusAccepted, e.Call("", "POST", "/api/v1/verify/recall-alerts", map[string]any{"code": link, "email": "pat@example.com", "consent": true}), nil)
+	var sub struct{ Until string }
+	e.Must(http.StatusAccepted, e.Call("", "POST", "/api/v1/verify/recall-alerts", map[string]any{"code": link, "email": "pat@example.com", "consent": true}), &sub)
+	// Kept no longer than the pack's expiry (what the consent text says), and at most two years.
+	want := time.Date(2031, 6, 30, 0, 0, 0, 0, time.UTC)
+	if limit := time.Now().AddDate(2, 0, 0); limit.Before(want) {
+		want = limit
+	}
+	if sub.Until != want.Format(time.DateOnly) {
+		t.Fatalf("subscription kept until %s, want %s", sub.Until, want.Format(time.DateOnly))
+	}
 	e.Must(http.StatusAccepted, e.Call("", "POST", "/api/v1/verify/recall-alerts", map[string]any{"code": link, "email": "sam@example.com", "consent": true}), nil)
 
 	// Nothing is sent before a recall.

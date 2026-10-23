@@ -523,12 +523,71 @@ export interface OperatorTenant extends Tenant {
   quotas?: Record<string, number>;
 }
 
+export interface ConsumerCertificate {
+  name: string;
+  issuer?: string;
+  url?: string;
+}
+
+/** What the brand owner publishes for people who scan a pack (per GTIN and language). */
+export interface ConsumerInfo {
+  gtin: string;
+  lang: string;
+  leafletUrl: string;
+  leafletText: string;
+  allergens: string[];
+  origin: string;
+  certificates: ConsumerCertificate[];
+  updatedAt: string;
+}
+
+export type ConsumerInfoInput = Omit<ConsumerInfo, 'gtin' | 'lang' | 'updatedAt'>;
+
 export interface VerifyScanResult {
   verified: boolean;
   status: string;
   product?: { name?: string; gtin?: string; [k: string]: unknown };
   pack?: { gtin?: string; serial?: string; lot?: string; expiry?: string; [k: string]: unknown };
   message?: string;
+  checkedAt?: string;
+  /** Consumer information in the reader's language, when published. */
+  info?: ConsumerInfo;
+  /** Expiry from the manufacturer's record (YYYY-MM-DD). */
+  expiryDate?: string;
+  /** Whether the reader may opt in to a recall notice for this pack's batch. */
+  recallAlerts?: boolean;
+}
+
+export const REPORT_REASONS = ['packaging', 'seal', 'effect', 'price', 'seller', 'other'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+export interface VerifyReportInput {
+  code: string;
+  reason: ReportReason;
+  details?: string;
+  country?: string;
+}
+
+export interface RecallAlertResult {
+  subscribed: boolean;
+  until: string;
+}
+
+/** Anonymous scan counts per GTIN and outcome (scan statuses plus "reported"). */
+export interface VerifyStats {
+  days: number;
+  items: { gtin: string; outcome: string; count: number }[];
+}
+
+export interface ConsumerReport {
+  id: string;
+  gtin: string;
+  serial: string;
+  lot: string;
+  reason: ReportReason | string;
+  details: string;
+  country: string;
+  createdAt: string;
 }
 
 export interface PlaygroundValidate {

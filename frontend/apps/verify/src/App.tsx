@@ -7,6 +7,7 @@ import { LanguageSwitch, Logo, ThemeToggle } from '@openspoor/ui';
 
 const Scan = lazy(() => import('./Scan'));
 const Playground = lazy(() => import('./Playground'));
+const Unsubscribe = lazy(() => import('./Unsubscribe'));
 
 function Frame() {
   const { t } = useTranslation();
@@ -54,6 +55,7 @@ const router = createBrowserRouter([
     children: [
       { path: '/', Component: Scan },
       { path: '/playground', Component: Playground },
+      { path: '/unsubscribe', Component: Unsubscribe },
       { path: '*', Component: Scan },
     ],
   },

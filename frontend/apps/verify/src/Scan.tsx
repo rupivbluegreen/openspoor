@@ -5,6 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError, type VerifyScanResult } from '@openspoor/ui';
 import { cameraAvailable, createDetector } from './barcode';
+import { ExpiryReminder, ProductInfo, RecallAlerts, ReportSuspect } from './Consumer';
 
 type Kind = 'verified' | 'suspect' | 'notFound' | 'recalled' | 'expired' | 'unknown';
 
@@ -87,12 +88,12 @@ function Camera({ onCode, onStop }: { onCode: (c: string) => void; onStop: () =>
 }
 
 export default function Scan() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [code, setCode] = useState('');
   const [scanning, setScanning] = useState(false);
   const verify = useMutation({ mutationFn: async (c: string) => {
       try {
-        return await api.post<VerifyScanResult>('/verify/scan', { code: c }, { anonymous: true });
+        return await api.post<VerifyScanResult>('/verify/scan', { code: c, lang: i18n.language.slice(0, 2) }, { anonymous: true });
       } catch (e) {
         if (e instanceof ApiError && e.status === 404) return { verified: false, status: 'not_found', message: e.title } satisfies VerifyScanResult;
         throw e;
@@ -116,6 +117,8 @@ export default function Scan() {
   const kind = r ? classify(r) : null;
   const look = kind ? LOOK[kind] : null;
   const pack = { ...(r?.product ?? {}), ...(r?.pack ?? {}) } as Record<string, unknown>;
+  const productName = String(r?.product?.name ?? pack.gtin ?? '');
+  const lot = typeof pack.lot === 'string' ? pack.lot : '';
 
   return (
     <Flex vertical gap={16} style={{ maxWidth: 560, margin: '0 auto' }}>
@@ -125,6 +128,7 @@ export default function Scan() {
       </div>
 
       {r && look && kind ? (
+        <>
         <Card styles={{ body: { padding: 8 } }} style={{ borderColor: look.color, borderWidth: 2 }}>
           <Result
             status={look.status}
@@ -143,10 +147,15 @@ export default function Scan() {
               { key: 'gtin', label: 'GTIN', children: <span dir="ltr">{String(pack.gtin ?? '–')}</span> },
               { key: 'serial', label: t('field.serial'), children: <span dir="ltr">{String(pack.serial ?? '–')}</span> },
               { key: 'lot', label: t('field.lot'), children: String(pack.lot ?? '–') },
-              { key: 'expiry', label: t('field.expiry'), children: String(pack.expiry ?? '–') },
+              { key: 'expiry', label: t('field.expiry'), children: String(r.expiryDate ?? pack.expiry ?? '–') },
             ]}
           />
         </Card>
+        {r.info && <ProductInfo info={r.info} />}
+        {r.expiryDate && <ExpiryReminder expiryDate={r.expiryDate} product={productName} lot={lot || undefined} />}
+        {r.recallAlerts && lot && <RecallAlerts key={code} code={code} lot={lot} />}
+        {r.product && <ReportSuspect key={code} code={code} />}
+        </>
       ) : (
         <>
           <Card>

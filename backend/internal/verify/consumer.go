@@ -176,9 +176,10 @@ func (m *Module) subscribe(w http.ResponseWriter, r *http.Request) error {
 	if !res.RecallAlerts {
 		return httpx.BadRequest("recall notices are available for verified packs with a known batch")
 	}
+	// Kept at the latest until the pack expires (what the reader consents to), and never beyond two years.
 	expires := time.Now().AddDate(2, 0, 0)
-	if d, err := time.Parse(time.DateOnly, res.ExpiryDate); err == nil && d.AddDate(0, 3, 0).Before(expires) {
-		expires = d.AddDate(0, 3, 0)
+	if d, err := time.Parse(time.DateOnly, res.ExpiryDate); err == nil && d.Before(expires) {
+		expires = d
 	}
 	err = m.DB.Tx(r.Context(), tenant, func(tx pgx.Tx) error {
 		_, err := tx.Exec(r.Context(), `insert into recall_subscription (id, tenant_id, gtin, lot, email, token, lang, expires_at)

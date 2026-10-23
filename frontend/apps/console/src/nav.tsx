@@ -8,7 +8,7 @@ import {
   RobotOutlined, RollbackOutlined, SafetyCertificateOutlined, SafetyOutlined, SearchOutlined,
   SettingOutlined, ShopOutlined, SolutionOutlined, TagsOutlined, TeamOutlined, ThunderboltOutlined,
   TruckOutlined, UserOutlined, AimOutlined, ControlOutlined, SwapOutlined,
-  AppstoreAddOutlined, AppstoreOutlined, BarChartOutlined, CodeOutlined, FieldTimeOutlined, MedicineBoxOutlined, ReadOutlined,
+  AppstoreAddOutlined, AppstoreOutlined, BarChartOutlined, ProfileOutlined, CodeOutlined, FieldTimeOutlined, MedicineBoxOutlined, ReadOutlined,
 } from '@ant-design/icons';
 
 type Page = LazyExoticComponent<ComponentType>;
@@ -81,6 +81,7 @@ export const NAV: NavGroup[] = [
       { path: '/comply/rulepacks', label: 'rulePacks', icon: <ControlOutlined />, page: p(() => import('./pages/comply/RulePacks')) },
       { path: '/comply/audit', label: 'audit', icon: <AuditOutlined />, page: p(() => import('./pages/comply/Audit')) },
       { path: '/comply/esignatures', label: 'esignatures', icon: <SafetyCertificateOutlined />, page: p(() => import('./pages/comply/ESignatures')) },
+      { path: '/comply/consumer-info', label: 'consumerInfo', icon: <ProfileOutlined />, page: p(() => import('./pages/comply/ConsumerInfo')) },
     ],
   },
   {
