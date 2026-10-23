@@ -369,3 +369,12 @@ func TestMarketplaceOptionalAuthAndCreatedAt(t *testing.T) {
 		t.Fatal("installs are per tenant")
 	}
 }
+
+func TestInstallAppWithoutRoles(t *testing.T) {
+	e := testkit.New(t)
+	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/apps", map[string]any{"id": "no-roles", "name": "Reader", "kind": "app", "publisher": "Acme", "version": "1"}), nil)
+	var inst struct{ APIKey string }
+	e.Must(http.StatusCreated, e.Do("POST", "/api/v1/apps/no-roles/install", nil), &inst)
+	// The key exists but carries no role: it cannot read the tenant's data.
+	e.Must(http.StatusForbidden, e.Call(inst.APIKey, "GET", "/api/v1/products", nil), nil)
+}

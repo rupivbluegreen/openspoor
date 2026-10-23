@@ -258,11 +258,15 @@ func (m *Module) install(w http.ResponseWriter, r *http.Request) error {
 		return httpx.NotFound("unknown app")
 	}
 	p := auth.MustFrom(r.Context())
+	roles := mf.Roles
+	if roles == nil { // an app that declares no roles gets a key that can do nothing; the column is not null
+		roles = []string{}
+	}
 	secret := "osk_" + ids.Secret(32)
 	keyID := ids.New()
 	err = m.Tx(r.Context(), func(tx pgx.Tx) error {
 		if _, err := tx.Exec(r.Context(), `insert into api_key (id, tenant_id, name, prefix, hash, roles, created_by) values ($1, app_tenant(), $2, $3, $4, $5, $6)`,
-			keyID, "app:"+mf.ID, secret[:10], auth.HashKey(secret), mf.Roles, p.Actor()); err != nil {
+			keyID, "app:"+mf.ID, secret[:10], auth.HashKey(secret), roles, p.Actor()); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(r.Context(), `insert into app_install (tenant_id, app_id, api_key_id, installed_by) values (app_tenant(), $1, $2, $3)`, mf.ID, keyID, p.Actor()); err != nil {
