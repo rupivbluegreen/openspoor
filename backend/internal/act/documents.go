@@ -130,6 +130,9 @@ func (m *Module) uploadDocument(w http.ResponseWriter, r *http.Request) error {
 		res.Truncated = true
 		res.Warnings = append(res.Warnings, "only the first passages are indexed")
 	}
+	if res.Warnings == nil {
+		res.Warnings = []string{}
+	}
 	sum := sha256.Sum256(data)
 	hash := hex.EncodeToString(sum[:])
 	id := ids.New()

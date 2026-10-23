@@ -801,6 +801,7 @@ func TestRecordedEventsUseTheShortBizStepForm(t *testing.T) {
 		EPCList: []string{"urn:epc:id:sscc:9506000.0000000017"}}
 	b, _ := lib.WriteJSON(lib.NewDocument([]lib.Event{ev}))
 	e.Must(http.StatusAccepted, e.Do("POST", "/api/v1/epcis/capture", b), nil)
+	e.Drain() // the capture is finished by a background job
 	var step string
 	if err := conn.QueryRow(ctx, `select biz_step from epcis_event where tenant_id = $1`, e.Tenant.ID.String()).Scan(&step); err != nil {
 		t.Fatal(err)

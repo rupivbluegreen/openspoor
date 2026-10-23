@@ -96,7 +96,7 @@ func TestLibraryDefinitionsAreConsistent(t *testing.T) {
 			t.Errorf("category %s is empty", c.Key)
 		}
 	}
-	if len(Library) < 30 {
+	if len(Library) < 60 {
 		t.Errorf("library has %d KPIs", len(Library))
 	}
 	if _, ok := KPIByID("otif_pct"); !ok {

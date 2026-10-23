@@ -119,7 +119,7 @@ jobs:
           CGO_ENABLED: "0"
         run: cyclonedx-gomod app -json -output ../sbom-backend.cdx.json -main cmd/openspoor .
       - name: Frontend SBOM (from frontend/pnpm-lock.yaml)
-        run: syft scan dir:frontend --exclude './**/node_modules/**' -o cyclonedx-json=sbom-frontend.cdx.json
+        run: syft scan dir:frontend --source-name openspoor-frontend --exclude './**/node_modules/**' -o cyclonedx-json=sbom-frontend.cdx.json
       - name: Check that both SBOMs list components
         run: |
           for f in sbom-backend.cdx.json sbom-frontend.cdx.json; do

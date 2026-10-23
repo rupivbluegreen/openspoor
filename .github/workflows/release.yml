@@ -86,7 +86,7 @@ jobs:
           go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.12.0
           go install github.com/anchore/syft/cmd/syft@v1.52.0
           (cd backend && CGO_ENABLED=0 cyclonedx-gomod app -json -output ../sbom-backend.cdx.json -main cmd/openspoor .)
-          syft scan dir:frontend --exclude './**/node_modules/**' -o cyclonedx-json=sbom-frontend.cdx.json
+          syft scan dir:frontend --source-name openspoor-frontend --exclude './**/node_modules/**' -o cyclonedx-json=sbom-frontend.cdx.json
 
       - name: Attach the backend SBOM to the image as a signed attestation
         run: cosign attest --yes --type cyclonedx --predicate sbom-backend.cdx.json "$IMAGE_REF"

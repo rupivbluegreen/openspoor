@@ -155,7 +155,8 @@ func TestEvalScoresAndTheAutonomyLadder(t *testing.T) {
 		t.Fatal("the refusal must be audited")
 	}
 
-	// A fresh run restores it.
+	// A fresh run restores it (the injected row was dated in the future; remove it).
+	superExec(t, e, `delete from agent_eval_score where dataset = 'x'`)
 	recordEvals(t, e)
 	e.Must(http.StatusOK, e.Call(qa, "PUT", "/api/v1/agents/tools/case.open", map[string]any{"mode": "auto"}), nil)
 	runAgent(t, e, "exception-triage")

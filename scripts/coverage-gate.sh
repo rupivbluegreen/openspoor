@@ -13,7 +13,13 @@
 #   - generated files (a "Code generated ... DO NOT EDIT." header, *.pb.go, *_gen.go, *.gen.go),
 #   - packages without statements.
 #
-# Environment: COVERAGE_MIN (default 80), COVERAGE_EXCLUDE (extra egrep for package paths, optional),
+# Known debt: scripts/coverage-baseline.txt lists packages that were below the minimum when the gate was
+# introduced, each with a floor ("<package dir> <floor percent>  # reason"). A listed package must stay at or
+# above its floor instead of the minimum, so it cannot get worse; when it reaches the minimum the script says
+# to delete its line. A package that is not listed has no allowance.
+#
+# Environment: COVERAGE_MIN (default 80), COVERAGE_EXCLUDE (extra regex for package paths, optional),
+# COVERAGE_BASELINE (baseline file; default coverage-baseline.txt next to this script),
 # MODULE (module path; read from go.mod by default).
 set -euo pipefail
 
@@ -23,6 +29,9 @@ min=${2:-${COVERAGE_MIN:-80}}
 module=${MODULE:-$(awk '/^module /{print $2; exit}' go.mod)}
 [ -n "$module" ] || { echo "coverage-gate: cannot determine the module path (run from backend/)" >&2; exit 2; }
 
+baseline=${COVERAGE_BASELINE:-$(dirname "$0")/coverage-baseline.txt}
+[ -f "$baseline" ] || baseline=/dev/null
+
 # Generated files, as paths relative to the module root.
 generated=$(mktemp)
 trap 'rm -f "$generated"' EXIT
@@ -31,10 +40,15 @@ trap 'rm -f "$generated"' EXIT
   find internal pkg -name '*.pb.go' -o -name '*_gen.go' -o -name '*.gen.go' 2>/dev/null || true
 } | sort -u > "$generated"
 
-awk -v module="$module" -v min="$min" -v extra="${COVERAGE_EXCLUDE:-}" -v genfile="$generated" '
+awk -v module="$module" -v min="$min" -v extra="${COVERAGE_EXCLUDE:-}" -v genfile="$generated" -v basefile="$baseline" '
 BEGIN {
   while ((getline line < genfile) > 0) gen[line] = 1
   close(genfile)
+  while ((getline line < basefile) > 0) {
+    sub(/#.*/, "", line)
+    if (split(line, f, " ") >= 2) floor[f[1]] = f[2] + 0
+  }
+  close(basefile)
 }
 NR == 1 && /^mode:/ { next }
 {
@@ -61,13 +75,16 @@ END {
   for (dir in total) {
     if (total[dir] == 0) continue
     pct = 100 * covered[dir] / total[dir]
-    status = (pct + 1e-9 < min) ? "FAIL" : "ok"
+    need = (dir in floor) ? floor[dir] : min
+    status = (pct + 1e-9 < need) ? "FAIL" : ((pct + 1e-9 < min) ? "debt" : "ok")
     if (status == "FAIL") fail++
+    if ((dir in floor) && pct + 1e-9 >= min) stale = stale "  " dir "\n"
     checked++; gt += total[dir]; gc += covered[dir]
     printf "%-4s %6.1f%%  %5d/%-5d  %s\n", status, pct, covered[dir], total[dir], dir | "sort -k2 -n"
   }
   close("sort -k2 -n")
   if (checked == 0) { print "coverage-gate: no domain package found in the profile" > "/dev/stderr"; exit 2 }
   printf "\ndomain packages: %d, statements: %d/%d (%.1f%%), minimum per package: %s%%\n", checked, gc, gt, 100 * gc / gt, min
-  if (fail > 0) { printf "coverage-gate: %d package(s) below %s%%\n", fail, min > "/dev/stderr"; exit 1 }
+  if (stale != "") printf "note: these packages reach %s%% now; delete them from the baseline:\n%s", min, stale
+  if (fail > 0) { printf "coverage-gate: %d package(s) below their minimum (%s%%, or the baseline floor)\n", fail, min > "/dev/stderr"; exit 1 }
 }' "$profile"
