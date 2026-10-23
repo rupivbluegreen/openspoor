@@ -248,6 +248,25 @@ func Require(roles ...string) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireStrict allows the request only when the principal has one of roles, whatever the
+// method: no read access for Viewer. For bulk or sensitive reads such as the tenant export.
+func RequireStrict(roles ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p, ok := From(r.Context())
+			if !ok {
+				httpx.Fail(w, r, httpx.Unauthorized("authentication required"))
+				return
+			}
+			if !p.Has(roles...) {
+				httpx.Fail(w, r, httpx.Forbidden("missing role: one of "+strings.Join(roles, ", ")))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RequireOperator allows only platform operators.
 func RequireOperator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

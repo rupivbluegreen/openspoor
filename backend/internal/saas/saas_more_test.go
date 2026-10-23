@@ -101,6 +101,7 @@ func TestSignupValidationPlansAndBranding(t *testing.T) {
 	e.Must(http.StatusOK, e.Call("", "POST", "/api/v1/auth/login", map[string]any{"email": viewerEmail, "password": testkit.Password}, "Host", "baltic.openspoor.test:443"), &vt)
 	e.Must(http.StatusForbidden, e.Call(vt.Token, "PUT", "/api/v1/tenant/branding", map[string]any{"primaryColor": "#000000"}), nil)
 	e.Must(http.StatusForbidden, e.Call(vt.Token, "POST", "/api/v1/tenant/export", nil), nil)
+	e.Must(http.StatusForbidden, e.Call(vt.Token, "GET", "/api/v1/tenant/export", nil), nil) // no Viewer read pass for the full export
 	e.Must(http.StatusForbidden, e.Call(vt.Token, "POST", "/api/v1/tenant/support-access", map[string]any{"hours": 1, "level": "admin"}), nil)
 	e.Must(http.StatusBadRequest, e.Call(su.Token, "PUT", "/api/v1/tenant/branding", map[string]any{"primaryColor": "red"}), nil)
 	e.Must(http.StatusBadRequest, e.Call(su.Token, "PUT", "/api/v1/tenant/branding", map[string]any{"logoUrl": "http://insecure.example/logo.png"}), nil)

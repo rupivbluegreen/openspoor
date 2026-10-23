@@ -96,7 +96,8 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/tenant/domain", httpx.Handler(m.setDomain))
 		r.Post("/tenant/domain/verify", httpx.Handler(m.verifyDomain))
 		r.Post("/tenant/support-access", httpx.Handler(m.grantSupport))
-		r.Get("/tenant/export", httpx.Handler(m.export))
+		// The export is every record of the tenant: Admin only, also for GET.
+		r.With(auth.RequireStrict(auth.RoleAdmin)).Get("/tenant/export", httpx.Handler(m.export))
 		r.Post("/tenant/export", httpx.Handler(m.export))
 		r.Delete("/tenant", httpx.Handler(m.deleteTenant))
 	})
