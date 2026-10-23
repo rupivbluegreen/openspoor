@@ -7,11 +7,13 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/time/rate"
 
 	"github.com/openspoor/openspoor/internal/core/audit"
 	"github.com/openspoor/openspoor/internal/core/auth"
@@ -25,7 +27,9 @@ import (
 // Module is the partners bounded context.
 type Module struct {
 	kernel.Deps
-	Client *http.Client
+	Client   *http.Client
+	mu       sync.Mutex
+	limiters map[string]*rate.Limiter
 }
 
 // New creates the module.
@@ -65,18 +69,30 @@ type Partner struct {
 
 const partnerCols = `id, name, gln, company_prefix, country, kind, status, linked_tenant, endpoints, master_data, health, created_at, approved_at`
 
-// Listing is a public directory entry.
+// Listing is a directory entry: the tenant's opt-in public profile.
 type Listing struct {
-	TenantID    uuid.UUID `json:"tenantId" db:"tenant_id"`
-	Name        string    `json:"name" db:"name"`
-	GLN         *string   `json:"gln,omitempty" db:"gln"`
-	Country     *string   `json:"country,omitempty" db:"country"`
-	Kind        string    `json:"kind" db:"kind"`
-	Description string    `json:"description" db:"description"`
-	Endpoints   Endpoints `json:"endpoints" db:"endpoints"`
-	Published   bool      `json:"published" db:"published"`
-	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
+	TenantID         uuid.UUID        `json:"tenantId" db:"tenant_id"`
+	Name             string           `json:"name" db:"name"`
+	GLN              *string          `json:"gln,omitempty" db:"gln"`
+	GLNs             []string         `json:"glns" db:"glns"`
+	CompanyPrefixes  []string         `json:"companyPrefixes" db:"company_prefixes"`
+	Country          *string          `json:"country,omitempty" db:"country"`
+	Kind             string           `json:"kind" db:"kind"`
+	Description      string           `json:"description" db:"description"`
+	Website          string           `json:"website" db:"website"`
+	Contact          string           `json:"contact" db:"contact"`
+	Licenses         []ProfileLicense `json:"licenses" db:"licenses"`
+	Endpoints        Endpoints        `json:"endpoints" db:"endpoints"`
+	Published        bool             `json:"published" db:"published"`
+	Verified         bool             `json:"verified" db:"verified"`
+	VerifiedAt       *time.Time       `json:"verifiedAt,omitempty" db:"verified_at"`
+	VerifiedBy       string           `json:"verifiedBy,omitempty" db:"verified_by"`
+	VerificationNote string           `json:"verificationNote,omitempty" db:"verification_note"`
+	UpdatedAt        time.Time        `json:"updatedAt" db:"updated_at"`
 }
+
+const listingCols = `tenant_id, name, gln, glns, company_prefixes, country, kind, description, website, contact, licenses, endpoints, published,
+	verified, verified_at, verified_by, verification_note, updated_at`
 
 // Routes implements kernel.Module.
 func (m *Module) Routes(r chi.Router) {
@@ -85,6 +101,9 @@ func (m *Module) Routes(r chi.Router) {
 		r.Get("/", httpx.Handler(m.list))
 		r.Post("/", httpx.Handler(m.create))
 		r.Get("/directory", httpx.Handler(m.searchDirectory))
+		r.Get("/directory/requests", httpx.Handler(m.listConnectionRequests))
+		r.Post("/directory/{tenantId}/connect", httpx.Handler(m.requestConnection))
+		r.Get("/onboarding/templates", httpx.Handler(m.listTemplates))
 		r.Get("/listing", httpx.Handler(m.getListing))
 		r.Put("/listing", httpx.Handler(m.putListing))
 		r.Post("/invitations", httpx.Handler(m.invite))
@@ -95,7 +114,11 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/{id}/approve", httpx.Handler(m.approve))
 		r.Post("/{id}/suspend", httpx.Handler(m.suspend))
 		r.Post("/{id}/health", httpx.Handler(m.checkHealthNow))
+		r.Get("/{id}/onboarding", httpx.Handler(m.getOnboarding))
+		r.Post("/{id}/onboarding", httpx.Handler(m.startOnboarding))
+		r.Patch("/{id}/onboarding/items/{itemId}", httpx.Handler(m.updateItem))
 	})
+	r.With(auth.RequireOperator).Post("/directory/{tenantId}/verification", httpx.Handler(m.verifyProfile))
 }
 
 // Schedules implements kernel.Scheduled: partner health probes every 5 minutes.
@@ -250,8 +273,8 @@ func (m *Module) searchDirectory(w http.ResponseWriter, r *http.Request) error {
 	var items []Listing
 	err := m.DB.OperatorTx(r.Context(), func(tx pgx.Tx) error {
 		var err error
-		items, err = db.List[Listing](r.Context(), tx, `select tenant_id, name, gln, country, kind, description, endpoints, published, updated_at from directory_listing
-			where published and ($1 = '' or name ilike '%'||$1||'%' or gln = $1 or country = upper($1)) order by name limit 100`, q)
+		items, err = db.List[Listing](r.Context(), tx, `select `+listingCols+` from directory_listing
+			where published and ($1 = '' or name ilike '%'||$1||'%' or gln = $1 or $1 = any(glns) or $1 = any(company_prefixes) or country = upper($1)) order by name limit 100`, q)
 		return err
 	})
 	if err != nil {
@@ -263,52 +286,15 @@ func (m *Module) searchDirectory(w http.ResponseWriter, r *http.Request) error {
 
 func (m *Module) getListing(w http.ResponseWriter, r *http.Request) error {
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		l, err := db.One[Listing](r.Context(), tx, `select tenant_id, name, gln, country, kind, description, endpoints, published, updated_at from directory_listing`)
+		l, err := db.One[Listing](r.Context(), tx, `select `+listingCols+` from directory_listing`)
 		if errors.Is(err, db.ErrNotFound) {
-			httpx.JSON(w, http.StatusOK, Listing{TenantID: kernel.TenantOf(r.Context())})
+			httpx.JSON(w, http.StatusOK, Listing{TenantID: kernel.TenantOf(r.Context()), GLNs: []string{}, CompanyPrefixes: []string{}, Licenses: []ProfileLicense{}})
 			return nil
 		}
 		if err == nil {
 			httpx.JSON(w, http.StatusOK, l)
 		}
 		return err
-	})
-}
-
-func (m *Module) putListing(w http.ResponseWriter, r *http.Request) error {
-	var in struct {
-		Name        string    `json:"name"`
-		GLN         *string   `json:"gln"`
-		Country     *string   `json:"country"`
-		Kind        string    `json:"kind"`
-		Description string    `json:"description"`
-		Endpoints   Endpoints `json:"endpoints"`
-		Published   bool      `json:"published"`
-	}
-	if err := httpx.Decode(r, &in); err != nil {
-		return err
-	}
-	if in.Name == "" || in.Kind == "" {
-		return httpx.BadRequest("name and kind are required")
-	}
-	if in.GLN != nil && *in.GLN != "" && !gs1.ValidGLN(*in.GLN) {
-		return httpx.BadRequest("invalid GLN")
-	}
-	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		l, err := db.One[Listing](r.Context(), tx, `insert into directory_listing (tenant_id, name, gln, country, kind, description, endpoints, published)
-			values (app_tenant(), $1,$2,$3,$4,$5,$6,$7)
-			on conflict (tenant_id) do update set name=excluded.name, gln=excluded.gln, country=excluded.country, kind=excluded.kind,
-				description=excluded.description, endpoints=excluded.endpoints, published=excluded.published, updated_at=now()
-			returning tenant_id, name, gln, country, kind, description, endpoints, published, updated_at`,
-			in.Name, in.GLN, in.Country, in.Kind, in.Description, in.Endpoints, in.Published)
-		if err != nil {
-			return err
-		}
-		if _, err := audit.Write(r.Context(), tx, audit.Record{Action: "directory.publish", Entity: "directory_listing", EntityID: l.TenantID.String(), After: l}); err != nil {
-			return err
-		}
-		httpx.JSON(w, http.StatusOK, l)
-		return nil
 	})
 }
 
@@ -374,7 +360,7 @@ func loadInfo(ctx context.Context, tx pgx.Tx, tenant uuid.UUID) (tenantInfo, err
 	if err := tx.QueryRow(ctx, `select name from tenant where id=$1`, tenant).Scan(&ti.Name); err != nil {
 		return ti, err
 	}
-	if l, err := db.One[Listing](ctx, tx, `select tenant_id, name, gln, country, kind, description, endpoints, published, updated_at from directory_listing where tenant_id=$1`, tenant); err == nil {
+	if l, err := db.One[Listing](ctx, tx, `select `+listingCols+` from directory_listing where tenant_id=$1`, tenant); err == nil {
 		ti.Listing = &l
 	}
 	rows, err := tx.Query(ctx, `select gtin, name, coalesce(ndc,'') from product where tenant_id=$1 and status='active' order by gtin limit 500`, tenant)

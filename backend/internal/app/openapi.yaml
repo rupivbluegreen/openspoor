@@ -602,6 +602,28 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - b2b
+    /api/v1/b2b/documents/{id}/ack:
+        post:
+            operationId: postB2bDocumentsIdAck
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - b2b
     /api/v1/b2b/documents/{id}/edi:
         get:
             operationId: getB2bDocumentsIdEdi
@@ -649,6 +671,133 @@ paths:
     /api/v1/b2b/documents/import:
         post:
             operationId: postB2bDocumentsImport
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - b2b
+    /api/v1/b2b/mappings:
+        get:
+            operationId: getB2bMappings
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - b2b
+        post:
+            operationId: postB2bMappings
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - b2b
+    /api/v1/b2b/mappings/{id}:
+        delete:
+            operationId: deleteB2bMappingsId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - b2b
+        get:
+            operationId: getB2bMappingsId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - b2b
+        put:
+            operationId: putB2bMappingsId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - b2b
+    /api/v1/b2b/mappings/preview:
+        post:
+            operationId: postB2bMappingsPreview
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - b2b
+    /api/v1/b2b/mappings/suggest:
+        post:
+            operationId: postB2bMappingsSuggest
             responses:
                 2XX:
                     content:
@@ -1087,6 +1236,189 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - control-tower
+    /api/v1/credentials:
+        get:
+            operationId: getCredentials
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - credentials
+        post:
+            operationId: postCredentials
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - credentials
+    /api/v1/credentials/{id}:
+        get:
+            operationId: getCredentialsId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - credentials
+    /api/v1/credentials/{id}/revoke:
+        post:
+            operationId: postCredentialsIdRevoke
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - credentials
+    /api/v1/credentials/status/revocation:
+        get:
+            operationId: getCredentialsStatusRevocation
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - credentials
+    /api/v1/credentials/verifications:
+        get:
+            operationId: getCredentialsVerifications
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - credentials
+    /api/v1/credentials/verify:
+        post:
+            operationId: postCredentialsVerify
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - credentials
+    /api/v1/directory:
+        get:
+            operationId: getDirectory
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - directory
+    /api/v1/directory/{tenantId}:
+        get:
+            operationId: getDirectoryTenantId
+            parameters:
+                - in: path
+                  name: tenantId
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - directory
+    /api/v1/directory/{tenantId}/verification:
+        post:
+            operationId: postDirectoryTenantIdVerification
+            parameters:
+                - in: path
+                  name: tenantId
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - directory
     /api/v1/documents:
         get:
             operationId: getDocuments
@@ -2544,6 +2876,103 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - me
+    /api/v1/messages:
+        get:
+            operationId: getMessages
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - messages
+    /api/v1/messages/{id}/retry:
+        post:
+            operationId: postMessagesIdRetry
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - messages
+    /api/v1/messages/slas:
+        get:
+            operationId: getMessagesSlas
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - messages
+    /api/v1/messages/slas/{partnerId}:
+        delete:
+            operationId: deleteMessagesSlasPartnerId
+            parameters:
+                - in: path
+                  name: partnerId
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - messages
+        put:
+            operationId: putMessagesSlasPartnerId
+            parameters:
+                - in: path
+                  name: partnerId
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - messages
     /api/v1/meta:
         get:
             operationId: getMeta
@@ -2593,6 +3022,22 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - migration
+    /api/v1/onboarding/tests:
+        post:
+            operationId: postOnboardingTests
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - onboarding
     /api/v1/openapi.yaml:
         get:
             operationId: getOpenapiyaml
@@ -2857,6 +3302,76 @@ paths:
                     $ref: '#/components/responses/Problem'
             tags:
                 - partners
+    /api/v1/partners/{id}/onboarding:
+        get:
+            operationId: getPartnersIdOnboarding
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+        post:
+            operationId: postPartnersIdOnboarding
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+    /api/v1/partners/{id}/onboarding/items/{itemId}:
+        patch:
+            operationId: patchPartnersIdOnboardingItemsItemId
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: itemId
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
     /api/v1/partners/{id}/suspend:
         post:
             operationId: postPartnersIdSuspend
@@ -2882,6 +3397,44 @@ paths:
     /api/v1/partners/directory:
         get:
             operationId: getPartnersDirectory
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+    /api/v1/partners/directory/{tenantId}/connect:
+        post:
+            operationId: postPartnersDirectoryTenantIdConnect
+            parameters:
+                - in: path
+                  name: tenantId
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+    /api/v1/partners/directory/requests:
+        get:
+            operationId: getPartnersDirectoryRequests
             responses:
                 2XX:
                     content:
@@ -2960,6 +3513,22 @@ paths:
                 - partners
         put:
             operationId: putPartnersListing
+            responses:
+                2XX:
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                    description: Success
+                4XX:
+                    $ref: '#/components/responses/Problem'
+                default:
+                    $ref: '#/components/responses/Problem'
+            tags:
+                - partners
+    /api/v1/partners/onboarding/templates:
+        get:
+            operationId: getPartnersOnboardingTemplates
             responses:
                 2XX:
                     content:

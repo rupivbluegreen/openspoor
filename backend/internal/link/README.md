@@ -9,6 +9,32 @@ Federation: each node has an Ed25519 identity published as a DID document. Peers
 and approved explicitly; messages (`ping`, `epcis.capture`, `b2b.document`) travel as signed
 envelopes, and inbound envelopes are rejected on a bad signature or more than 5 minutes of
 clock skew. Inbound `epcis.capture` payloads are captured into the EPCIS repository.
+Outbound envelopes are re-signed with a fresh `createdAt` on every delivery attempt (same id).
+
+Mapping studio: saved mappings per partner and document type turn CSV, JSON (records and
+nested lines by dotted path) or fixed-width files into canonical B2B documents (`pkg/edi`) or
+EPCIS events. Transforms: `trim`, `upper`, `lower`, `date` (YYYY/MM/DD/HH/mm/ss patterns),
+`lookup` (table with optional default), `constant`, `concat`. Rows are grouped into documents by
+the mapped `number`. A preview returns the canonical result with per-row errors; inbound import
+(`format` csv, json, flat or mapped) is all-or-nothing. "Suggest" proposes fields from header
+names (a heuristic; a person reviews and saves).
+
+Message tracking: `/messages` is one log over B2B documents, federation messages and TI/TS
+deliveries (read from the `dscsa` shipment table). Attempts, last error and the dead-letter state
+come from the job queue: a delivery job that exhausted its retries (or was rejected) shows as
+`dead`, raises a `link.message_dead` alert, and can be put back with "retry now". Outbound B2B
+documents are acknowledged by local delivery, by the peer accepting a federation message, or by
+`POST /b2b/documents/{id}/ack` (functional acknowledgement from an EDI gateway). Partner SLAs
+set an acknowledgement window; breaches raise `link.sla_breach` alerts.
+
+Onboarding test harness: sends a test over the partner's channel (local connection check,
+signed federation ping delivered immediately, or an empty EPCIS document to an HTTP capture
+endpoint) and records the run on the partner's onboarding (`partners.RecordTest`).
+
+Authorized trading partner credentials (ADR-010): W3C VC 2.0 credentials for a license in the
+tenant's license register, signed by the node key with an `eddsa-jcs-2022` Data Integrity proof,
+revocable through a W3C Bitstring Status List served publicly. Presented credentials are
+verified (did:web resolution, proof, validity, revocation) and the result is stored per partner.
 
 ## Endpoints
 
@@ -30,18 +56,38 @@ clock skew. Inbound `epcis.capture` payloads are captured into the EPCIS reposit
 | GET | `/api/v1/federation/messages` | Message log |
 | POST | `/api/v1/federation/inbox` | Receive signed messages from peers (public) |
 | GET | `/.well-known/did.json` | Node DID document (public) |
+| GET, POST | `/api/v1/b2b/mappings` | List / create mappings |
+| GET, PUT, DELETE | `/api/v1/b2b/mappings/{id}` | Read / update / delete a mapping |
+| POST | `/api/v1/b2b/mappings/preview` | Apply a saved or inline mapping to a sample file |
+| POST | `/api/v1/b2b/mappings/suggest` | Propose field mappings from column names |
+| POST | `/api/v1/b2b/documents/{id}/ack` | Record a functional acknowledgement |
+| GET | `/api/v1/messages` | Message log (filters: kind, direction, status, partnerId, q) with counts per status |
+| POST | `/api/v1/messages/{id}/retry` | Retry a dead or backing-off delivery now |
+| GET | `/api/v1/messages/slas` | Partner SLAs |
+| PUT, DELETE | `/api/v1/messages/slas/{partnerId}` | Set / remove a partner's SLA |
+| POST | `/api/v1/onboarding/tests` | Run the onboarding test harness for a partner |
+| GET, POST | `/api/v1/credentials` | List / issue ATP credentials (issue: admin, compliance) |
+| GET | `/api/v1/credentials/{id}` | An issued credential |
+| POST | `/api/v1/credentials/{id}/revoke` | Revoke (admin, compliance) |
+| POST | `/api/v1/credentials/verify` | Verify a presented credential |
+| GET | `/api/v1/credentials/verifications` | Verification results (filter: partnerId) |
+| GET | `/api/v1/credentials/status/revocation` | Signed revocation status list (public) |
 
-Authenticated routes need the admin, ops, compliance or integration role.
+Authenticated routes need the admin, ops, compliance or integration role (Viewer may read).
 
 ## Background work
 
 - Job `federation.deliver`: delivers one signed envelope, with retries.
 - Schedule `link.cert_expiry` (every 6 h): alerts on certificates expiring within 30 days.
+- Schedule `link.sla` (every 15 min): alerts on outbound messages not acknowledged within the partner's SLA.
 
 ## Data
 
 `b2b_document`, `supplier_record`, `shared_document`, `federation_node`, `federation_peer`,
-`federation_message` (migration `00008_link.sql`).
+`federation_message` (migration `00008_link.sql`); `b2b_mapping`, `partner_sla`, `atp_credential`,
+`atp_verification`, `b2b_document.acked_at`, `federation_message.job_id` (migration `00015_link_network.sql`).
+Reads `license`/`organization`/`site` (platform) for issuance and `shipment` (dscsa) for the message log
+inside the tenant's transaction.
 
 ## Depends on
 
@@ -49,7 +95,7 @@ Authenticated routes need the admin, ops, compliance or integration role.
 
 ## Spec gaps
 
-None marked `TODO(spec)`.
+- `TODO(spec)` in `atp.go`: which license types make a party an authorized trading partner under DSCSA.
 
 ## Tests
 

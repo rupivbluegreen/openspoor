@@ -79,7 +79,7 @@ func TestModuleMetadataAndDID(t *testing.T) {
 	if m.Name() != "link" || m.Client.Timeout != 15*time.Second {
 		t.Fatalf("module: %+v", m)
 	}
-	if s := m.Schedules(); len(s) != 1 || s[0].Name != "link.cert_expiry" || s[0].Every != 6*time.Hour {
+	if s := m.Schedules(); len(s) != 2 || s[0].Name != "link.cert_expiry" || s[0].Every != 6*time.Hour || s[1].Name != "link.sla" {
 		t.Fatalf("schedules: %+v", s)
 	}
 	for in, want := range map[string]string{
@@ -169,7 +169,7 @@ func TestB2BDocuments(t *testing.T) {
 	problem(t, e.Do("GET", "/api/v1/b2b/documents/x", nil), 400, "invalid id")
 
 	// Import: format and parse errors; EDIFACT round trip creates a received inbound document.
-	problem(t, e.Do("POST", "/api/v1/b2b/documents/import", map[string]any{"format": "csv", "content": "a,b"}), 400, "format must be x12 or edifact")
+	problem(t, e.Do("POST", "/api/v1/b2b/documents/import", map[string]any{"format": "pdf", "content": "a,b"}), 400, "format must be x12, edifact")
 	problem(t, e.Do("POST", "/api/v1/b2b/documents/import", map[string]any{"format": "x12", "content": "garbage"}), 400, "cannot parse")
 	problem(t, e.Do("POST", "/api/v1/b2b/documents/import", map[string]any{"format": "x12"}), 400, "cannot parse")
 	problem(t, e.Do("POST", "/api/v1/b2b/documents/import", "{"), 400, "invalid JSON body")

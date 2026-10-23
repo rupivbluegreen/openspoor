@@ -107,11 +107,16 @@ func (m *Module) Root(r chi.Router) {
 func didDocument(n *nodeIdentity) map[string]any {
 	jwk := map[string]string{"kty": "OKP", "crv": "Ed25519", "x": base64.RawURLEncoding.EncodeToString(n.Pub)}
 	return map[string]any{
-		"@context":           []string{"https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1"},
-		"id":                 n.DID,
-		"verificationMethod": []map[string]any{{"id": n.DID + "#key-1", "type": "JsonWebKey2020", "controller": n.DID, "publicKeyJwk": jwk}},
-		"assertionMethod":    []string{n.DID + "#key-1"},
-		"service":            []map[string]string{{"id": n.DID + "#inbox", "type": "OpenSpoorFederationInbox", "serviceEndpoint": "/api/v1/federation/inbox"}},
+		"@context": []string{"https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1", "https://w3id.org/security/multikey/v1"},
+		"id":       n.DID,
+		// key-1 (JWK) signs federation envelopes; key-2 is the same key as a Multikey, used by
+		// eddsa-jcs-2022 Data Integrity proofs on credentials (ADR-010).
+		"verificationMethod": []map[string]any{
+			{"id": n.DID + "#key-1", "type": "JsonWebKey2020", "controller": n.DID, "publicKeyJwk": jwk},
+			{"id": n.DID + multikeyVMIndex, "type": "Multikey", "controller": n.DID, "publicKeyMultibase": multikeyEd25519(n.Pub)},
+		},
+		"assertionMethod": []string{n.DID + "#key-1", n.DID + multikeyVMIndex},
+		"service":         []map[string]string{{"id": n.DID + "#inbox", "type": "OpenSpoorFederationInbox", "serviceEndpoint": "/api/v1/federation/inbox"}},
 	}
 }
 
@@ -315,15 +320,23 @@ func (m *Module) Send(ctx context.Context, peerID uuid.UUID, typ string, payload
 		}
 		env := n.Sign(Envelope{ID: uuid.NewString(), Type: typ, From: n.DID, FromTenant: slug, To: p.DID, ToTenant: p.RemoteTenant, CreatedAt: time.Now().UTC(), Payload: raw})
 		msgID = env.ID
-		if _, err := tx.Exec(ctx, `insert into federation_message (id, tenant_id, peer_id, direction, msg_id, type, status) values ($1, app_tenant(), $2, 'outbound', $3, $4, 'queued')`,
-			ids.New(), p.ID, env.ID, typ); err != nil {
+		tid := me.TenantID
+		jobID, err := jobs.Enqueue(ctx, tx, &tid, JobDeliver, map[string]any{"url": p.URL + "/api/v1/federation/inbox", "envelope": env}, jobs.MaxAttempts(m.maxAttempts()))
+		if err != nil {
 			return err
 		}
-		tid := me.TenantID
-		_, err = jobs.Enqueue(ctx, tx, &tid, JobDeliver, map[string]any{"url": p.URL + "/api/v1/federation/inbox", "envelope": env}, jobs.MaxAttempts(10))
+		_, err = tx.Exec(ctx, `insert into federation_message (id, tenant_id, peer_id, direction, msg_id, type, status, job_id) values ($1, app_tenant(), $2, 'outbound', $3, $4, 'queued', $5)`,
+			ids.New(), p.ID, env.ID, typ, jobID)
 		return err
 	})
 	return msgID, err
+}
+
+func (m *Module) maxAttempts() int {
+	if m.DeliveryAttempts > 0 {
+		return m.DeliveryAttempts
+	}
+	return 10
 }
 
 // RegisterJobs implements kernel.Worker.
@@ -336,6 +349,12 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 	}
 	if err := json.Unmarshal(j.Payload, &p); err != nil {
 		return jobs.Permanent{Err: err}
+	}
+	// Re-sign our own envelopes on every attempt: receivers reject a createdAt outside MaxSkew,
+	// and a retry can run long after the message was queued. The id (replay key) is unchanged.
+	if n, err := m.Node(ctx); err == nil && p.Envelope.From == n.DID {
+		p.Envelope.CreatedAt = time.Now().UTC()
+		p.Envelope = n.Sign(p.Envelope)
 	}
 	b, _ := json.Marshal(p.Envelope)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.URL, bytes.NewReader(b))
@@ -359,9 +378,25 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 			status = "retrying"
 		}
 	}
+	dead := status == "rejected" || (status == "retrying" && j.Attempts >= j.MaxAttempts)
 	_ = m.DB.Tx(ctx, *j.TenantID, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `update federation_message set status=$3, detail=$4 where direction='outbound' and msg_id=$1 and tenant_id=$2`, p.Envelope.ID, *j.TenantID, status, detail)
-		return err
+		var fmID uuid.UUID
+		if err := tx.QueryRow(ctx, `update federation_message set status=$3, detail=$4 where direction='outbound' and msg_id=$1 and tenant_id=$2 returning id`,
+			p.Envelope.ID, *j.TenantID, status, detail).Scan(&fmID); err != nil {
+			return err
+		}
+		if status == "delivered" {
+			// The peer accepted the message: that is the acknowledgement of a B2B document sent over federation.
+			_, err := tx.Exec(ctx, `update b2b_document set acked_at = coalesce(acked_at, now()) where direction='outbound' and delivery->>'messageId' = $1`, p.Envelope.ID)
+			return err
+		}
+		if dead {
+			_, err := tx.Exec(ctx, `insert into alert (id, tenant_id, kind, severity, title, detail, entity, entity_id, dedupe_key)
+				values ($1, app_tenant(), 'link.message_dead', 'error', $2, $3, 'federation_message', $4, $5) on conflict do nothing`,
+				ids.New(), "Federation "+p.Envelope.Type+" message could not be delivered (dead letter)", detail, fmID.String(), "dead:"+fmID.String())
+			return err
+		}
+		return nil
 	})
 	switch status {
 	case "retrying":

@@ -36,7 +36,11 @@ type Module struct {
 	kernel.Deps
 	EPCIS  *epcis.Module
 	Client *http.Client
-	node   *nodeIdentity
+	// DeliveryAttempts bounds retries of one federation delivery before it is dead-lettered (default 10).
+	DeliveryAttempts int
+	// InsecureDIDWeb resolves did:web identifiers over http instead of https (tests and local development only).
+	InsecureDIDWeb bool
+	node           *nodeIdentity
 }
 
 // New creates the module.
@@ -69,17 +73,49 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/federation/peers/{id}/approve", httpx.Handler(m.approvePeer))
 		r.Post("/federation/send", httpx.Handler(m.fedSend))
 		r.Get("/federation/messages", httpx.Handler(m.listMessages))
+		// Mapping studio.
+		r.Get("/b2b/mappings", httpx.Handler(m.listMappings))
+		r.Post("/b2b/mappings", httpx.Handler(m.createMapping))
+		r.Post("/b2b/mappings/preview", httpx.Handler(m.previewMapping))
+		r.Post("/b2b/mappings/suggest", httpx.Handler(m.suggestMapping))
+		r.Get("/b2b/mappings/{id}", httpx.Handler(m.getMapping))
+		r.Put("/b2b/mappings/{id}", httpx.Handler(m.updateMapping))
+		r.Delete("/b2b/mappings/{id}", httpx.Handler(m.deleteMapping))
+		// Message tracking, dead letters and SLAs.
+		r.Post("/b2b/documents/{id}/ack", httpx.Handler(m.ackDoc))
+		r.Get("/messages", httpx.Handler(m.listMessageLog))
+		r.Post("/messages/{id}/retry", httpx.Handler(m.retryMessage))
+		r.Get("/messages/slas", httpx.Handler(m.listSLAs))
+		r.Put("/messages/slas/{partnerId}", httpx.Handler(m.putSLA))
+		r.Delete("/messages/slas/{partnerId}", httpx.Handler(m.deleteSLA))
+		// Onboarding test harness.
+		r.Post("/onboarding/tests", httpx.Handler(m.runPartnerTest))
+		// Authorized trading partner credentials: verification.
+		r.Get("/credentials", httpx.Handler(m.listCredentials))
+		r.Post("/credentials/verify", httpx.Handler(m.verifyCredential))
+		r.Get("/credentials/verifications", httpx.Handler(m.listVerifications))
+		r.Get("/credentials/{id}", httpx.Handler(m.getCredential))
+	})
+	// Issuing and revoking credentials is for administrators and compliance.
+	r.Group(func(r chi.Router) {
+		r.Use(auth.Require(auth.RoleAdmin, auth.RoleCompliance))
+		r.Post("/credentials", httpx.Handler(m.issueCredential))
+		r.Post("/credentials/{id}/revoke", httpx.Handler(m.revokeCredential))
 	})
 }
 
 // Public implements kernel.PublicRoutes.
 func (m *Module) Public(r chi.Router) {
 	r.Post("/federation/inbox", httpx.Handler(m.inbox))
+	r.Get("/credentials/status/revocation", httpx.Handler(m.statusList))
 }
 
-// Schedules implements kernel.Scheduled: daily certificate expiry alerts.
+// Schedules implements kernel.Scheduled: certificate expiry alerts and partner SLA breaches.
 func (m *Module) Schedules() []kernel.Schedule {
-	return []kernel.Schedule{{Name: "link.cert_expiry", Every: 6 * time.Hour, Run: m.ExpiryAlerts}}
+	return []kernel.Schedule{
+		{Name: "link.cert_expiry", Every: 6 * time.Hour, Run: m.ExpiryAlerts},
+		{Name: "link.sla", Every: 15 * time.Minute, Run: m.SLABreaches},
+	}
 }
 
 // --- B2B documents ---
@@ -99,9 +135,10 @@ type Doc struct {
 	Delivery  map[string]any `json:"delivery,omitempty" db:"delivery"`
 	CreatedAt time.Time      `json:"createdAt" db:"created_at"`
 	SentAt    *time.Time     `json:"sentAt,omitempty" db:"sent_at"`
+	AckedAt   *time.Time     `json:"ackedAt,omitempty" db:"acked_at"`
 }
 
-const docCols = `id, type, direction, partner_id, number, status, payload, total, currency, related_id, delivery, created_at, sent_at`
+const docCols = `id, type, direction, partner_id, number, status, payload, total, currency, related_id, delivery, created_at, sent_at, acked_at`
 
 func (m *Module) listDocs(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
@@ -178,22 +215,30 @@ func (m *Module) createDoc(w http.ResponseWriter, r *http.Request) error {
 // importDoc parses an inbound X12 850 or EDIFACT ORDERS message.
 func (m *Module) importDoc(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
-		Format    string     `json:"format"`
-		Content   string     `json:"content"`
-		PartnerID *uuid.UUID `json:"partnerId"`
+		Format        string     `json:"format"`
+		Content       string     `json:"content"`
+		ContentBase64 string     `json:"contentBase64"`
+		PartnerID     *uuid.UUID `json:"partnerId"`
+		MappingID     *uuid.UUID `json:"mappingId"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		return err
 	}
 	var d edi.Document
 	var err error
-	switch strings.ToLower(in.Format) {
+	switch f := strings.ToLower(in.Format); f {
+	case "csv", "json", "flat", "mapped":
+		content, err := fileContent(in.Content, in.ContentBase64)
+		if err != nil {
+			return err
+		}
+		return m.importMapped(w, r, in.MappingID, in.PartnerID, f, content)
 	case "x12":
 		d, err = edi.ParseX12(in.Content)
 	case "edifact":
 		d, err = edi.ParseEDIFACT(in.Content)
 	default:
-		return httpx.BadRequest("format must be x12 or edifact")
+		return httpx.BadRequest("format must be x12, edifact, csv, json, flat or mapped")
 	}
 	if err != nil {
 		return httpx.BadRequest("cannot parse: " + err.Error())
@@ -293,7 +338,8 @@ func (m *Module) sendDoc(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return m.Tx(ctx, func(tx pgx.Tx) error {
-		d, err = db.One[Doc](ctx, tx, `update b2b_document set status='sent', sent_at=now(), delivery=$2 where id=$1 returning `+docCols, id, delivery)
+		d, err = db.One[Doc](ctx, tx, `update b2b_document set status='sent', sent_at=now(), delivery=$2,
+			acked_at=case when $2::jsonb->>'channel' = 'local' then now() else acked_at end where id=$1 returning `+docCols, id, delivery)
 		if err != nil {
 			return err
 		}
