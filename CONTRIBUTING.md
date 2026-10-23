@@ -18,7 +18,7 @@ make -C backend test-integration                       # Go tests against a thro
 ## Pull requests
 - Small commits with conventional-commit messages (`feat(epcis): …`, `fix(dscsa): …`).
 - Add tests (unit + integration against PostgreSQL). Aim for 80% line coverage on domain code.
-- Significant decisions get an ADR in `docs/adr/`. Update `docs/CHANGELOG.md`.
+- Update `docs/CHANGELOG.md` for user-visible changes.
 - Country rule packs live in `rulepacks/*.yaml`; cite the public source document for every rule.
 
 By contributing you agree your contribution is licensed under Apache-2.0.

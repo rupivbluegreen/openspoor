@@ -26,10 +26,10 @@ distributed only to onboarded parties, or we could not verify the current versio
 
 | Area | Question | Where |
 |---|---|---|
-| Workflows | Temporal is in the compose stack (ADR-004), but long-running human workflows (recall, batch release) and connector retries run on the PostgreSQL job queue. Wire Temporal workers when a workflow needs durable timers measured in weeks. | ADR-004, internal/act/workflows.go |
-| AS2 | AS2 (RFC 4130) is an interface; the built-in transport refuses with a clear error. Choose a gateway (for example an existing AS2 server) or a vetted Go implementation. | ADR-007, internal/dscsa |
-| Federation | Mutual TLS fingerprint pinning is stored but not enforced in-process; the Verifiable Credential binding organisations to nodes is not built; `did:key` is not supported yet. | ADR-008 |
+| Workflows | Temporal is in the compose stack, but long-running human workflows (recall, batch release) and connector retries run on the PostgreSQL job queue. Wire Temporal workers when a workflow needs durable timers measured in weeks. | internal/act/workflows.go, internal/core/jobs |
+| AS2 | AS2 (RFC 4130) is an interface; the built-in transport refuses with a clear error. Choose a gateway (for example an existing AS2 server) or a vetted Go implementation. | internal/dscsa |
+| Federation | Mutual TLS fingerprint pinning is stored but not enforced in-process; the Verifiable Credential binding organisations to nodes is not built; `did:key` is not supported yet. | internal/link/federation.go |
 | GDPR vs GxP | Tenant deletion crypto-shreds the per-tenant data key and deletes events, serial state and the tenant row. The append-only audit chain is kept intact, including its before/after snapshots, because the immutability trigger forbids edits. Decide the retention period per market, and whether audit snapshots containing personal data must be pseudonymised at write time to satisfy erasure requests. | internal/saas/gdpr.go |
-| Archive | Raw capture documents are not yet archived to S3 (SeaweedFS, ADR-005); `OPENSPOOR_S3_ENDPOINT` is read but unused. Events themselves are stored in PostgreSQL. | ADR-005 |
+| Archive | Raw capture documents are not yet archived to S3 (SeaweedFS); `OPENSPOOR_S3_ENDPOINT` is read but unused. Events themselves are stored in PostgreSQL. | deploy/docker-compose.yml |
 | Billing | Usage metering is exported to Lago when `OPENSPOOR_LAGO_URL` is set. Stripe is not integrated directly; decide whether Lago's Stripe integration is sufficient. | internal/saas/billing.go |
 | Capture latency | The 1k-event capture p95 budget (< 200 ms) holds up to 2 concurrent clients on 4 vCPU (163 ms) and is exceeded at 4 clients (234 ms). Options: more cores, or a separate capture node per tenant group. | bench-results/ |

@@ -19,7 +19,7 @@ linters:
         no-minio:
           deny:
             - pkg: github.com/minio/minio-go
-              desc: use the S3 API (SeaweedFS), never MinIO (ADR-005)
+              desc: use the S3 API (SeaweedFS), never MinIO
     errcheck:
       # Writes to hashes, builders and buffered report writers cannot fail (or fail at Flush);
       # a response body Close after a full read has nothing actionable to report.
