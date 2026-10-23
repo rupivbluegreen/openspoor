@@ -329,12 +329,23 @@ func (m *Module) vrsRequest(w http.ResponseWriter, r *http.Request) error {
 		reason = "responder_error: " + callErr.Error()
 	}
 	corr, _ := uuid.Parse(q.CorrUUID)
+	rowID := ids.New()
 	err = m.Tx(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `insert into vrs_request (id, tenant_id, direction, corr_uuid, gtin, serial, lot, expiry, requestor_gln, context, verified, reason, responder, latency_ms, response)
 			values ($1, app_tenant(), 'outbound', $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-			ids.New(), corr, q.GTIN, q.SerialNumber, q.LotNumber, q.ExpirationDate, q.RequestorGLN, q.Context, verified, reason, target.url, lat, resp)
+			rowID, corr, q.GTIN, q.SerialNumber, q.LotNumber, q.ExpirationDate, q.RequestorGLN, q.Context, verified, reason, target.url, lat, resp)
 		if err != nil {
 			return err
+		}
+		// A negative answer from the responder (not a transport failure) can be opened as a suspect-product investigation.
+		if callErr == nil && !verified {
+			if _, err := tx.Exec(ctx, `insert into alert (id, tenant_id, kind, severity, title, detail, entity, entity_id, dedupe_key)
+				values ($1, app_tenant(), 'dscsa.vrs_not_verified', 'warning', $2, $3, 'vrs_request', $4, $5) on conflict do nothing`,
+				ids.New(), "VRS did not verify "+q.GTIN+" / "+q.SerialNumber+" ("+reason+")",
+				map[string]any{"gtin": q.GTIN, "serial": q.SerialNumber, "lot": q.LotNumber, "reason": reason, "corrUUID": q.CorrUUID, "vrsRequestId": rowID},
+				rowID.String(), "vrs:"+q.GTIN+"/"+q.SerialNumber); err != nil {
+				return err
+			}
 		}
 		_, err = audit.Write(ctx, tx, audit.Record{Action: "vrs.request", Entity: "vrs_request", EntityID: corr.String(), After: map[string]any{"gtin": q.GTIN, "serial": q.SerialNumber, "verified": verified, "reason": reason}})
 		return err

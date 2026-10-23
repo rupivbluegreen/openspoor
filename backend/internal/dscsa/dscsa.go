@@ -76,6 +76,7 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/directory", httpx.Handler(m.putDirectory))
 		r.Delete("/directory/{id}", httpx.Handler(m.deleteDirectory))
 	})
+	r.Route("/investigations", m.investigationRoutes)
 	r.Get("/retention", httpx.Handler(m.listRetention))
 	r.With(auth.Require(auth.RoleAdmin, auth.RoleCompliance)).Put("/retention/{class}", httpx.Handler(m.putRetention))
 }
@@ -87,7 +88,10 @@ func (m *Module) Public(r chi.Router) {
 
 // Schedules implements kernel.Scheduled.
 func (m *Module) Schedules() []kernel.Schedule {
-	return []kernel.Schedule{{Name: "dscsa.retention", Every: 24 * time.Hour, Run: m.enforceRetention}}
+	return []kernel.Schedule{
+		{Name: "dscsa.retention", Every: 24 * time.Hour, Run: m.enforceRetention},
+		{Name: "dscsa.investigations_overdue", Every: time.Hour, Run: m.raiseOverdue},
+	}
 }
 
 // Shipment is an outbound or inbound shipment.
@@ -272,6 +276,15 @@ func (m *Module) BuildTITS(ctx context.Context, tx pgx.Tx, s Shipment, seller, b
 		if st := states[e]; st.Status == "decommissioned" || st.Status == "destroyed" || st.Status == "recalled" {
 			return nil, httpx.Unprocessable("cannot ship "+st.Status+" product", []string{e})
 		}
+	}
+	all := make([]string, 0, len(states))
+	for e := range states {
+		all = append(all, e)
+	}
+	if held, err := heldIdentifiers(ctx, tx, all, uuid.Nil); err != nil {
+		return nil, err
+	} else if len(held) > 0 {
+		return nil, httpx.Unprocessable("cannot ship product held by an open investigation", held)
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	sellerLoc, _ := sgln(seller.GLN)

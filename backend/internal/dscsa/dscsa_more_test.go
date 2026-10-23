@@ -574,7 +574,7 @@ func TestRetentionPolicyAndEnforcement(t *testing.T) {
 			mod = d
 		}
 	}
-	if mod == nil || mod.Name() != "dscsa" || len(mod.Schedules()) != 1 {
+	if mod == nil || mod.Name() != "dscsa" || len(mod.Schedules()) != 2 || mod.Schedules()[0].Name != "dscsa.retention" {
 		t.Fatal("dscsa module or schedule missing")
 	}
 	if err := mod.Schedules()[0].Run(ctx); err != nil {
