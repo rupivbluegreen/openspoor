@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Input, List, Space, Tabs, Tag, Typography } from 'antd';
-import { CheckOutlined, MailOutlined, PlusOutlined } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { Alert, Button, Card, Space, Tabs, Tag, Typography } from 'antd';
+import { CheckOutlined, MailOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { api, CodeView, glnValidator, ModalForm, PageContainer, ProFormText, QueryTable, StatusTag, type Partner } from '@openspoor/ui/pro';
 import { useAction, useSubmit } from '../../lib/hooks';
+import { NetworkDirectory } from './NetworkDirectory';
+import { PartnerDrawer } from './PartnerDrawer';
 
 type Row = Partner & Record<string, unknown>;
 
@@ -21,7 +22,9 @@ function Connections() {
   const approve = useAction((id: string) => api.post(`/partners/${id}/approve`), { invalidate: [['/partners']] });
   const create = useSubmit((v: Record<string, unknown>) => api.post('/partners', v), { invalidate: [['/partners']] });
   const focusId = useSearchParams()[0].get('id');
+  const [open, setOpen] = useState<Partner | null>(null);
   return (
+    <>
     <QueryTable<Row>
       rowKey="id"
       queryKey={['/partners']}
@@ -37,14 +40,18 @@ function Connections() {
         {
           title: t('common.actions'),
           valueType: 'option',
-          render: (_d, r) =>
-            ['pending', 'invited', 'requested'].includes(String(r.status).toLowerCase())
+          render: (_d, r) => [
+            <a key="manage" onClick={() => setOpen(r)}>
+              <SettingOutlined /> Onboarding
+            </a>,
+            ...(['pending', 'invited', 'requested'].includes(String(r.status).toLowerCase())
               ? [
                   <a key="approve" onClick={() => approve.mutate(r.id)}>
                     <CheckOutlined /> {t('action.approve')}
                   </a>,
                 ]
-              : [],
+              : []),
+          ],
         },
       ]}
       toolBarRender={() => [
@@ -57,32 +64,15 @@ function Connections() {
         >
           <ProFormText name="name" label={t('field.name')} rules={[{ required: true }]} />
           <ProFormText name="gln" label="GLN" rules={[glnValidator(t('common.invalidGln'))]} />
-          <ProFormText name={['endpoints', 'epcis']} label="EPCIS endpoint" rules={[{ type: 'url' }]} />
-          <ProFormText name={['endpoints', 'as2']} label="AS2 endpoint" rules={[{ type: 'url' }]} />
+          <ProFormText name={['endpoints', 'epcisCapture']} label="EPCIS endpoint" rules={[{ type: 'url' }]} />
+          <ProFormText name={['endpoints', 'as2Url']} label="AS2 endpoint" rules={[{ type: 'url' }]} />
           <ProFormText name={['endpoints', 'vrs']} label="VRS endpoint" rules={[{ type: 'url' }]} />
+          <ProFormText name={['endpoints', 'federation']} label="Federation peer id" />
         </ModalForm>,
       ]}
     />
-  );
-}
-
-function Directory() {
-  const { t } = useTranslation();
-  const [q, setQ] = useState('');
-  const res = useQuery({ queryKey: ['/partners/directory', q], queryFn: () => api.list<Row>('/partners/directory', { q }), enabled: q.length > 1 });
-  return (
-    <Card>
-      <Input.Search placeholder={`${t('action.search')} (name, GLN)`} enterButton onSearch={setQ} allowClear style={{ maxWidth: 480, marginBottom: 16 }} />
-      <List
-        loading={res.isFetching}
-        dataSource={res.data?.items ?? []}
-        renderItem={(p) => (
-          <List.Item>
-            <List.Item.Meta title={p.name} description={p.gln ? `GLN ${p.gln}` : undefined} />
-          </List.Item>
-        )}
-      />
-    </Card>
+    <PartnerDrawer partner={open} onClose={() => setOpen(null)} />
+    </>
   );
 }
 
@@ -128,7 +118,7 @@ export default function Partners() {
       <Tabs
         items={[
           { key: 'conn', label: 'Connections', children: <Connections /> },
-          { key: 'dir', label: 'Directory', children: <Directory /> },
+          { key: 'dir', label: 'Directory', children: <NetworkDirectory /> },
           { key: 'inv', label: 'Invitations', children: <Invitations /> },
         ]}
       />

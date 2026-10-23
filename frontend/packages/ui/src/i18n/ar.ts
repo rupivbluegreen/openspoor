@@ -18,6 +18,7 @@ const ar: Messages = {
     marketplace: 'السوق', developerApps: 'تطبيقات المطورين', learn: 'مركز التعلم', benchmarks: 'المقارنات المعيارية',
     udiDevices: 'أجهزة UDI', coldChain: 'سلسلة التبريد',
     consumerInfo: 'معلومات المستهلك',
+    mappingStudio: 'استوديو ربط الحقول', messages: 'الرسائل', networkProfile: 'الملف الشبكي',
     oneUpOneDown: 'خطوة للخلف/للأمام',
   },
   action: {

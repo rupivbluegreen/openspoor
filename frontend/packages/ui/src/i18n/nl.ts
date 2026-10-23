@@ -18,6 +18,7 @@ const nl: Messages = {
     marketplace: 'Marktplaats', developerApps: 'Ontwikkelaarsapps', learn: 'Kennisbank', benchmarks: 'Benchmarks',
     udiDevices: 'UDI-hulpmiddelen', coldChain: 'Koudeketen',
     consumerInfo: 'Consumenteninformatie',
+    mappingStudio: 'Mappingstudio', messages: 'Berichten', networkProfile: 'Netwerkprofiel',
     oneUpOneDown: 'Eén stap terug/vooruit',
   },
   action: {

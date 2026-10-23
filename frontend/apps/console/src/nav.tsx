@@ -57,6 +57,8 @@ export const NAV: NavGroup[] = [
       { path: '/link/b2b', label: 'b2bDocuments', icon: <FileTextOutlined />, page: p(() => import('./pages/link/B2BDocuments')) },
       { path: '/link/suppliers', label: 'supplierCompliance', icon: <FileProtectOutlined />, page: p(() => import('./pages/link/SupplierCompliance')) },
       { path: '/link/federation', label: 'federation', icon: <DeploymentUnitOutlined />, page: p(() => import('./pages/link/Federation')) },
+      { path: '/link/mapping', label: 'mappingStudio', icon: <SwapOutlined />, page: p(() => import('./pages/link/MappingStudio')) },
+      { path: '/link/messages', label: 'messages', icon: <InboxOutlined />, page: p(() => import('./pages/link/Messages')) },
     ],
   },
   {
@@ -129,6 +131,7 @@ export const NAV: NavGroup[] = [
       { path: '/settings/orgs', label: 'organizations', icon: <ApartmentOutlined />, page: p(() => import('./pages/settings/Organizations')) },
       { path: '/settings/sites', label: 'sites', icon: <ShopOutlined />, page: p(() => import('./pages/settings/Sites')) },
       { path: '/settings/licenses', label: 'licenses', icon: <IdcardOutlined />, page: p(() => import('./pages/settings/Licenses')) },
+      { path: '/settings/network-profile', label: 'networkProfile', icon: <GlobalOutlined />, page: p(() => import('./pages/settings/NetworkProfile')) },
       { path: '/settings/users', label: 'users', icon: <UserOutlined />, page: p(() => import('./pages/settings/Users')) },
       { path: '/settings/api-keys', label: 'apiKeys', icon: <KeyOutlined />, page: p(() => import('./pages/settings/ApiKeys')) },
       { path: '/settings/branding', label: 'branding', icon: <BgColorsOutlined />, page: p(() => import('./pages/settings/Branding')) },

@@ -16,6 +16,7 @@ const en = {
     marketplace: 'Marketplace', developerApps: 'Developer apps', learn: 'Learning hub', benchmarks: 'Benchmarks',
     udiDevices: 'UDI devices', coldChain: 'Cold chain',
     consumerInfo: 'Consumer information',
+    mappingStudio: 'Mapping studio', messages: 'Messages', networkProfile: 'Network profile',
     oneUpOneDown: 'One-up/one-down',
   },
   action: {
