@@ -41,6 +41,7 @@ func buildModules(d kernel.Deps, plat *platform.Module) ([]kernel.Module, error)
 	sa.Wire(func(g func(context.Context, uuid.UUID, int) error) { ep.Gate = g })
 	plat.HostTenant = sa.SlugFromHost
 	fd := food.New(d, ep)
+	fd.Certs = supplierCertificates{}
 	lk := link.New(d, ep)
 	ac := act.New(d)
 	ec := ecosystem.New(d, plat, ep)

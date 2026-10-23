@@ -11,6 +11,26 @@ Recalls follow forward lineage from the recalled lots, find every customer they 
 to and pharma serials in the recalled batches, mark lots recalled and notify customers
 (partners on the same node get an alert).
 
+The one-up/one-down report serves Regulation (EC) No 178/2002 Article 18: per lot, the
+immediate suppliers (receiving events: supplier GLN and name, date, quantity, lot, reference
+document) and immediate customers (shipping events). Transformations are followed inside the
+operator: inputs of an output lot are its one-up (`transformation_input`), and receipts of those
+inputs are reached with `viaLot` set; likewise outputs and their shipments for one-down. The
+date range filters the events. The Regulation prescribes no format or columns, which the
+export notes say (CSV `#` comment lines, JSON `notes`). Authority requests assemble the report
+for a set of lots, store it as generated (with its SHA-256), and record every download (who,
+when, format) on the request and in the audit trail.
+
+Certificates (halal, origin, organic, …) are the supplier compliance hub's records
+(`supplier_record`, reached through the `CertificateStore` interface that `internal/app` wires,
+since food may only depend on `epcis`). Food links them to a lot (TLC), a product or a site
+(GLN). A lot is covered by certificates linked to the lot, its product or one of its sites (TLC
+source, location, ship-from of its receipts), and by hub certificates held for a supplier whose
+GLN is one of those sites. Certificate kinds are free text; no certification body rules are
+modelled. Certificate references appear in the one-up/one-down rows and, with
+`certificates=true`, in the FSMA 204 export's "Additional KDEs" JSON (they are not FSMA KDEs, so
+they are off by default).
+
 ## Endpoints (`/api/v1/food`; tenant must have the food vertical; roles admin / ops / compliance / integration)
 
 | Method | Path | Purpose |
@@ -27,19 +47,33 @@ to and pharma serials in the recalled batches, mark lots recalled and notify cus
 | GET, POST | `/eudr/dds` | List / create due diligence statements from registered plots |
 | GET | `/eudr/dds/{id}` | Get a statement |
 | POST | `/eudr/dds/{id}/submit` | Mark submitted with a local reference (stub) |
+| GET | `/one-up-one-down` | One-up/one-down report (`tlc` repeatable or comma-separated, `productId`, `gtin`, `from`, `to`; `format=csv\|json` downloads and is audited) |
+| GET, POST | `/one-up-one-down/authority-requests` | List / assemble a report for a competent authority |
+| GET | `/one-up-one-down/authority-requests/{id}` | Request with its stored report |
+| GET | `/one-up-one-down/authority-requests/{id}/export` | Download as CSV or JSON (recorded on the request and audited) |
+| GET, POST | `/certificates` | List linked certificates (`targetType`, `target`, `kind`, `status`) / create a hub certificate with links |
+| POST | `/certificates/{id}/links` | Link an existing hub certificate to a lot, product or site |
+| DELETE | `/certificates/links/{linkId}` | Remove a link (the certificate stays in the hub) |
+| GET | `/lots/{tlc}/certificates` | Certificates covering a lot, with validity and how they cover it |
+
+Viewer may read (including downloads); writes need one of the roles above.
 
 ## Background work
 
-None.
+- Schedule `food.cert_expiry` (every 6 h): an alert (`food.certificate_expiring`; warning when
+  expiring within 30 days, error when expired) per linked certificate, listing the active lots it
+  covers; deduplicated per certificate, expiry date and state, and audited as `system`.
 
 ## Data
 
 `food_lot`, `food_cte`, `food_lineage`, `farm_plot`, `recall`, `recall_notification`,
-`eudr_dds` (migration `00007_food.sql`).
+`eudr_dds` (migration `00007_food.sql`); `food_certificate_link`, `food_authority_request` and
+the `supplier_record.scope` column (migration `00016_food_oneup_certificates.sql`).
 
 ## Depends on
 
-`core/*`, `epcis` (CTE mirroring), `pkg/epcis`, `pkg/gs1`.
+`core/*`, `epcis` (CTE mirroring), `pkg/epcis`, `pkg/gs1`. `internal/app` provides the
+`CertificateStore` over the supplier compliance hub's `supplier_record`.
 
 ## Spec gaps
 
@@ -47,6 +81,10 @@ None.
   template."
 - EUDR: "map the payload to the EU Information System (TRACES) DDS schema when submitting";
   submission is stubbed.
+- One-up/one-down: the Commission's guidance on Articles 11, 12, 14, 17, 18, 19 and 20 of
+  Regulation (EC) No 178/2002 recommends further information (such as supplier and customer
+  addresses); only fields captured on CTEs are included. Confirm against the current guidance
+  and, for food of animal origin, Implementing Regulation (EU) No 931/2011.
 
 ## Tests
 

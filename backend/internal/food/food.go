@@ -38,6 +38,8 @@ import (
 type Module struct {
 	kernel.Deps
 	EPCIS *epcis.Module
+	// Certs is the certificate registry (the supplier compliance hub), wired by internal/app.
+	Certs CertificateStore
 }
 
 // New creates the module.
@@ -67,6 +69,16 @@ func (m *Module) Routes(r chi.Router) {
 		r.Post("/eudr/dds", httpx.Handler(m.createDDS))
 		r.Get("/eudr/dds/{id}", httpx.Handler(m.getDDS))
 		r.Post("/eudr/dds/{id}/submit", httpx.Handler(m.submitDDS))
+		r.Get("/lots/{tlc}/certificates", httpx.Handler(m.lotCertificates))
+		r.Get("/certificates", httpx.Handler(m.listCertificates))
+		r.Post("/certificates", httpx.Handler(m.createCertificate))
+		r.Post("/certificates/{id}/links", httpx.Handler(m.addCertificateLink))
+		r.Delete("/certificates/links/{linkId}", httpx.Handler(m.deleteCertificateLink))
+		r.Get("/one-up-one-down", httpx.Handler(m.oneUpOneDown))
+		r.Get("/one-up-one-down/authority-requests", httpx.Handler(m.listAuthorityRequests))
+		r.Post("/one-up-one-down/authority-requests", httpx.Handler(m.createAuthorityRequest))
+		r.Get("/one-up-one-down/authority-requests/{id}", httpx.Handler(m.getAuthorityRequest))
+		r.Get("/one-up-one-down/authority-requests/{id}/export", httpx.Handler(m.exportAuthorityRequest))
 	})
 }
 
@@ -567,6 +579,13 @@ var fsmaColumns = []string{"Traceability Lot Code", "Traceability Lot Code Sourc
 
 // FSMACSV writes the spreadsheet rows for CTEs in the window (optionally one lot and its lineage).
 func FSMACSV(ctx context.Context, tx pgx.Tx, w *csv.Writer, from, to time.Time, tlc string) (int, error) {
+	return fsmaCSV(ctx, tx, w, from, to, tlc, nil)
+}
+
+// fsmaCSV writes the spreadsheet; certs (when non-nil) maps a TLC to certificate references,
+// added to the "Additional KDEs" JSON under "certificates". Certificates are not FSMA 204 KDEs,
+// so they are only included on request.
+func fsmaCSV(ctx context.Context, tx pgx.Tx, w *csv.Writer, from, to time.Time, tlc string, certs map[string][]string) (int, error) {
 	tlcs := []string{}
 	if tlc != "" {
 		back, err := lineage(ctx, tx, []string{tlc}, false)
@@ -610,6 +629,9 @@ func FSMACSV(ctx context.Context, tx pgx.Tx, w *csv.Writer, from, to time.Time, 
 			inputs = strings.Join(parts, ";")
 			delete(kdes, "inputs")
 		}
+		if refs := certs[t]; len(refs) > 0 {
+			kdes["certificates"] = refs
+		}
 		extra := ""
 		if len(kdes) > 0 {
 			b, _ := json.Marshal(kdes)
@@ -648,7 +670,14 @@ func (m *Module) fsmaExport(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="fsma204-`+time.Now().UTC().Format("20060102-1504")+`.csv"`)
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
-		n, err := FSMACSV(r.Context(), tx, csv.NewWriter(w), from, to, q.Get("tlc"))
+		var certs map[string][]string
+		if q.Get("certificates") == "true" {
+			var err error
+			if certs, err = m.certificateRefs(r.Context(), tx, from, to); err != nil {
+				return err
+			}
+		}
+		n, err := fsmaCSV(r.Context(), tx, csv.NewWriter(w), from, to, q.Get("tlc"), certs)
 		if err != nil {
 			return err
 		}
