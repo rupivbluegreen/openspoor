@@ -6,7 +6,8 @@ import any domain module.
 | Package | Purpose |
 |---|---|
 | `kernel` | `Deps` (config, DB, bus, jobs, auth, key ring) and the module interfaces: `Module` (`Routes`), `PublicRoutes`, `RootRoutes`, `Worker` (`RegisterJobs`), `Scheduled` (`Schedules`) |
-| `config` | Loads configuration from `OPENSPOOR_*` environment variables (plus `ANTHROPIC_API_KEY`) |
+| `config` | Loads configuration from `OPENSPOOR_*` environment variables (plus `ANTHROPIC_API_KEY`); secret settings go through `secretsrc`; builds the server TLS configuration |
+| `secretsrc` | Resolves a secret setting given as plain text, `file:/path` or `vault:<mount>/<path>#<field>` (KV v2 over `net/http`, token or Kubernetes login); fails closed, never logs values |
 | `db` | PostgreSQL pool; tenant transactions set `app.tenant_id` so row-level security isolates tenants; `OperatorTx` for cross-tenant system work; `List`/`One`/`Count` helpers |
 | `auth` | Authenticates requests (local JWT, OIDC, scoped API keys), carries the `Principal`, role checks (`Require`, `RequireOperator`) |
 | `httpx` | JSON responses, typed HTTP errors, request decoding, handler adapter |
@@ -37,5 +38,5 @@ None marked `TODO(spec)`.
 
 ## Tests
 
-No test files in `internal/core`. The packages are exercised by the module integration
+`secretsrc` and `config` have unit tests (fake Vault, temp files, generated certificates). The other packages are exercised by the module integration
 tests: from `backend/`, `eval "$(../scripts/testdb.sh)" && go test ./internal/...`.

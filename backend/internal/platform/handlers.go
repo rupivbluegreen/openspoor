@@ -2,6 +2,7 @@ package platform
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -171,8 +172,11 @@ func (m *Module) login(w http.ResponseWriter, r *http.Request) error {
 			in.Tenant = slug
 		}
 	}
-	p, err := m.Login(r.Context(), in.Tenant, in.Email, in.Password)
+	p, err := m.Login(WithClientIP(r.Context(), ClientIP(r, m.Cfg.TrustedProxies)), in.Tenant, in.Email, in.Password)
 	if err != nil {
+		if secs, ok := RetryAfter(err); ok {
+			w.Header().Set("Retry-After", strconv.Itoa(secs))
+		}
 		return err
 	}
 	return m.issue(w, p)
@@ -477,8 +481,8 @@ func (m *Module) createUser(w http.ResponseWriter, r *http.Request) error {
 	}
 	var hash *string
 	if in.Password != "" {
-		if len(in.Password) < 10 {
-			return httpx.BadRequest("password must be at least 10 characters")
+		if err := ValidatePassword(in.Password, in.Email); err != nil {
+			return err
 		}
 		b, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 		if err != nil {

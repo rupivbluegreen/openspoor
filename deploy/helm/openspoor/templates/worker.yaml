@@ -27,5 +27,21 @@ spec:
           env: {{- include "openspoor.env" . | nindent 12 }}
             - name: OPENSPOOR_WORKER_CONCURRENCY
               value: {{ .Values.worker.concurrency | quote }}
+            {{- if .Values.federationClient.enabled }}
+            - name: OPENSPOOR_TLS_CLIENT_CERT
+              value: /etc/openspoor/federation/tls.crt
+            - name: OPENSPOOR_TLS_CLIENT_KEY
+              value: /etc/openspoor/federation/tls.key
+            - name: OPENSPOOR_TLS_MIN_VERSION
+              value: {{ .Values.tls.minVersion | quote }}
+            {{- if .Values.federationClient.peerCA }}
+            - name: OPENSPOOR_TLS_PEER_CA
+              value: /etc/openspoor/federation/ca.crt
+            {{- end }}
+            {{- end }}
           ports: [{ name: http, containerPort: 8080 }]
           resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+          {{- if .Values.federationClient.enabled }}
+          volumeMounts: [{ name: federation, mountPath: /etc/openspoor/federation, readOnly: true }]
+      volumes: [{ name: federation, secret: { secretName: {{ .Values.federationClient.secretName }} } }]
+          {{- end }}

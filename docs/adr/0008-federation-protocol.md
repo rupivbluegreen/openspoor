@@ -22,8 +22,14 @@ Built in `internal/link/federation.go`:
 - Envelopes are signed with a raw Ed25519 signature (base64url), not a JWS. The signed bytes are the envelope without `sig`, with the payload **re-encoded with sorted object keys** (numbers kept verbatim). This was needed because PostgreSQL `jsonb` reorders keys, which broke verification of stored messages.
 - Inbox checks: signature against the approved peer's key, `to` equals our DID, `createdAt` within ±5 minutes (`MaxSkew`), and duplicate `id` rejected with 409 (a 409 counts as delivered for the sender).
 - Outbound delivery goes through the job queue, with retries and backoff.
+- Mutual TLS pinning (`federation.go`, configuration in `internal/core/config/tls.go`). The peer record's `tlsFingerprint` is the SHA-256 of the peer's leaf certificate (colons, case and a `sha256:` prefix are normalised on input; an unusable value fails closed).
+  - Outbound: a peer with a fingerprint is reached through an HTTP client that keeps normal chain and host-name verification (system roots plus `OPENSPOOR_TLS_PEER_CA`), requires TLS 1.3 (1.2 only with `OPENSPOOR_TLS_MIN_VERSION=1.2`), additionally requires the leaf to match the pin on every connection (`VerifyConnection`, which also runs on resumed sessions), does not follow redirects, and presents `OPENSPOOR_TLS_CLIENT_CERT`/`OPENSPOOR_TLS_CLIENT_KEY` (re-read per handshake). The pin is looked up from the peer record at delivery time. A pin on a non-https URL is refused when the peer is added and again at delivery. DID resolution for a new peer uses the same pinned client.
+  - Inbound: when the API serves TLS itself (`OPENSPOOR_TLS_CERT`/`KEY`) the server asks for, but does not require, a client certificate, so the console and integrations are unaffected. `/api/v1/federation/inbox` alone requires one (`OPENSPOOR_FEDERATION_REQUIRE_CLIENT_CERT`, on by default with server TLS): no certificate gives 401; after the envelope's `from` DID and tenant resolve to an approved peer, the leaf must be within its validity dates and match that peer's stored fingerprint, otherwise 403. A peer without a stored fingerprint is refused. With `OPENSPOOR_TLS_CLIENT_CA` the handshake also verifies the chain of a presented certificate; without it the pin is the only trust anchor, which suits self-signed peers.
+  - The envelope signature is still checked after this; mTLS authenticates the channel and the signature authenticates the message.
+  - Tests: `internal/link/federation_tls_test.go` (generated certificates; pin match, mismatch, normalisation, missing, unpinned and expired client certificates, TLS 1.2 peers, redirects).
+
+Behind a proxy that terminates TLS, the process cannot see a peer's certificate. Leave `OPENSPOOR_FEDERATION_REQUIRE_CLIENT_CERT` off there and enforce mutual TLS at the proxy, or terminate TLS in the pod (`docs/runbooks/secrets.md`).
 
 Not built yet (see OPEN_QUESTIONS):
-- Mutual TLS pinning. The peer's TLS fingerprint is stored but not yet enforced in-process; terminate mTLS at the ingress until then.
 - The W3C Verifiable Credential that binds an organisation to a node.
 - `did:key` for air-gapped hubs.

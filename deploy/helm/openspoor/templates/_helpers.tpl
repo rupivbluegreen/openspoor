@@ -12,6 +12,14 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
   value: {{ .Values.publicUrl | quote }}
 - name: OPENSPOOR_BASE_DOMAIN
   value: {{ .Values.baseDomain | quote }}
+{{- with .Values.vault.addr }}
+- name: OPENSPOOR_VAULT_ADDR
+  value: {{ . | quote }}
+{{- end }}
+{{- with .Values.vault.role }}
+- name: OPENSPOOR_VAULT_ROLE
+  value: {{ . | quote }}
+{{- end }}
 {{- range $k, $v := .Values.extraEnv }}
 - name: {{ $k }}
   value: {{ $v | quote }}

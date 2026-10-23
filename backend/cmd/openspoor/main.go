@@ -121,8 +121,8 @@ func main() {
 }
 
 func migrateURL(cfg config.Config) string {
-	if u := os.Getenv("OPENSPOOR_MIGRATE_DATABASE_URL"); u != "" {
-		return u
+	if cfg.MigrateDatabaseURL != "" {
+		return cfg.MigrateDatabaseURL
 	}
 	return cfg.DatabaseURL
 }
@@ -136,17 +136,53 @@ func mustApp(ctx context.Context, cfg config.Config) *app.App {
 }
 
 func serve(ctx context.Context, a *app.App, cfg config.Config) {
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: a.Router, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second}
+	srv, err := newServer(a.Router, cfg)
+	if err != nil {
+		fatal(err)
+	}
+	servers := []*http.Server{srv}
+	if cfg.TLS.RedirectAddr != "" {
+		servers = append(servers, &http.Server{Addr: cfg.TLS.RedirectAddr, Handler: config.RedirectHandler(cfg.PublicURL), ReadHeaderTimeout: 10 * time.Second})
+	}
 	go func() {
 		<-ctx.Done()
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(sctx)
+		for _, s := range servers {
+			_ = s.Shutdown(sctx)
+		}
 	}()
-	slog.Info("api listening", "addr", cfg.HTTPAddr, "mode", cfg.Mode, "version", app.Version)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if len(servers) > 1 {
+		go func() {
+			if err := servers[1].ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fatal(err)
+			}
+		}()
+	}
+	tlsOn := srv.TLSConfig != nil
+	attrs := []any{"addr", cfg.HTTPAddr, "mode", cfg.Mode, "version", app.Version, "tls", tlsOn}
+	if tlsOn {
+		attrs = append(attrs, "tls_min_version", config.VersionName(srv.TLSConfig.MinVersion), "federation_client_cert_required", cfg.TLS.RequireFederationClientCert)
+	}
+	slog.Info("api listening", attrs...)
+	if tlsOn {
+		// The certificate comes from TLSConfig.GetCertificate (reloaded when the files change).
+		err = srv.ListenAndServeTLS("", "")
+	} else {
+		err = srv.ListenAndServe()
+	}
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fatal(err)
 	}
+}
+
+// newServer builds the API server; with OPENSPOOR_TLS_CERT/KEY it serves HTTPS itself.
+func newServer(h http.Handler, cfg config.Config) (*http.Server, error) {
+	tc, err := cfg.ServerTLS()
+	if err != nil {
+		return nil, err
+	}
+	return &http.Server{Addr: cfg.HTTPAddr, Handler: h, TLSConfig: tc, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second}, nil
 }
 
 func fatal(err error) {

@@ -5,11 +5,17 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -22,6 +28,7 @@ import (
 
 	"github.com/openspoor/openspoor/internal/core/audit"
 	"github.com/openspoor/openspoor/internal/core/auth"
+	"github.com/openspoor/openspoor/internal/core/config"
 	"github.com/openspoor/openspoor/internal/core/db"
 	"github.com/openspoor/openspoor/internal/core/httpx"
 	"github.com/openspoor/openspoor/internal/core/ids"
@@ -204,9 +211,13 @@ func (m *Module) listPeers(w http.ResponseWriter, r *http.Request) error {
 }
 
 // fetchDID resolves a node's DID document from its base URL.
-func (m *Module) fetchDID(ctx context.Context, base string) (string, ed25519.PublicKey, error) {
+func (m *Module) fetchDID(ctx context.Context, base, fingerprint string) (string, ed25519.PublicKey, error) {
+	cl, err := m.clientFor(fingerprint)
+	if err != nil {
+		return "", nil, err
+	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(base, "/")+"/.well-known/did.json", nil)
-	res, err := m.Client.Do(req)
+	res, err := cl.Do(req)
 	if err != nil {
 		return "", nil, err
 	}
@@ -249,6 +260,16 @@ func (m *Module) addPeer(w http.ResponseWriter, r *http.Request) error {
 	if in.Name == "" || in.RemoteTenant == "" {
 		return httpx.BadRequest("name and remoteTenant (the peer tenant slug) are required")
 	}
+	if in.TLSFingerprint != "" {
+		fp, err := NormalizeFingerprint(in.TLSFingerprint)
+		if err != nil {
+			return httpx.BadRequest("tlsFingerprint: " + err.Error())
+		}
+		if u.Scheme != "https" {
+			return httpx.BadRequest("a pinned tlsFingerprint needs an https peer url")
+		}
+		in.TLSFingerprint = fp
+	}
 	var key ed25519.PublicKey
 	did := in.DID
 	if in.PublicKey != "" {
@@ -257,7 +278,7 @@ func (m *Module) addPeer(w http.ResponseWriter, r *http.Request) error {
 			return httpx.BadRequest("publicKey must be a base64url Ed25519 key and did is required with it")
 		}
 		key = k
-	} else if did, key, err = m.fetchDID(r.Context(), in.URL); err != nil {
+	} else if did, key, err = m.fetchDID(r.Context(), in.URL, in.TLSFingerprint); err != nil {
 		return httpx.BadRequest("cannot resolve peer DID: " + err.Error())
 	}
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
@@ -362,7 +383,11 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 		return jobs.Permanent{Err: err}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	res, err := m.Client.Do(req)
+	var res *http.Response
+	cl, err := m.deliveryClient(ctx, *j.TenantID, p.URL, p.Envelope.To)
+	if err == nil {
+		res, err = cl.Do(req)
+	}
 	status, detail := "delivered", map[string]any{}
 	if err != nil {
 		status, detail["error"] = "retrying", err.Error()
@@ -409,6 +434,11 @@ func (m *Module) deliverJob(ctx context.Context, j jobs.Job) error {
 
 // inbox receives signed messages from peers.
 func (m *Module) inbox(w http.ResponseWriter, r *http.Request) error {
+	enforce := m.Cfg.TLS.RequireFederationClientCert
+	if enforce && (r.TLS == nil || len(r.TLS.PeerCertificates) == 0) {
+		slog.Warn("federation inbox: no client certificate", "remote", r.RemoteAddr)
+		return httpx.Unauthorized("client certificate required")
+	}
 	var env Envelope
 	dec := json.NewDecoder(io.LimitReader(r.Body, 64<<20))
 	if err := dec.Decode(&env); err != nil {
@@ -438,6 +468,12 @@ func (m *Module) inbox(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return httpx.Forbidden("sender is not an approved peer of the recipient")
+	}
+	if enforce {
+		if err := checkClientCert(r.TLS.PeerCertificates[0], peer, time.Now()); err != nil {
+			slog.Warn("federation inbox: client certificate refused", "peer", peer.DID, "reason", err.Error())
+			return httpx.Forbidden("client certificate does not match the pinned certificate of the sender")
+		}
 	}
 	if !VerifyEnvelope(peer.PublicKey, env) {
 		return httpx.Unauthorized("invalid signature")
@@ -534,3 +570,164 @@ func (m *Module) listMessages(w http.ResponseWriter, r *http.Request) error {
 }
 
 var _ kernel.Module = (*Module)(nil)
+
+// --- mutual TLS pinning (ADR-008) ---
+
+// NormalizeFingerprint returns the canonical form of a SHA-256 certificate fingerprint: 64 lower-case
+// hex digits. It accepts colon- or space-separated octets, upper or lower case, and the prefixes
+// "sha256:" and "SHA256 Fingerprint=" that common tools print.
+func NormalizeFingerprint(s string) (string, error) {
+	low := strings.ToLower(strings.TrimSpace(s))
+	if i := strings.IndexByte(low, '='); i >= 0 && strings.HasPrefix(low, "sha") {
+		low = low[i+1:]
+	}
+	low = strings.TrimPrefix(strings.TrimPrefix(low, "sha256:"), "sha-256:")
+	low = strings.NewReplacer(":", "", " ", "").Replace(low)
+	if b, err := hex.DecodeString(low); err != nil || len(b) != sha256.Size {
+		return "", errors.New("a SHA-256 fingerprint is 64 hex digits (optionally colon separated)")
+	}
+	return low, nil
+}
+
+// CertFingerprint is the canonical SHA-256 fingerprint of a DER certificate.
+func CertFingerprint(der []byte) string {
+	sum := sha256.Sum256(der)
+	return hex.EncodeToString(sum[:])
+}
+
+// fingerprintMatches compares a certificate to a stored (possibly unnormalised) pin in constant time.
+// An unusable pin never matches.
+func fingerprintMatches(der []byte, pin string) bool {
+	want, err := NormalizeFingerprint(pin)
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(CertFingerprint(der)), []byte(want)) == 1
+}
+
+// checkClientCert decides whether the leaf certificate a connection presented is the one pinned for
+// the peer. Inbound client certificates are not necessarily chain-verified (peers often use
+// self-signed certificates), so validity dates are checked here, and a peer without a pin is refused.
+func checkClientCert(leaf *x509.Certificate, p Peer, now time.Time) error {
+	if p.TLSFingerprint == "" {
+		return errors.New("peer has no pinned TLS fingerprint")
+	}
+	if now.Before(leaf.NotBefore) || now.After(leaf.NotAfter) {
+		return errors.New("client certificate is not valid now")
+	}
+	if !fingerprintMatches(leaf.Raw, p.TLSFingerprint) {
+		return errors.New("client certificate fingerprint differs from the pinned one")
+	}
+	return nil
+}
+
+// pinnedTLSConfig builds the client TLS configuration for one peer. The normal chain and host name
+// verification stays on; pinning is an additional check of the leaf certificate, run on every
+// connection (VerifyConnection also runs for resumed sessions). pin may be empty (no pinning).
+func (m *Module) pinnedTLSConfig(pin string) (*tls.Config, error) {
+	t := m.Cfg.TLS
+	cfg := &tls.Config{MinVersion: tls.VersionTLS13}
+	if t.MinVersion != 0 {
+		cfg.MinVersion = t.MinVersion
+	}
+	if pin != "" {
+		want, err := NormalizeFingerprint(pin)
+		if err != nil {
+			return nil, fmt.Errorf("peer TLS fingerprint: %w", err)
+		}
+		cfg.VerifyConnection = func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 || !fingerprintMatches(cs.PeerCertificates[0].Raw, want) {
+				return errors.New("peer certificate does not match the pinned fingerprint")
+			}
+			return nil
+		}
+	}
+	if t.PeerCA != "" {
+		pool, err := config.LoadPool(t.PeerCA)
+		if err != nil {
+			return nil, fmt.Errorf("OPENSPOOR_TLS_PEER_CA: %w", err)
+		}
+		cfg.RootCAs = pool
+	}
+	if t.ClientCert != "" {
+		// Read on each handshake so a renewed certificate is picked up without a restart.
+		cert, key := t.ClientCert, t.ClientKey
+		cfg.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			pair, err := tls.LoadX509KeyPair(cert, key)
+			if err != nil {
+				return nil, fmt.Errorf("OPENSPOOR_TLS_CLIENT_CERT: %w", err)
+			}
+			return &pair, nil
+		}
+	}
+	return cfg, nil
+}
+
+type clientKey struct {
+	pin, cert, key, ca string
+	min                uint16
+}
+
+var (
+	clientsMu sync.Mutex
+	clients   = map[clientKey]*http.Client{}
+)
+
+// clientFor returns the HTTP client for a peer: m.Client when nothing TLS-specific is configured and
+// the peer is not pinned, otherwise a client that pins the peer certificate, requires at least
+// TLS 1.3 (unless OPENSPOOR_TLS_MIN_VERSION=1.2 was set) and presents this node's client certificate.
+func (m *Module) clientFor(pin string) (*http.Client, error) {
+	t := m.Cfg.TLS
+	if pin == "" && t.ClientCert == "" && t.PeerCA == "" && t.MinVersion == 0 {
+		return m.Client, nil
+	}
+	if pin != "" {
+		fp, err := NormalizeFingerprint(pin)
+		if err != nil {
+			return nil, fmt.Errorf("peer TLS fingerprint: %w", err)
+		}
+		pin = fp
+	}
+	k := clientKey{pin, t.ClientCert, t.ClientKey, t.PeerCA, t.MinVersion}
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+	if c, ok := clients[k]; ok {
+		return c, nil
+	}
+	cfg, err := m.pinnedTLSConfig(pin)
+	if err != nil {
+		return nil, err
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = cfg
+	timeout := 15 * time.Second
+	if m.Client != nil && m.Client.Timeout > 0 {
+		timeout = m.Client.Timeout
+	}
+	c := &http.Client{Timeout: timeout, Transport: tr,
+		// A redirect would send the signed envelope to a host the pin was not made for.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	clients[k] = c
+	return c, nil
+}
+
+// deliveryClient picks the client for one delivery: the pin comes from the peer record (looked up by
+// the addressed DID at delivery time, so a re-pinned or corrected fingerprint applies to queued jobs).
+func (m *Module) deliveryClient(ctx context.Context, tenant uuid.UUID, target, toDID string) (*http.Client, error) {
+	var pin string
+	err := m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `select tls_fingerprint from federation_peer where did=$1 and url = $2 order by created_at desc limit 1`,
+			toDID, strings.TrimSuffix(target, "/api/v1/federation/inbox")).Scan(&pin)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	if pin != "" && !strings.HasPrefix(target, "https://") {
+		return nil, errors.New("peer has a pinned TLS fingerprint but its URL is not https; refusing to send")
+	}
+	return m.clientFor(pin)
+}

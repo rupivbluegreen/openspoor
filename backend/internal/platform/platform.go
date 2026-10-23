@@ -80,8 +80,8 @@ func (m *Module) CreateTenant(ctx context.Context, in NewTenant) (Tenant, User, 
 	if in.Name == "" || in.Slug == "" || in.AdminEmail == "" {
 		return Tenant{}, User{}, httpx.BadRequest("name, slug and adminEmail are required")
 	}
-	if len(in.AdminPassword) < 10 {
-		return Tenant{}, User{}, httpx.BadRequest("admin password must be at least 10 characters")
+	if err := ValidatePassword(in.AdminPassword, in.AdminEmail); err != nil {
+		return Tenant{}, User{}, err
 	}
 	if in.Plan == "" {
 		in.Plan = "community"
@@ -136,10 +136,17 @@ func (m *Module) TenantBySlug(ctx context.Context, slugOrDomain string) (Tenant,
 	return t, err
 }
 
-// Login checks a local password and returns a principal.
+// Login checks a local password and returns a principal. Wrong password, unknown user and unknown
+// tenant give the same answer after the same work, and repeated failures are throttled (loginguard.go).
 func (m *Module) Login(ctx context.Context, tenantSlug, email, password string) (auth.Principal, error) {
 	t, err := m.TenantBySlug(ctx, tenantSlug)
 	if err != nil {
+		g := m.keysFor(ctx, "unknown:"+strings.ToLower(strings.TrimSpace(tenantSlug)), normEmail(email))
+		if err := m.guardCheck(ctx, g); err != nil {
+			return auth.Principal{}, err
+		}
+		burnPassword(password)
+		m.loginFailed(ctx, g, uuid.Nil, uuid.Nil)
 		return auth.Principal{}, httpx.Unauthorized("invalid credentials")
 	}
 	if t.Status != "active" {
@@ -148,17 +155,37 @@ func (m *Module) Login(ctx context.Context, tenantSlug, email, password string) 
 	return m.checkPassword(ctx, t.ID, email, password)
 }
 
+func normEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
+
+// checkPassword verifies a user's password inside the throttle. Every failure path (no such user,
+// no local password, inactive user, wrong password) compares against a hash and answers the same.
 func (m *Module) checkPassword(ctx context.Context, tenant uuid.UUID, email, password string) (auth.Principal, error) {
+	email = normEmail(email)
+	g := m.keysFor(ctx, tenant.String(), email)
+	if err := m.guardCheck(ctx, g); err != nil {
+		return auth.Principal{}, err
+	}
 	var p auth.Principal
 	var hash *string
 	var status string
 	err := m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `select id, email, name, roles, password_hash, status, operator from app_user where email=$1`, strings.ToLower(email)).
+		return tx.QueryRow(ctx, `select id, email, name, roles, password_hash, status, operator from app_user where email=$1`, email).
 			Scan(&p.UserID, &p.Email, &p.Name, &p.Roles, &hash, &status, &p.Operator)
 	})
-	if err != nil || hash == nil || status != "active" || bcrypt.CompareHashAndPassword([]byte(*hash), []byte(password)) != nil {
+	if err != nil && !errors.Is(err, db.ErrNotFound) && !errors.Is(err, pgx.ErrNoRows) {
+		return auth.Principal{}, err
+	}
+	ok := false
+	if err == nil && hash != nil {
+		ok = bcrypt.CompareHashAndPassword([]byte(*hash), []byte(password)) == nil
+	} else {
+		burnPassword(password)
+	}
+	if !ok || status != "active" {
+		m.loginFailed(ctx, g, tenant, p.UserID)
 		return auth.Principal{}, httpx.Unauthorized("invalid credentials")
 	}
+	m.loginSucceeded(ctx, g)
 	p.TenantID, p.Kind = tenant, "user"
 	return p, nil
 }

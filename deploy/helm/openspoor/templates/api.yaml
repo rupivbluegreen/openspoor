@@ -27,10 +27,28 @@ spec:
           env: {{- include "openspoor.env" . | nindent 12 }}
             - name: OPENSPOOR_WORKER_CONCURRENCY
               value: {{ .Values.worker.concurrency | quote }}
+            {{- if .Values.tls.enabled }}
+            - name: OPENSPOOR_TLS_CERT
+              value: /etc/openspoor/tls/tls.crt
+            - name: OPENSPOOR_TLS_KEY
+              value: /etc/openspoor/tls/tls.key
+            - name: OPENSPOOR_TLS_MIN_VERSION
+              value: {{ .Values.tls.minVersion | quote }}
+            {{- if .Values.tls.clientCA }}
+            - name: OPENSPOOR_TLS_CLIENT_CA
+              value: /etc/openspoor/tls/ca.crt
+            {{- end }}
+            {{- end }}
           ports: [{ name: http, containerPort: 8080 }]
           resources: {{- toYaml .Values.api.resources | nindent 12 }}
-          readinessProbe: { httpGet: { path: /readyz, port: http }, periodSeconds: 5 }
-          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 10 }
+          readinessProbe: { httpGet: { path: /readyz, port: http{{ if .Values.tls.enabled }}, scheme: HTTPS{{ end }} }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http{{ if .Values.tls.enabled }}, scheme: HTTPS{{ end }} }, periodSeconds: 10 }
+          {{- if .Values.tls.enabled }}
+          volumeMounts: [{ name: tls, mountPath: /etc/openspoor/tls, readOnly: true }]
+          {{- end }}
+      {{- if .Values.tls.enabled }}
+      volumes: [{ name: tls, secret: { secretName: {{ .Values.tls.secretName }} } }]
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service

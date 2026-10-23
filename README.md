@@ -78,6 +78,13 @@ The same image runs everywhere; `OPENSPOOR_MODE` selects `saas` (multi-tenant, h
 | `OPENSPOOR_REGION` | `eu` | Data-residency region this installation serves; tenants are created in it and cannot be relabelled to another |
 | `OPENSPOOR_JWT_SECRET` | — | Session signing key (at least 16 bytes) |
 | `OPENSPOOR_MASTER_KEY` | — | Wraps per-tenant data keys and the federation key |
+| `OPENSPOOR_DATABASE_PASSWORD` | — | Password for the user in the database URL, when it should not sit in the URL |
+| `OPENSPOOR_VAULT_ADDR`, `OPENSPOOR_VAULT_TOKEN`, `OPENSPOOR_VAULT_ROLE` (+ `_AUTH_MOUNT`, `_NAMESPACE`, `_CACERT`, `_K8S_TOKEN_FILE`) | — | Secret settings (master key, JWT secret, database URL and password, Lago, model, SMTP and S3 secrets) can be `file:/path` or `vault:<mount>/<path>#<field>` (KV v2) instead of a value; Vault auth by token or Kubernetes service account ([runbook](docs/runbooks/secrets.md)) |
+| `OPENSPOOR_TLS_CERT`, `OPENSPOOR_TLS_KEY`, `OPENSPOOR_TLS_MIN_VERSION` | — / `1.3` | Serve HTTPS from the process (normally a proxy or ingress terminates TLS); `1.2` only if set explicitly |
+| `OPENSPOOR_TLS_CLIENT_CA`, `OPENSPOOR_FEDERATION_REQUIRE_CLIENT_CERT` | — / on with TLS | Federation mutual TLS: the inbox requires a client certificate pinned to the sending peer |
+| `OPENSPOOR_TLS_CLIENT_CERT`, `OPENSPOOR_TLS_CLIENT_KEY`, `OPENSPOOR_TLS_PEER_CA` | — | Client certificate this node presents to peers, and CA roots for peers on a private CA |
+| `OPENSPOOR_TLS_REDIRECT_ADDR` | off | Plain-HTTP listener that redirects to `OPENSPOOR_PUBLIC_URL` (https) |
+| `OPENSPOOR_TRUSTED_PROXIES` | `0` | Reverse proxies that append to `X-Forwarded-For`; used for per-address login throttling |
 | `OPENSPOOR_OIDC_ISSUER`, `OPENSPOOR_OIDC_AUDIENCE` | — | External SSO over OIDC; SAML identity providers connect through Keycloak ([runbook](docs/runbooks/sso.md)) |
 | `OPENSPOOR_PUBLIC_URL`, `OPENSPOOR_BASE_DOMAIN` | localhost | Links, `did:web` identity, SaaS host routing |
 | `OPENSPOOR_WEB_ROOT` | — | Directory with the built `console`, `verify` and `operator` apps |

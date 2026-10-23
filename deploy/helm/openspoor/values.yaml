@@ -12,6 +12,34 @@ baseDomain: openspoor.example.com   # saas: tenants at <slug>.<baseDomain>
 existingSecret: openspoor-secrets
 migrateDatabaseUrlKey: OPENSPOOR_DATABASE_URL
 
+# Secret settings may be references instead of values: put "file:/path" or "vault:<mount>/<path>#<field>"
+# in the Secret above (docs/runbooks/secrets.md). To read from Vault with the pod's service-account
+# token (Kubernetes auth method), set the address and role here and grant the role read access.
+vault:
+  addr: ""            # https://vault.example.com:8200
+  role: ""            # Vault Kubernetes-auth role bound to this release's service account
+
+# TLS normally ends at the ingress (ingress.tls below) and nothing is needed here. Set tls.enabled
+# when the pod must terminate TLS itself, which federation mutual TLS needs (the inbox then requires
+# a client certificate pinned to the sending peer). The Secret is a kubernetes.io/tls Secret
+# (tls.crt, tls.key), for example issued by cert-manager; add ca.crt to verify peer client
+# certificates against a CA (tls.clientCA). With the ingress in front, use its HTTPS backend option
+# (for example nginx.ingress.kubernetes.io/backend-protocol: HTTPS) and TLS passthrough or an
+# mTLS-capable ingress for /api/v1/federation/inbox.
+tls:
+  enabled: false
+  secretName: openspoor-tls
+  minVersion: "1.3"   # "1.2" only if a peer cannot do TLS 1.3
+  clientCA: false
+
+# Federation delivery runs in the worker. To present this node's client certificate to peers (mutual
+# TLS), mount it there: a kubernetes.io/tls Secret (tls.crt, tls.key), plus ca.crt when peers use a
+# private CA. Peers' server certificates are pinned by the fingerprint stored on the peer record.
+federationClient:
+  enabled: false
+  secretName: openspoor-federation-client
+  peerCA: false
+
 extraEnv: {}          # e.g. OPENSPOOR_KAFKA_BROKERS, OPENSPOOR_OIDC_ISSUER, OPENSPOOR_S3_ENDPOINT
 
 api:
