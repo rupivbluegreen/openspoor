@@ -426,6 +426,9 @@ func (m *Module) putPackaging(w http.ResponseWriter, r *http.Request) error {
 	}
 	market := strings.ToUpper(chi.URLParam(r, "market"))
 	return m.Tx(r.Context(), func(tx pgx.Tx) error {
+		if _, err := ByID(r.Context(), tx, id); err != nil {
+			return err
+		}
 		t, err := db.One[PackagingTemplate](r.Context(), tx, `insert into packaging_template (id, tenant_id, product_id, market, levels) values ($1, app_tenant(), $2, $3, $4)
 			on conflict (tenant_id, product_id, market) do update set levels=excluded.levels, updated_at=now()
 			returning id, product_id, market, levels, updated_at`, ids.New(), id, market, in.Levels)

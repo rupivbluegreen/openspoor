@@ -139,8 +139,10 @@ func (m *Module) capture(w http.ResponseWriter, r *http.Request) error {
 	c, err := m.Capture(r.Context(), r.Header.Get("Content-Type"), body, r.Header.Get("X-Source"))
 	var ce *CaptureError
 	if errors.As(err, &ce) {
+		// Written directly: httpx.JSON would replace the problem+json content type.
 		w.Header().Set("Content-Type", "application/problem+json")
-		httpx.JSON(w, http.StatusUnprocessableEntity, map[string]any{"title": "EPCIS document rejected", "status": 422,
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]any{"title": "EPCIS document rejected", "status": 422,
 			"captureId": ce.Capture.ID, "errors": ce.Capture.Errors, "eventCount": ce.Capture.EventCount})
 		return nil
 	}

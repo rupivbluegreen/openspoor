@@ -607,6 +607,13 @@ func (m *Module) Receive(ctx context.Context, in InboundInput) (Shipment, error)
 		}
 	}
 	rec := ReconcileDoc(doc, in.ASN)
+	// Store the TI/TS as JSON-LD: the column is jsonb and XML input must not be written verbatim.
+	tits := raw
+	if !json.Valid(raw) {
+		if tits, err = lib.WriteJSON(doc); err != nil {
+			return Shipment{}, err
+		}
+	}
 	var s Shipment
 	err = m.Tx(ctx, func(tx pgx.Tx) error {
 		pid := in.PartnerID
@@ -623,7 +630,7 @@ func (m *Module) Receive(ctx context.Context, in InboundInput) (Shipment, error)
 		var err error
 		s, err = db.One[Shipment](ctx, tx, `insert into shipment (id, tenant_id, direction, partner_id, po_number, asn_number, status, epcs, asn, tits, reconciliation, capture_id, received_at)
 			values ($1, app_tenant(), 'inbound', $2,$3,$4,$5,$6,$7,$8,$9,$10, now()) returning `+shipCols,
-			ids.New(), pid, in.PONumber, in.ASN.Number, status, top, in.ASN, raw, rec, c.ID)
+			ids.New(), pid, in.PONumber, in.ASN.Number, status, top, in.ASN, tits, rec, c.ID)
 		if err != nil {
 			return err
 		}

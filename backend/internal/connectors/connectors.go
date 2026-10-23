@@ -575,9 +575,11 @@ func (m *Module) submitJob(ctx context.Context, j jobs.Job) error {
 	}
 	c := m.registry[inst.Connector]
 	sub, err := c.Submit(ctx, m.effectiveConfig(ctx, inst), connector.Payload{Kind: rep.Kind, Key: rep.Key, Body: rep.Payload, Packs: rep.Packs})
-	return m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
-		if err != nil {
-			last := j.Attempts >= j.MaxAttempts
+	if err != nil {
+		// Record the failed attempt in its own committed transaction: returning the submit
+		// error from inside the tx would roll back the attempt count, response and alert.
+		last := j.Attempts >= j.MaxAttempts
+		if txErr := m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
 			status := "queued"
 			if last {
 				status = "failed"
@@ -589,13 +591,18 @@ func (m *Module) submitJob(ctx context.Context, j jobs.Job) error {
 			if last {
 				al := connector.Alert{Severity: "error", Title: c.Info().Name + ": submission failed after retries", Reason: err.Error(),
 					SuggestedFix: "Check the hub endpoint and credentials in the connector settings, then resubmit.", Packs: rep.Packs, Retryable: true}
-				if e := m.raise(ctx, tx, rep, al); e != nil {
-					return e
-				}
-				return jobs.Permanent{Err: err}
+				return m.raise(ctx, tx, rep, al)
 			}
-			return err // retried with backoff by the job runner
+			return nil
+		}); txErr != nil {
+			return txErr
 		}
+		if last {
+			return jobs.Permanent{Err: err}
+		}
+		return err // retried with backoff by the job runner
+	}
+	return m.DB.Tx(ctx, tenant, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `update regulatory_report set attempts=attempts+1, status='submitted', submission_ref=$2, updated_at=now() where id=$1`, rep.ID, sub.Ref); err != nil {
 			return err
 		}
